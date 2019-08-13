@@ -2,19 +2,19 @@
 /**
  * @license
  * The MIT License
- *
+ * 
  * Copyright © 2019 Yuka authors
- *
+ * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- *
+ * 
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- *
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -18222,6 +18222,63 @@ class NavMesh {
 		return this.regions.indexOf( region );
 
 	}
+
+
+	/**
+	* Returns the shortest path that leads from the given start position to the end position.
+	* The computational overhead of this method for complex navigation meshes can greatly
+	* reduced by using a spatial index.
+	*
+	* @param {Vector3} from - The start/source position.
+	* @param {Vector3} to - The end/destination position.
+	* @return {Array} Path of regions. If same region, returns array length 1 same region
+	*/
+	findPathOfRegions( from, to ) {
+
+		const graph = this.graph;
+		const path = new Array();
+
+		let fromRegion = this.getRegionForPoint( from, this.epsilonContainsTest );
+		let toRegion = this.getRegionForPoint( to, this.epsilonContainsTest );
+
+		if ( fromRegion === null || toRegion === null ) {
+
+			// if source or target are outside the navmesh, choose the nearest convex region
+
+			if ( fromRegion === null ) fromRegion = this.getClosestRegion( from );
+			if ( toRegion === null ) toRegion = this.getClosestRegion( to );
+
+		}
+
+		// check if both convex region are identical
+
+		if ( fromRegion === toRegion ) {
+
+			// no search necessary, directly create the path
+
+			path.push( fromRegion );
+			return path;
+
+		} else {
+
+			// source and target are not in same region, perform search
+
+			const source = this.getNodeIndex( fromRegion );
+			const target = this.getNodeIndex( toRegion );
+
+			const astar = new AStar( graph, source, target );
+			astar.search();
+
+			if ( astar.found === true ) {
+
+				for ( let i = 0, l = ( polygonPath.length ); i < l; i ++ ) {
+					path.push( this.regions[ polygonPath[ i ] ] );
+				}
+			}
+			return path;
+		}
+	}
+
 
 	/**
 	* Returns the shortest path that leads from the given start position to the end position.

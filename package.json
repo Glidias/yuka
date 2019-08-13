@@ -7,7 +7,7 @@
   "module": "build/yuka.modules.js",
   "scripts": {
     "build": "rollup -c \"config/rollup/config.js\"",
-    "build-prod": "rollup -c \"config/rollup/config.js\" && google-closure-compiler --charset UTF-8 build/yuka.js > build/yuka.min.js",
+    "build-prod": "rollup -c \"config/rollup/config.js\" && google-closure-compiler build/yuka.js > build/yuka.min.js",
     "dev": "concurrently \"rollup -c \"config/rollup/config.js\" -w\" \"http-server -c-1\"",
     "doc": "jsdoc src -c \"config/jsdoc/config.json\"",
     "lint": "eslint src examples --ext .js",

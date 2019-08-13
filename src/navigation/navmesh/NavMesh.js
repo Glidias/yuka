@@ -286,6 +286,67 @@ class NavMesh {
 
 	}
 
+
+	/**
+	* Returns the shortest path that leads from the given start position to the end position.
+	* The computational overhead of this method for complex navigation meshes can greatly
+	* reduced by using a spatial index.
+	*
+	* @param {Vector3} from - The start/source position.
+	* @param {Vector3} to - The end/destination position.
+	* @return {Array} Path of regions. If same region, returns array length 1 same region
+	*/
+	findPathOfRegions( from, to ) {
+
+		const graph = this.graph;
+		const path = new Array();
+
+		let fromRegion = this.getRegionForPoint( from, this.epsilonContainsTest );
+		let toRegion = this.getRegionForPoint( to, this.epsilonContainsTest );
+
+		if ( fromRegion === null || toRegion === null ) {
+
+			// if source or target are outside the navmesh, choose the nearest convex region
+
+			if ( fromRegion === null ) fromRegion = this.getClosestRegion( from );
+			if ( toRegion === null ) toRegion = this.getClosestRegion( to );
+
+		}
+
+		// check if both convex region are identical
+
+		if ( fromRegion === toRegion ) {
+
+			// no search necessary, directly create the path
+
+			path.push( fromRegion );
+			return path;
+
+		} else {
+
+			// source and target are not in same region, perform search
+
+			const source = this.getNodeIndex( fromRegion );
+			const target = this.getNodeIndex( toRegion );
+
+			const astar = new AStar( graph, source, target );
+			astar.search();
+
+			if ( astar.found === true ) {
+
+				// push sequence of portal edges to corridor
+
+				const portalEdge = { left: null, right: null };
+
+				for ( let i = 0, l = ( polygonPath.length ); i < l; i ++ ) {
+					path.push( this.regions[ polygonPath[ i ] ] );
+				}
+			}
+			return path;
+		}
+	}
+
+
 	/**
 	* Returns the shortest path that leads from the given start position to the end position.
 	* The computational overhead of this method for complex navigation meshes can greatly
