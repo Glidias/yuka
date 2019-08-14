@@ -3613,6 +3613,18 @@ class SteeringBehavior {
 	}
 
 	/**
+	 * Override this handler to perform behaviour setup for vehicle removal of behaviour
+	 * @param {*} vehicle
+	 */
+	onAdded(vehicle) {}
+
+	/**
+	 * Override this handler to perform behaviour cleanup for vehicle upon removal of behaviour
+	 * @param {*} vehicle
+	 */
+	onRemoved(vehicle) {}
+
+	/**
 	* Calculates the steering force for a single simulation step.
 	*
 	* @param {Vehicle} vehicle - The game entity the force is produced for.
@@ -6663,7 +6675,7 @@ class SteeringManager {
 	add( behavior ) {
 
 		this.behaviors.push( behavior );
-
+		behaviour.onAdded(this.vehicle);
 		return this;
 
 	}
@@ -6678,7 +6690,7 @@ class SteeringManager {
 
 		const index = this.behaviors.indexOf( behavior );
 		this.behaviors.splice( index, 1 );
-
+		behaviour.onRemoved(this.vehicle);
 		return this;
 
 	}
@@ -20450,6 +20462,29 @@ class OnPathBehavior extends SteeringBehavior {
 
 }
 
+// import { Vector3 } from '../../math/Vector3.js';
+
+//const desiredVelocity = new Vector3();
+
+/**
+* Flowfield behaviour through a navmesh
+*
+* @author Glidias
+* @augments SteeringBehavior
+*/
+
+class NavMeshFlowFieldBehaviour extends SteeringBehavior {
+
+	/**
+	 *
+	 * @param {NavMesh} navmesh
+	 * @param {AStar|BFS|DFS|Dijkstra} pathRef
+	 */
+	constructor( navmesh, pathRef ) {
+
+	}
+}
+
 /**
 * Base class for representing tasks. A task is an isolated unit of work that is
 * processed in an asynchronous way. Tasks are managed within a {@link TaskQueue task queue}.
@@ -20583,4 +20618,4 @@ function runTaskQueue( deadline ) {
 
 }
 
-export { AABB, AStar, AlignmentBehavior, ArriveBehavior, BFS, BVH, BVHNode, BoundingSphere, Face as CHFace, Vertex as CHVertex, VertexList as CHVertexList, Cell, CellSpacePartitioning, CohesionBehavior, CompositeGoal, ConvexHull, Corridor, CostTable, DFS, Dijkstra, Edge, EntityManager, EvadeBehavior, EventDispatcher, FleeBehavior, FollowPathBehavior, FuzzyAND, FuzzyCompositeTerm, FuzzyFAIRLY, FuzzyModule, FuzzyOR, FuzzyRule, FuzzySet, FuzzyTerm, FuzzyVERY, FuzzyVariable, GameEntity, Goal, GoalEvaluator, Graph, GraphUtils, HalfEdge, HeuristicPolicyDijkstra, HeuristicPolicyEuclid, HeuristicPolicyEuclidSquared, HeuristicPolicyManhattan, InterposeBehavior, LeftSCurveFuzzySet, LeftShoulderFuzzySet, LineSegment, Logger, MathUtils, Matrix3, Matrix4, MemoryRecord, MemorySystem, MeshGeometry, MessageDispatcher, MovingEntity, NavEdge, NavMesh, NavMeshLoader, NavNode, Node, NormalDistFuzzySet, OBB, ObstacleAvoidanceBehavior, OffsetPursuitBehavior, OnPathBehavior, Path, Plane, Polygon, Polyhedron, PriorityQueue, PursuitBehavior, Quaternion, Ray, RectangularTriggerRegion, Regulator, RightSCurveFuzzySet, RightShoulderFuzzySet, SAT, SeekBehavior, SeparationBehavior, SingletonFuzzySet, Smoother, SphericalTriggerRegion, State, StateMachine, SteeringBehavior, SteeringManager, Task, TaskQueue, Telegram, Think, Time, TriangularFuzzySet, Trigger, TriggerRegion, Vector3, Vehicle, Vision, WanderBehavior, WorldUp };
+export { AABB, AStar, AlignmentBehavior, ArriveBehavior, BFS, BVH, BVHNode, BoundingSphere, Face as CHFace, Vertex as CHVertex, VertexList as CHVertexList, Cell, CellSpacePartitioning, CohesionBehavior, CompositeGoal, ConvexHull, Corridor, CostTable, DFS, Dijkstra, Edge, EntityManager, EvadeBehavior, EventDispatcher, FleeBehavior, FollowPathBehavior, FuzzyAND, FuzzyCompositeTerm, FuzzyFAIRLY, FuzzyModule, FuzzyOR, FuzzyRule, FuzzySet, FuzzyTerm, FuzzyVERY, FuzzyVariable, GameEntity, Goal, GoalEvaluator, Graph, GraphUtils, HalfEdge, HeuristicPolicyDijkstra, HeuristicPolicyEuclid, HeuristicPolicyEuclidSquared, HeuristicPolicyManhattan, InterposeBehavior, LeftSCurveFuzzySet, LeftShoulderFuzzySet, LineSegment, Logger, MathUtils, Matrix3, Matrix4, MemoryRecord, MemorySystem, MeshGeometry, MessageDispatcher, MovingEntity, NavEdge, NavMesh, NavMeshFlowFieldBehaviour, NavMeshLoader, NavNode, Node, NormalDistFuzzySet, OBB, ObstacleAvoidanceBehavior, OffsetPursuitBehavior, OnPathBehavior, Path, Plane, Polygon, Polyhedron, PriorityQueue, PursuitBehavior, Quaternion, Ray, RectangularTriggerRegion, Regulator, RightSCurveFuzzySet, RightShoulderFuzzySet, SAT, SeekBehavior, SeparationBehavior, SingletonFuzzySet, Smoother, SphericalTriggerRegion, State, StateMachine, SteeringBehavior, SteeringManager, Task, TaskQueue, Telegram, Think, Time, TriangularFuzzySet, Trigger, TriggerRegion, Vector3, Vehicle, Vision, WanderBehavior, WorldUp };

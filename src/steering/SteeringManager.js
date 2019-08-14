@@ -59,7 +59,7 @@ class SteeringManager {
 	add( behavior ) {
 
 		this.behaviors.push( behavior );
-
+		behaviour.onAdded(this.vehicle);
 		return this;
 
 	}
@@ -74,7 +74,7 @@ class SteeringManager {
 
 		const index = this.behaviors.indexOf( behavior );
 		this.behaviors.splice( index, 1 );
-
+		behaviour.onRemoved(this.vehicle);
 		return this;
 
 	}

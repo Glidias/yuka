@@ -30,6 +30,18 @@ class SteeringBehavior {
 	}
 
 	/**
+	 * Override this handler to perform behaviour setup for vehicle removal of behaviour
+	 * @param {*} vehicle
+	 */
+	onAdded(vehicle) {}
+
+	/**
+	 * Override this handler to perform behaviour cleanup for vehicle upon removal of behaviour
+	 * @param {*} vehicle
+	 */
+	onRemoved(vehicle) {}
+
+	/**
 	* Calculates the steering force for a single simulation step.
 	*
 	* @param {Vehicle} vehicle - The game entity the force is produced for.

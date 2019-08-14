@@ -3619,6 +3619,18 @@
 		}
 
 		/**
+		 * Override this handler to perform behaviour setup for vehicle removal of behaviour
+		 * @param {*} vehicle
+		 */
+		onAdded(vehicle) {}
+
+		/**
+		 * Override this handler to perform behaviour cleanup for vehicle upon removal of behaviour
+		 * @param {*} vehicle
+		 */
+		onRemoved(vehicle) {}
+
+		/**
 		* Calculates the steering force for a single simulation step.
 		*
 		* @param {Vehicle} vehicle - The game entity the force is produced for.
@@ -6669,7 +6681,7 @@
 		add( behavior ) {
 
 			this.behaviors.push( behavior );
-
+			behaviour.onAdded(this.vehicle);
 			return this;
 
 		}
@@ -6684,7 +6696,7 @@
 
 			const index = this.behaviors.indexOf( behavior );
 			this.behaviors.splice( index, 1 );
-
+			behaviour.onRemoved(this.vehicle);
 			return this;
 
 		}
@@ -20456,6 +20468,29 @@
 
 	}
 
+	// import { Vector3 } from '../../math/Vector3.js';
+
+	//const desiredVelocity = new Vector3();
+
+	/**
+	* Flowfield behaviour through a navmesh
+	*
+	* @author Glidias
+	* @augments SteeringBehavior
+	*/
+
+	class NavMeshFlowFieldBehaviour extends SteeringBehavior {
+
+		/**
+		 *
+		 * @param {NavMesh} navmesh
+		 * @param {AStar|BFS|DFS|Dijkstra} pathRef
+		 */
+		constructor( navmesh, pathRef ) {
+
+		}
+	}
+
 	/**
 	* Base class for representing tasks. A task is an isolated unit of work that is
 	* processed in an asynchronous way. Tasks are managed within a {@link TaskQueue task queue}.
@@ -20650,6 +20685,7 @@
 	exports.MovingEntity = MovingEntity;
 	exports.NavEdge = NavEdge;
 	exports.NavMesh = NavMesh;
+	exports.NavMeshFlowFieldBehaviour = NavMeshFlowFieldBehaviour;
 	exports.NavMeshLoader = NavMeshLoader;
 	exports.NavNode = NavNode;
 	exports.Node = Node;
