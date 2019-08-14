@@ -79,6 +79,24 @@ class NavMesh {
 
 	}
 
+	weldNeighboringVertices() {
+		var regions = this.regions;
+		for ( let i = 0, il = regions.length; i < il; i ++ ) {
+			let r = regions[i];
+			let edge = r.edge;
+			do {
+				if (edge.twin !== null) {
+					if (edge.prev.vertex !== edge.twin.vertex) {
+						edge.twin.vertex = edge.prev.vertex;
+					}
+					if (edge.vertex !== edge.twin.prev.vertex) {
+						edge.twin.prev.vertex = edge.vertex;
+					}
+				}
+			} while ( edge !== r.edge );
+		}
+	}
+
 	/**
 	* Creates the navigation mesh from an array of convex polygons.
 	*
