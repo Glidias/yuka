@@ -30,7 +30,7 @@ class SteeringBehavior {
 	}
 
 	/**
-	 * Override this handler to perform behaviour setup for vehicle removal of behaviour
+	 * Override this handler to perform behaviour setup for vehicle upon addition of behaviour
 	 * @param {*} vehicle
 	 */
 	onAdded(vehicle) {}
