@@ -3,3 +3,5 @@ class FlowTriangulate {
 
 	}
 }
+
+export { FlowTriangulate };

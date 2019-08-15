@@ -1,4 +1,5 @@
 import { SteeringBehavior } from '../SteeringBehavior.js';
+import { FlowAgent } from '../../navigation/navmesh/flowfield/FlowAgent.js';
 
 // import { Vector3 } from '../../math/Vector3.js';
 
