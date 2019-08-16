@@ -7,55 +7,142 @@ class NavMeshFlowField {
 		this.navMesh = navMesh;
 	}
 
+	static cacheRegionIndexLookup(navMesh) {
+		if (!navMesh.regionIndexMap) {
+			navMesh.regionIndexMap = new Map();
+			var len = navMesh.regions.length;
+			for (var i=0; i<len; i++) {
+				navMesh.regionIndexMap.set(navMesh.regions[i], i);
+			}
+			navMesh.getNodeIndex = NavMeshFlowField.getCachedNodeIndexForRegionProto;
+		}
+	}
+
+	static getCachedNodeIndexForRegionProto(region) {
+		return this.regionIndexMap.has(region) ? this.regionIndexMap.get(region) : -1;
+	}
+
 	/**
 	 * Init persistant flowfield for leading up to a specific final  destination node, or for a single fixed path
+	 * @param {[Node]|(Dijkstra|Map)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra result cost map
 	 */
-	initPersistant() {
+	initPersistant(pathRef) {
 		this.edgeFieldMap = new Map();	// <Edge (of portal), [vec1, vec2]>
 		this.triangulationMap = new Map();	// <Edge (of portal?|region), FlowTriangulate>
+		this.savedRegionFlows = new Set();
+		this.pathRef = pathRef;
 	}
 
-	/**
-	 * Init single-region+..(related regions) transitional flowfield
-	 * @param {Polygon} region
-	 * @param {AStar|BFS|DFS|Dijkstra} pathRef
-	 */
-	initTransitional(region, pathRef) {
+
+	initTransitional(fromNode, node, pathRef) {
 		this.edgeFieldMap = new Map();	// <Edge (of portal), [vec1, vec2]>
 		this.triangulationMap = null;
-		return "";	// return string-based key for LRU cache storage
-	}
+		this.savedRegionFlows = null;
+		this.pathRef = null;
 
-
-	/**
-	 *
-	 * @param {Polygon} region
-	 * @param {AStar|BFS|DFS|Dijkstra} pathRef
-	 */
-	static getFullPathFrom(region, pathRef) {
-
+		this.calcRegionFlow(fromNode, node, pathRef);
+		return "";	// return string-based key for external LRU cache storage
 	}
 
 	/**
 	 *
-	 * @param {Polygon} region
-	 * @param {AStar|BFS|DFS|Dijkstra} pathRef
+	 * @param {Number} node	Node index to start from
+	 * @param {[Node]|(Dijkstra|Map)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra result cost map
+	 * @return [Number] All nodes that comprise of the necesary regions to be able to help calculate flowfield from given node (as if starting from that node).
+	 *  If no path can be found from given node, returns null.
 	 */
-	static getFlowRegionsFrom(region, pathRef) {
+	static getFlowNodesFrom(node, pathRef) {
+		let resultArr = [];
+		if (!Array.isArray(pathRef)) { // Dijkstra assumed or it's _cost map representing the costs it takes to get to final destination node from given node key
+			// iterate through all regions to find lowest costs
+			let costs = pathRef._costs ? pathRef._costs : pathRef;
 
+			let n = node;
+
+
+			let edges = this.navMesh.graph._edges.get( n );
+			let len = edges.length;
+
+			let tryCost = 99999999999999;
+			let tryNode = null;
+
+			for (let i=0; i<len; i++) {
+
+				let toN = edges[i].to;
+				if (costs.has(toN) && costs.get(toN) < tryCost) {
+					tryCost = costs.get(toN);
+					tryNode = toN;
+				}
+			}
+
+			if (tryNode !== null) resultArr.push(tryNode);
+			else {
+				return null;
+			}
+
+
+
+		} else {
+			var startIndex = pathRef.indexOf(region);
+			if (startIndex < 0) return null;
+
+
+		}
+		return resultArr;
+	}
+
+	setupTriangulation(fromPortal, nextPortal) {
+		if (!fromPortal) {
+			// get conventional makeshift triangulation towards "nextPortal"
+		}
+
+		let triangulation = null;
+		if (!this.triangulationMap) {	// non-persitant
+			if (!this.localTriangulation) {
+				// setup local triangulation with fromPortal to nextPortal
+				//this.localTriangulation =
+			}
+			triangulation = this.localTriangulation;
+
+		} else {	// persitant
+			let triangulationMap = this.triangulationMap;
+			let persistKey = fromPortal;
+			triangulation = triangulationMap.get(persistKey);
+			if (!triangulation) {
+				// setup triangulation o store in map
+				//triangulation =
+				triangulationMap.set(persistKey, triangulation);
+			}
+		}
+		return triangulation;
 	}
 
 	//a = new FlowVertex(this.curRegion.edge.vertex);
 	//b = new FlowVertex(this.curRegion.edge.next.vertex);
 	//c = new FlowVertex(this.curRegion.edge.prev.vertex);
 
-	calcRegionFlow(region, pathRef) {
-
+	/**
+	 *
+	 * @param {Number} fromNode	Node index to originate from (if any). If unspecified, put as -1.
+	 * Using this for entering non-tri regions can influence shape of main corridoor triangulation which goes directly (fromNode) to (destination node of node). Using this for entering tri-regions isn't required at all. (use -1)
+	 * @param {Number} node	Node index to start from
+	 * @param {[Node]|(Dijkstra|Map)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra result cost map
+	 * @return ...
+	 */
+	calcRegionFlow(fromNode, node, pathRef) {
+		if (this.savedRegionFlows && this.savedRegionFlows.has(fromNode + "," + node)) {
+			return;
+		}
+		if (!pathRef) {
+			pathRef = this.pathRef;
+			if (!pathRef) throw new Error("calcRegionFlow:: unable to retrieve pathRef!");
+		}
+		let region = this.navMesh.regions[node];
 		let edgeFieldMap = this.edgeFieldMap;
 
+		// let fromPortal = fromNode >= 0 ? getFromPortal : null; // determine with node/fromNode (if any)
+
 		//let nextRegion =
-		// let prevRegion =  // wont exist for tri start
-		// let fromPortal =  region.getPortalEdgeTo(prevRegion); // wont exist for tri start, if non-tri start, just pick the biggest one for makeshift triangulation
 		// let nextPortal = region.getPortalEdgeTo(nextRegion);
 
 		// with region, pathref
@@ -65,32 +152,21 @@ class NavMeshFlowField {
 
 		// list of regions
 
-		// check if in cache (note: for agent specific continuoous movement case, can skip calculation and leave it as null actually, but for simplicity ust include it in for now)
-		if (!edgeFieldMap.has(fromPortal)) {
-			edgeFieldMap.set(fromPortal, [new FlowVertex(fromPortal.prev.vertex), new FlowVertex(fromPortal.vertex)]);
+		// fromPortal not required if calculating region flow in triangle node...
+		if (region.edge.next.next.next === region.edge) fromPortal = null;
+
+		if (fromPortal) {
+			if (!edgeFieldMap.has(fromPortal)) {
+				edgeFieldMap.set(fromPortal, [new FlowVertex(fromPortal.prev.vertex), new FlowVertex(fromPortal.vertex)]);
+			}
 		}
+
 		if (!edgeFieldMap.has(nextPortal)) {
 			edgeFieldMap.set(nextPortal, [new FlowVertex(nextPortal.prev.vertex), new FlowVertex(nextPortal.vertex)]);
 		}
 
 		if (region.edge.next.next.next !== region.edge) {	// >=4ngon region
-			let triangulation = null;
-			if (!this.triangulationMap) {	// non-persitant
-				if (!this.localTriangulation) {
-					// setup local triangulation
-					//this.localTriangulation =
-				}
-				triangulation = this.localTriangulation;
-			} else {	// persitant
-				let triangulationMap = this.triangulationMap;
-				let persistKey = fromPortal;
-				triangulation = triangulationMap.get(persistKey); // or  get from edge instead, unless start of path region (laregest edge asumed of rthat case)
-				if (!triangulation) {
-					// setup triangulation o store in map
-					//triangulation =
-					triangulationMap.set(persistKey, triangulation);
-				}
-			}
+			this.setupTriangulation(fromPortal, toPortal);
 			// link vecctor fromPortal to nextPortal interval vertex vectors along main coriddoor of triangulation
 
 			//  .. for fan edges of triangulation
@@ -99,11 +175,11 @@ class NavMeshFlowField {
 
 
 		} else {	// triangle region
-			// link fromPortal to nextPortal interval vertex vectors
+
+			// link start vertex vector to nextPortal's midpoint
 
 			// link   nextPortal  vertex vectors along incident  X and B sets
 
-			// link start vertex vector to nextPortal's midpoint
 			//edgeFieldMap.set(vertex_not_shared_by_nextPortal, [new FlowVertex(vertex_not_shared_by_nextPortal));
 		}
 
