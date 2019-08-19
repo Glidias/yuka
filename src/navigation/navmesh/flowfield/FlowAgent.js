@@ -40,7 +40,7 @@ class FlowAgent {
 	*/
 
 	/**
-	 *  Set direction result vector for with a,b,c tri flow vertices from current position
+	 *  Set direction result vector for with a,b,c tri flow vertices from current position (assumed within triangle)
 	 * @param {Vector3} pt 	The position of agent
 	 * @param {Vector3} dir The result direction vector
 	 */

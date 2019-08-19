@@ -1,7 +1,8 @@
-import { Polygon } from '../../math/Polygon.js';
-import { Vector3 } from '../../math/Vector3.js';
+import { Polygon } from '../../../math/Polygon.js';
+import { Vector3 } from '../../../math/Vector3.js';
 import { FlowTriangulate } from './FlowTriangulate.js';
 import { FlowVertex } from './FlowVertex.js';
+import { isNull } from 'util';
 
 const CALC_VEC = new Vector3();
 const CALC_VEC2 = new Vector3();
@@ -9,6 +10,8 @@ const CALC_VEC2 = new Vector3();
 class NavMeshFlowField {
 	constructor(navMesh) {
 		this.navMesh = navMesh;
+
+		this._flowedFinal = false;
 	}
 
 	static cacheRegionIndexLookup(navMesh) {
@@ -57,7 +60,7 @@ class NavMeshFlowField {
 	/**
 	 *
 	 * @param {Number} node	Node index to start from
-	 * @param {[Node]|(Dijkstra|Map)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra result cost map
+	 * @param {[Node]|(Dijkstra)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra
 	 * @return [Number] All portal edges that comprise of the necesary regions to be able to help calculate flowfield from given node (as if starting from that node).
 	 *  If no path can be found from given node, returns null.
 	 */
@@ -69,7 +72,7 @@ class NavMeshFlowField {
 		let firstEdge = null;
 		if (!Array.isArray(pathRef)) { // Dijkstra assumed or it's _cost map representing the costs it takes to get to final destination node from given node key
 			// iterate through all regions to find lowest costs
-			let costs = pathRef._costs ? pathRef._costs : pathRef;
+			let costs = pathRef._costs;// ? pathRef._costs : pathRef;
 
 			n = node;
 
@@ -107,15 +110,17 @@ class NavMeshFlowField {
 					}
 				} else {
 					n = null;
+					tryNode = null;
 				}
 			}
-
-
+			//!!tryNode &&
+			this._flowedFinal = tryNode === pathRef.target;
 
 		} else {
 			var startIndex = pathRef.indexOf(node);
 			if (startIndex < 0) return null;
 			if (startIndex >= pathRef.length - 1) {
+				this._flowedFinal = true;
 				return resultArr;
 			}
 			tryNode = pathRef[startIndex+1];
@@ -133,7 +138,7 @@ class NavMeshFlowField {
 					n = null;
 				}
 			}
-
+			this._flowedFinal = startIndex + 1 >= pathRef.length - 1;
 		}
 		return resultArr;
 	}
@@ -169,6 +174,21 @@ class NavMeshFlowField {
 	//c = new FlowVertex(this.curRegion.edge.prev.vertex);
 
 
+
+	_calcTriRegionField(region, edgeFlows, finalDestPt) {
+		//  .. for fan edges of triangulation
+		// link vector from fan edge to destination portal left/right vertices
+		// determine nextPortal flow vectors from fanned edges of triangulation along incident  X and B sets
+	}
+
+	_calcNonTriRegionField(triangulation, edgeFlows, finalDestPt) {
+		// link start vertex vector to nextPortal's midpoint
+
+		// link   nextPortal  vertex vectors along incident  X and B sets
+
+		//edgeFieldMap.set(vertex_not_shared_by_nextPortal, [new FlowVertex(vertex_not_shared_by_nextPortal));
+	}
+
 	static calcFinalRegionField(region, finalDestPt, edgeFieldMap) {
 		let a = CALC_VEC;
 		let b = CALV_VEC2;
@@ -177,7 +197,7 @@ class NavMeshFlowField {
 		if (!edgeFieldMap.has(region.edge.vertex)) {
 			edge = region.edge;
 			do {
-				edgeFieldMap.set(region.edge.vertex, new FlowVertex(region.edge.vertex));
+				edgeFieldMap.set(edge.vertex, new FlowVertex(edge.vertex));
 				edge = edge.next;
 			} while(edge !== region.edge)
 		}
@@ -202,10 +222,11 @@ class NavMeshFlowField {
 	 * @param {Number} fromNode	Node index to originate from (if any). If unspecified, put as -1.
 	 * Using this for entering non-tri regions can influence shape of main corridoor triangulation which goes directly (fromNode) to (destination node of node). Using this for entering tri-regions isn't required at all. (use -1)
 	 * @param {Number} node	Node index to start from
-	 * @param {[Node]|(Dijkstra|Map)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra result cost map
-	 * @param {Vector3}	finalDestPt	Final destination point for flowfield. Required if the 'node' is a final node or last-before-final node along pathRef. If unsure, just include it in.
-	 * @param {Array} edgeFlows Precomputed edgeflows for internal usage only.
-	 * @return ...
+	 * @param {[Node]|(Dijkstra)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra
+	 * @param {Vector3}	finalDestPt	Final destination point for flowfield.
+	 * Required if the 'node' is a final node or last-before-final node along pathRef. If unsure, just include it in.
+	 * In some cases, this has to be excluded if final destination point is not known or ever-changing per frame, in which case 'node' cannot be the final node along pathRef.
+	 * @return {Array} List of edge-flows used in the calculation
 	 */
 	calcRegionFlow(fromNode, node, pathRef, finalDestPt) {
 		if (!pathRef) {
@@ -225,6 +246,7 @@ class NavMeshFlowField {
 
 		edgeFlows = this.getFlowEdges(node, pathRef);
 		if (edgeFlows === null) {
+			// could not find path from "node" along pathRef
 			return null;
 		}
 
@@ -233,8 +255,7 @@ class NavMeshFlowField {
 			return edgeFlows;
 		}
 
-		let nextRegion = this.navMesh.regions[edgeFlows[0]];
-		let nextPortal = region.getPortalEdgeTo(nextRegion);
+		let nextPortal = edgeFlows[0];
 		if (!edgeFieldMap.has(nextPortal)) {
 			edgeFieldMap.set(nextPortal, [new FlowVertex(nextPortal.prev.vertex), new FlowVertex(nextPortal.vertex)]);
 		}
@@ -250,24 +271,14 @@ class NavMeshFlowField {
 			}
 		}
 
-		// With edgeFlows,
-		// list of portals to check under set X, incident to a given vertex
-		// list of border edges to check under set B, incident to a given vertex
+		// remove finalDestPt reference if not applicable along edgeFlows (ie. last destination node along edgeFLow isn't final destination node)
+		if (!this._flowedFinal) finalDestPt = null;
 
 		if (region.edge.next.next.next !== region.edge) {	// >=4ngon region
-			this.setupTriangulation(fromPortal, nextPortal);
-
-			//  .. for fan edges of triangulation
-			// link vector from fan edge to destination portal left/right vertices
-			// determine nextPortal flow vectors from fanned edges of triangulation along incident  X and B sets
-
+			let triangulation = this.setupTriangulation(fromPortal, nextPortal);
+			this._calcNonTriRegionField(triangulation, edgeFlows, finalDestPt);
 		} else {	// triangle region
-
-			// link start vertex vector to nextPortal's midpoint
-
-			// link   nextPortal  vertex vectors along incident  X and B sets
-
-			//edgeFieldMap.set(vertex_not_shared_by_nextPortal, [new FlowVertex(vertex_not_shared_by_nextPortal));
+			this._calcTriRegionField(region, edgeFlows, finalDestPt);
 		}
 
 		return edgeFlows;
