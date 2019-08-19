@@ -114,7 +114,7 @@ class NavMeshFlowField {
 				}
 			}
 			//!!tryNode &&
-			this._flowedFinal = tryNode === pathRef.target;
+			this._flowedFinal = tryNode === pathRef.source;
 
 		} else {
 			var startIndex = pathRef.indexOf(node);
