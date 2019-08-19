@@ -1,4 +1,4 @@
-import { Polygon } from '../../../math/Polygon.js';
+//import { Polygon } from '../../../math/Polygon.js';
 import { Vector3 } from '../../../math/Vector3.js';
 import { FlowTriangulate } from './FlowTriangulate.js';
 import { FlowVertex } from './FlowVertex.js';
@@ -6,6 +6,7 @@ import { isNull } from 'util';
 
 const CALC_VEC = new Vector3();
 const CALC_VEC2 = new Vector3();
+const CALC_VEC3 = new Vector3();
 
 class NavMeshFlowField {
 	constructor(navMesh) {
@@ -60,7 +61,7 @@ class NavMeshFlowField {
 	/**
 	 *
 	 * @param {Number} node	Node index to start from
-	 * @param {[Node]|(Dijkstra)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra
+	 * @param {[Node]|(Dijkstra)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra with .source as the final destination and .destination as -1
 	 * @return [Number] All portal edges that comprise of the necesary regions to be able to help calculate flowfield from given node (as if starting from that node).
 	 *  If no path can be found from given node, returns null.
 	 */
@@ -70,9 +71,9 @@ class NavMeshFlowField {
 		let tryNode;
 		let tryEdge;
 		let firstEdge = null;
-		if (!Array.isArray(pathRef)) { // Dijkstra assumed or it's _cost map representing the costs it takes to get to final destination node from given node key
+		if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
 			// iterate through all regions to find lowest costs
-			let costs = pathRef._costs;// ? pathRef._costs : pathRef;
+			let costs = pathRef._costs;
 
 			n = node;
 
@@ -93,16 +94,11 @@ class NavMeshFlowField {
 					}
 				}
 
-
 				if (tryNode !== null) {
 					if (firstEdge !== null) {
-						tryEdge = this.navMesh.regions[n].getPortalEdgeTo(this.navMesh.regions[tryNode]);
-						if (tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ) {
-							resultArr.push(tryEdge);
-							n = tryNode;
-						} else {
-							n = null;
-						}
+						tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
+						resultArr.push(tryEdge);
+						n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
 					} else {
 						firstEdge = tryEdge;
 						resultArr.push(tryEdge);
@@ -113,7 +109,6 @@ class NavMeshFlowField {
 					tryNode = null;
 				}
 			}
-			//!!tryNode &&
 			this._flowedFinal = tryNode === pathRef.source;
 
 		} else {
@@ -124,20 +119,17 @@ class NavMeshFlowField {
 				return resultArr;
 			}
 			tryNode = pathRef[startIndex+1];
-			firstEdge = this.navMesh.regions[node].getPortalEdgeTo(this.navMesh.regions[tryNode]);
+			firstEdge = this.navMesh.regions[node].getEdgeTo(this.navMesh.regions[tryNode]);
 			resultArr(firstEdge);
 			n = tryNode;
 			while (n!==null) {
 				startIndex++;
 				tryNode = pathRef[startIndex+1];
-				tryEdge = this.navMesh.regions[n].getPortalEdgeTo(this.navMesh.regions[tryNode]);
-				if (tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ) {
-					resultArr.push(tryEdge);
-					n = tryNode;
-				} else {
-					n = null;
-				}
+				tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
+				resultArr.push(tryEdge);
+				n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
 			}
+
 			this._flowedFinal = startIndex + 1 >= pathRef.length - 1;
 		}
 		return resultArr;
@@ -145,7 +137,7 @@ class NavMeshFlowField {
 
 	setupTriangulation(fromPortal, nextPortal) {
 		if (!fromPortal) {
-			// get conventional makeshift triangulation towards "nextPortal"
+			// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
 		}
 
 		let triangulation = null;
@@ -176,22 +168,91 @@ class NavMeshFlowField {
 
 
 	_calcTriRegionField(region, edgeFlows, finalDestPt) {
-		//  .. for fan edges of triangulation
-		// link vector from fan edge to destination portal left/right vertices
-		// determine nextPortal flow vectors from fanned edges of triangulation along incident  X and B sets
+		// link   nextPortal  vertex vectors along incident  X and B sets
+		const a = CALC_VEC;
+		const b = CALC_VEC2;
+		const c = CALC_VEC3;
+		let edgeFieldMap = this.edgeFieldMap;
+
+
+		let edge = region.edge;	// 1st edge
+		let tryEdge = edgeFlows[0];
+		// link start vertex vector to nextPortal's midpoint
+		// get start corner flow vertex
+		if (edge !== tryEdge) {
+			edge = edge.next; // 2nd edge
+			if (edge !== tryEdge) {
+				edge = edge.next;	// 3rd edge
+			}
+		}
+
+		let isolatedV = edge.next.vertex;
+
+		a.x = isolatedV.vertex.x;
+		a.z = isolatedV.vertex.z;
+		b.x = (edge.vertex.x + edge.prev.vertex.x) * 0.5;
+		b.z = (edge.vertex.z + edge.prev.vertex.z) * 0.5;
+
+		edgeFieldMap.set(isolatedV, new FlowVertex(isolatedV).subVectors(b,a).normalize());
+
+		let poly;
+
+		let leftFlowVertex;
+		let rightFlowVertex;
+		let f;
+		let t;
+		// determine left B1, B2 edge to flow vertex check
+		t = 0;
+		edge = edgeFlows[0];
+		a.x = edge.vertex.x - isolatedV.x;
+		a.z = edge.vertex.z - isolatedV.z;
+		// perp
+		c.x = -a.z;
+		c.z = a.x;
+
+		tryEdge = edgeFlows[++t];  // find non-incident portal edge along flow to vertex
+		while (tryEdge && edge.vertex === tryEdge.vertex) {
+			tryEdge = edgeFlows[++t];
+		}
+		if (tryEdge) {
+			// flow along b2 for next non-incident portal
+			b.x = tryEdge.vertex.x - edge.vertex.x;
+			b.z = tryEdge.vertex.z - edge.vertex.z;
+			// does flow along b2 lie within boundary normal for b1 (a(perp)?
+			leftFlowVertex = new FlowVertex(edge.vertex).copy(b.x * c.x + b.z * b.z >= 0 ? b : a).normalize();
+		} else {
+			// finalDestPt required to determine b comparison
+		}
+
+
+
+		// determine left X set (all subsequent edges incident to edge left vertex)
+
+
+
+		// determine right B1, B2 edge to flow vertex check
+		b1 = edge.prev;
+		b2 = edge.twin.next;
+		poly = edge.twin;
+		if (poly.edge.next.next.next !== poly.edge) {
+			// b2 vector
+		} else {
+
+		}
+		// determine right X set (all subsequent edges incident to edge right vertex)
+
 	}
 
 	_calcNonTriRegionField(triangulation, edgeFlows, finalDestPt) {
-		// link start vertex vector to nextPortal's midpoint
+		//  .. for fan edges of triangulation
+		// link vector from fan edge to destination portal left/right vertices
 
-		// link   nextPortal  vertex vectors along incident  X and B sets
-
-		//edgeFieldMap.set(vertex_not_shared_by_nextPortal, [new FlowVertex(vertex_not_shared_by_nextPortal));
+		// determine nextPortal flow vectors from fanned edges of triangulation along incident  X and B sets
 	}
 
 	static calcFinalRegionField(region, finalDestPt, edgeFieldMap) {
-		let a = CALC_VEC;
-		let b = CALV_VEC2;
+		const a = CALC_VEC;
+		const b = CALV_VEC2;
 
 		// calculate
 		if (!edgeFieldMap.has(region.edge.vertex)) {
@@ -205,8 +266,6 @@ class NavMeshFlowField {
 		edge = region.edge;
 		do {
 			flowVertex = edgeFieldMap.get(edge.vertex);
-
-			// hmm...sub vectors should be in 2D instead?
 			a.x = edge.vertex.x;
 			a.z = edge.vertex.z;
 			b.x = finalDestPt.x;
@@ -257,17 +316,17 @@ class NavMeshFlowField {
 
 		let nextPortal = edgeFlows[0];
 		if (!edgeFieldMap.has(nextPortal)) {
-			edgeFieldMap.set(nextPortal, [new FlowVertex(nextPortal.prev.vertex), new FlowVertex(nextPortal.vertex)]);
+			edgeFieldMap.set(nextPortal, [new FlowVertex(nextPortal.vertex), new FlowVertex(nextPortal.prev.vertex)]);
 		}
 
 		let fromPortal;
 		// fromPortal not required if calculating region flow in triangle node...
 		if (region.edge.next.next.next === region.edge) fromPortal = null;
-		else fromPortal = fromNode >= 0 ? this.navMesh.regions[fromNode].getPortalEdgeTo(region).twin : null; // determine with node/fromNode (if any);
+		else fromPortal = fromNode >= 0 ? this.navMesh.regions[fromNode].getEdgeTo(region).twin : null; // determine with node/fromNode (if any);
 
 		if (fromPortal) {
 			if (!edgeFieldMap.has(fromPortal)) {
-				edgeFieldMap.set(fromPortal, [new FlowVertex(fromPortal.prev.vertex), new FlowVertex(fromPortal.vertex)]);
+				edgeFieldMap.set(fromPortal, [new FlowVertex(fromPortal.vertex), new FlowVertex(fromPortal.prev.vertex)]);
 			}
 		}
 

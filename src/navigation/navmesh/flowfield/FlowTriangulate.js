@@ -1,6 +1,7 @@
 class FlowTriangulate {
-	constructor() {
-
+	constructor(fromPortal, nextPortal) {
+		this.fromPortal = fromPortal;
+		this.nextPortal = nextPortal;
 	}
 }
 
