@@ -1,4 +1,3 @@
-//import { Polygon } from '../../../math/Polygon.js';
 import { Vector3 } from '../../../math/Vector3.js';
 import { FlowTriangulate } from './FlowTriangulate.js';
 import { FlowVertex } from './FlowVertex.js';
@@ -184,6 +183,7 @@ class NavMeshFlowField {
 		const c = CALC_VEC3;
 		let edgeFieldMap = this.edgeFieldMap;
 
+		// Launch flow vector from isolated vertex corner
 
 		let edge = region.edge;	// 1st edge
 		let tryEdge = edgeFlows[0];
@@ -205,14 +205,28 @@ class NavMeshFlowField {
 
 		edgeFieldMap.set(isolatedV, new FlowVertex(isolatedV).subVectors(b,a).normalize());
 
-		let poly;
+		// Calculate destination portal flow vectors
 
+		this._calcDestPortalField(edgeFlows, isolatedV);
+	}
+
+	_calcDestPortalField(edgeFlows, iVertex, iVertex2) {
+		const a = CALC_VEC;
+		const b = CALC_VEC2;
+		const c = CALC_VEC3;
+		let edgeFieldMap = this.edgeFieldMap;
+
+		let edge = edgeFlows[0];
+		let isolatedV;
+
+		// Calculate destination portal flow vectors
 		let leftFlowVertex;
 		let rightFlowVertex;
 		let t;
 		let i;
 		// (C1) determine left B1, B2 edge to flow vertex check
 		t = 0;
+		isolatedV = iVertex;
 		edge = edgeFlows[0];
 		a.x = edge.vertex.x - isolatedV.x;
 		a.z = edge.vertex.z - isolatedV.z;
@@ -258,6 +272,7 @@ class NavMeshFlowField {
 		// (C1) determine left B1, B2 edge to flow vertex check
 		t = 0;
 		edge = edgeFlows[0];
+		isolatedV = iVertex2 ? iVertex2 : iVertex;
 		a.x = edge.prev.vertex.x - isolatedV.x;
 		a.z = edge.prev.vertex.z - isolatedV.z;
 		// perp boundary normal
@@ -298,13 +313,54 @@ class NavMeshFlowField {
 			}
 		}
 
+		edgeFieldMap.set(edge, [leftFlowVertex, rightFlowVertex]);
 	}
 
 	_calcNonTriRegionField(triangulation, edgeFlows, finalDestPt) {
-		//  .. for fan edges of triangulation
-		// link vector from fan edge to destination portal left/right vertices
+		const a = CALC_VEC;
+		const b = CALC_VEC2;
+		const c = CALC_VEC3;
+		let edgeFieldMap = this.edgeFieldMap;
 
-		// determine nextPortal flow vectors from fanned edges of triangulation along incident  X and B sets
+		let edge = triangulation.fromPortal;	// from inside of region
+		let tryEdge = triangulation.toPortal; // from inside of region
+
+		if (tryEdge !== edgeFlows[0]) {
+			throw new Error("Assertion failed: toPortal of triangulation should match edgeFlows[0] assumption!");
+		}
+
+		let leftFlowVertex = null;
+		let rightFlowVertex = null;
+
+		// Determine fromPortal flow vectors
+
+		// towards toPortal on left border, fromPortal
+		if (edge.prev.vertex !== tryEdge.vertex) {
+			a.x = edge.prev.vertex.x;
+			a.y = edge.prev.vertex.y;
+			b.x = tryEdge.vertex.x;
+			b.z = tryEdge.vertex.z;
+			leftFlowVertex = new FlowVertex(edge.prev.vertex).subVectors(b, a).normalize();
+		} // else will share same vertex on fromPortal edge
+
+		// towards toPortal on right border, fromPortal
+		if (edge.vertex !== tryEdge.prev.vertex) {
+			a.x = edge.vertex.x;
+			a.y = edge.vertex.y;
+			b.x = tryEdge.prev.vertex.x;
+			b.z = tryEdge.prev.vertex.z;
+			rightFlowVertex = new FlowVertex(edge.vertex).subVectors(b, a).normalize();
+		} // else will share same vertex on fromPortal edge
+
+		let fromPortalVectors;
+		edgeFieldMap.set(edge, fromPortalVectors = [leftFlowVertex, rightFlowVertex]);
+
+		//  .. for all fan edges of triangulation towards toPortal
+
+		// Calculate destination portal flow vectors
+		this._calcDestPortalField(edgeFlows, leftFlowVertex ? leftFlowVertex.vertex : rightFlowVertex.vertex,
+			(leftFlowVertex && rightFlowVertex) ? rightFlowVertex.vertex : null);
+
 	}
 
 	static calcFinalRegionField(region, finalDestPt, edgeFieldMap) {
