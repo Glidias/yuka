@@ -20,7 +20,7 @@ class NavMeshFlowFieldBehaviour extends SteeringBehavior {
 	 * @param {AStar|BFS|DFS|Dijkstra} pathRef
 	 */
 	constructor( navmesh, pathRef ) {
-
+		super();
 	}
 }
 

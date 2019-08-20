@@ -70,15 +70,19 @@ class NavMeshFlowField {
 	 *
 	 * @param {Number} node	Node index to start from
 	 * @param {[Node]|(Dijkstra)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra with .source as the final destination and .destination as -1
+	 * @param {BooleanD} getAll Always get all flow edges until reach end of path
 	 * @return [Number] All portal edges that comprise of the necesary regions to be able to help calculate flowfield from given node (as if starting from that node).
 	 *  If no path can be found from given node, returns null.
 	 */
-	getFlowEdges(node, pathRef) {
+	getFlowEdges(node, pathRef, getAll) {
 		let resultArr = [];
 		let n;
 		let tryNode;
 		let tryEdge;
 		let firstEdge = null;
+
+		this._flowedFinal = false;	// for test-debugging purposes
+
 		if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
 			// iterate through all regions to find lowest costs
 			let costs = pathRef._costs;
@@ -107,11 +111,18 @@ class NavMeshFlowField {
 						tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
 						resultArr.push(tryEdge);
 						n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
+
+						if (getAll) n = tryNode;
 					} else {
 						firstEdge = tryEdge;
 						resultArr.push(tryEdge);
 						n = tryNode;
 					}
+
+					if (tryNode === pathRef.source) {
+						break;
+					}
+
 				} else {
 					n = null;
 					tryNode = null;
@@ -133,9 +144,12 @@ class NavMeshFlowField {
 			while (n!==null) {
 				startIndex++;
 				tryNode = pathRef[startIndex+1];
+				if (!tryNode) break;
 				tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
 				resultArr.push(tryEdge);
 				n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
+
+				if (getAll) n = tryNode;
 			}
 
 			this._flowedFinal = startIndex + 1 >= pathRef.length - 1;
