@@ -206,7 +206,6 @@ class NavMeshFlowField {
 		edgeFieldMap.set(isolatedV, new FlowVertex(isolatedV).subVectors(b,a).normalize());
 
 		// Calculate destination portal flow vectors
-
 		this._calcDestPortalField(edgeFlows, isolatedV);
 	}
 
@@ -313,7 +312,8 @@ class NavMeshFlowField {
 			}
 		}
 
-		edgeFieldMap.set(edge, [leftFlowVertex, rightFlowVertex]);
+		let result = [leftFlowVertex, rightFlowVertex];
+		edgeFieldMap.set(edge, result);
 	}
 
 	_calcNonTriRegionField(triangulation, edgeFlows, finalDestPt) {
@@ -355,11 +355,20 @@ class NavMeshFlowField {
 		let fromPortalVectors;
 		edgeFieldMap.set(edge, fromPortalVectors = [leftFlowVertex, rightFlowVertex]);
 
+		// TODO: fan info
 		//  .. for all fan edges of triangulation towards toPortal
 
 		// Calculate destination portal flow vectors
-		this._calcDestPortalField(edgeFlows, leftFlowVertex ? leftFlowVertex.vertex : rightFlowVertex.vertex,
+		let result = this._calcDestPortalField(edgeFlows, leftFlowVertex ? leftFlowVertex.vertex : rightFlowVertex.vertex,
 			(leftFlowVertex && rightFlowVertex) ? rightFlowVertex.vertex : null);
+
+		if (!fromPortalVectors[0]) {
+			fromPortalVectors[0] = result[0];
+		}
+
+		if (!fromPortalVectors[1]) {
+			fromPortalVectors[1] = result[1];
+		}
 
 	}
 
