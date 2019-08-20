@@ -8,6 +8,15 @@ const CALC_VEC = new Vector3();
 const CALC_VEC2 = new Vector3();
 const CALC_VEC3 = new Vector3();
 
+//a = new FlowVertex(this.curRegion.edge.vertex);
+//b = new FlowVertex(this.curRegion.edge.next.vertex);
+//c = new FlowVertex(this.curRegion.edge.prev.vertex);
+
+/**
+ * Gridless flowfield on navmesh generation
+ * https://gingkoapp.com/how-to-gridless-rts
+ */
+
 class NavMeshFlowField {
 	constructor(navMesh) {
 		this.navMesh = navMesh;
@@ -161,12 +170,13 @@ class NavMeshFlowField {
 		return triangulation;
 	}
 
-	//a = new FlowVertex(this.curRegion.edge.vertex);
-	//b = new FlowVertex(this.curRegion.edge.next.vertex);
-	//c = new FlowVertex(this.curRegion.edge.prev.vertex);
-
-
-
+	/**
+	 * An implementation of:
+	 * http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.68.875&rep=rep1&type=pdf#page=2
+	 * @param {Polygon} region The starting polygon reference to calculate flowfield for
+	 * @param {Array<HalfEdge>} edgeFlows List of connecting portal edges along path up to the edge which doesn't share any vertex with the first portal edge
+	 * @param {Vector3} finalDestPt	Final destination point reference
+	 */
 	_calcTriRegionField(region, edgeFlows, finalDestPt) {
 		// link   nextPortal  vertex vectors along incident  X and B sets
 		const a = CALC_VEC;
@@ -199,18 +209,19 @@ class NavMeshFlowField {
 
 		let leftFlowVertex;
 		let rightFlowVertex;
-		let f;
 		let t;
-		// determine left B1, B2 edge to flow vertex check
+		let i;
+		// (C1) determine left B1, B2 edge to flow vertex check
 		t = 0;
 		edge = edgeFlows[0];
 		a.x = edge.vertex.x - isolatedV.x;
 		a.z = edge.vertex.z - isolatedV.z;
-		// perp
+		// perp boundary normal
 		c.x = -a.z;
 		c.z = a.x;
 
-		tryEdge = edgeFlows[++t];  // find non-incident portal edge along flow to vertex
+		tryEdge = edgeFlows[++t];
+		// find non-incident portal edge along flow to vertex
 		while (tryEdge && edge.vertex === tryEdge.vertex) {
 			tryEdge = edgeFlows[++t];
 		}
@@ -218,28 +229,74 @@ class NavMeshFlowField {
 			// flow along b2 for next non-incident portal
 			b.x = tryEdge.vertex.x - edge.vertex.x;
 			b.z = tryEdge.vertex.z - edge.vertex.z;
-			// does flow along b2 lie within boundary normal for b1 (a(perp)?
-			leftFlowVertex = new FlowVertex(edge.vertex).copy(b.x * c.x + b.z * b.z >= 0 ? b : a).normalize();
+			// does flow along b2 lie within boundary normal?
+			leftFlowVertex = new FlowVertex(edge.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize();
 		} else {
-			// finalDestPt required to determine b comparison
+			if (tryEdge) { // leads indirectly to end
+				leftFlowVertex =  new FlowVertex(edge.vertex).copy(a).normalize();
+			} else { // assumed leads directly into final destination node from starting node, finalDestPt requried
+				b.x = finalDestPt.x - edge.vertex.x;
+				b.z = finalDestPt.z - edge.vertex.z;
+				leftFlowVertex =  new FlowVertex(edge.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize().initFinal(finalDestPt);
+				// !Check if need to non-normalize for finalDestPt?
+			}
+		}
+		// (C2) check X portal edges incident to leftFlowVertex to determine if initSpinning required
+		for (i=1; i<t; i++) {
+			tryEdge = edgeFlows[i];
+			a.x = tryEdge.prev.vertex.x - tryEdge.vertex.x;
+			a.z = tryEdge.prev.vertex.z - tryEdge.vertex.z;
+			// perp forward normal along edge flow X
+			c.x = -a.z;
+			c.z = a.x;
+			if (leftFlowVertex.x * c.x + leftFlowVertex.z * c.z < 0) {
+				leftFlowVertex.initSpinning(tryEdge, false, edgeFlows[i+1], finalDestPt);
+				break;
+			}
 		}
 
+		// (C1) determine left B1, B2 edge to flow vertex check
+		t = 0;
+		edge = edgeFlows[0];
+		a.x = edge.prev.vertex.x - isolatedV.x;
+		a.z = edge.prev.vertex.z - isolatedV.z;
+		// perp boundary normal
+		c.x = -a.z;
+		c.z = a.x;
 
-
-		// determine left X set (all subsequent edges incident to edge left vertex)
-
-
-
-		// determine right B1, B2 edge to flow vertex check
-		b1 = edge.prev;
-		b2 = edge.twin.next;
-		poly = edge.twin;
-		if (poly.edge.next.next.next !== poly.edge) {
-			// b2 vector
-		} else {
-
+		tryEdge = edgeFlows[++t];
+		// find non-incident portal edge along flow to vertex
+		while (tryEdge && edge.prev.vertex === tryEdge.prev.vertex) {
+			tryEdge = edgeFlows[++t];
 		}
-		// determine right X set (all subsequent edges incident to edge right vertex)
+		if (tryEdge) {
+			// flow along b2 for next non-incident portal
+			b.x = tryEdge.prev.vertex.x - edge.prev.vertex.x;
+			b.z = tryEdge.prev.vertex.z - edge.prev.vertex.z;
+			// does flow along b2 lie within boundary normal?
+			rightFlowVertex = new FlowVertex(edge.prev.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize();
+		} else {
+			if (tryEdge) { // leads indirectly to end
+				rightFlowVertex =  new FlowVertex(edge.prev.vertex).copy(a).normalize();
+			} else { // assumed leads directly into final destination node from starting node, finalDestPt requried
+				b.x = finalDestPt.x - edge.prev.vertex.x;
+				b.z = finalDestPt.z - edge.prev.vertex.z;
+				rightFlowVertex =  new FlowVertex(edge.prev.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize().initFinal(finalDestPt);
+			}
+		}
+		// (C2) check X portal edges incident to rightFlowVertex to determine if initSpinning required
+		for (i=1; i<t; i++) {
+			tryEdge = edgeFlows[i];
+			a.x = tryEdge.prev.vertex.x - tryEdge.vertex.x;
+			a.z = tryEdge.prev.vertex.z - tryEdge.vertex.z;
+			// perp forward normal along edge flow X
+			c.x = -a.z;
+			c.z = a.x;
+			if (rightFlowVertex.x * c.x + rightFlowVertex.z * c.z < 0) {
+				rightFlowVertex.initSpinning(tryEdge, true, edgeFlows[i+1], finalDestPt);
+				break;
+			}
+		}
 
 	}
 
