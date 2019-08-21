@@ -1,5 +1,5 @@
 import { FlowVertex } from './FlowVertex.js'
-import { NavMeshFlowField } from './NavMeshFlowField.js'
+import { NavMeshFlowField } from './NavmeshFlowField.js'
 import { Vector3 } from '../../../math/Vector3.js';
 
 const testPt = new Vector3();
