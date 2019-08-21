@@ -21,6 +21,8 @@ class NavMeshFlowField {
 		this.navMesh = navMesh;
 
 		this._flowedFinal = false;
+
+		this._debugPath = [];
 	}
 
 	static cacheRegionIndexLookup(navMesh) {
@@ -142,13 +144,12 @@ class NavMeshFlowField {
 				this._flowedFinal = true;
 				return resultArr;
 			}
-			tryNode = pathRef[startIndex+1];
+			tryNode = pathRef[++startIndex];
 			firstEdge = this.navMesh.regions[node].getEdgeTo(this.navMesh.regions[tryNode]);
-			resultArr(firstEdge);
+			resultArr.push(firstEdge);
 			n = tryNode;
 			while (n!==null) {
-				startIndex++;
-				tryNode = pathRef[startIndex+1];
+				tryNode = pathRef[++startIndex];
 				if (!tryNode) break;
 				tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
 				resultArr.push(tryEdge);
@@ -157,7 +158,7 @@ class NavMeshFlowField {
 				if (getAll) n = tryNode;
 			}
 
-			this._flowedFinal = startIndex + 1 >= pathRef.length - 1;
+			this._flowedFinal = startIndex >= pathRef.length - 1;
 		}
 		return resultArr;
 	}
