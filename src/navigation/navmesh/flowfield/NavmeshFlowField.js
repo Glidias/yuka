@@ -85,7 +85,7 @@ class NavMeshFlowField {
 
 		if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
 			// iterate through all regions to find lowest costs
-			let costs = pathRef._costs;
+			let costs = pathRef._cost;
 
 			n = node;
 
@@ -96,23 +96,29 @@ class NavMeshFlowField {
 				let tryCost = 99999999999999;
 				tryNode = null;
 
+
 				for (let i=0; i<len; i++) {
 
 					let toN = edges[i].to;
+					if (tryNode === pathRef.source) {
+						tryNode = toN;
+						this._flowedFinal = true;
+						break;
+					}
 					if (costs.has(toN) && costs.get(toN) < tryCost) {
 						tryCost = costs.get(toN);
 						tryNode = toN;
-						tryEdge = edges[i];
 					}
 				}
 
 				if (tryNode !== null) {
+					tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
 					if (firstEdge !== null) {
-						tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
 						resultArr.push(tryEdge);
 						n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
 
 						if (getAll) n = tryNode;
+						if (this._flowedFinal) return resultArr;
 					} else {
 						firstEdge = tryEdge;
 						resultArr.push(tryEdge);
@@ -122,13 +128,12 @@ class NavMeshFlowField {
 					if (tryNode === pathRef.source) {
 						break;
 					}
-
 				} else {
 					n = null;
 					tryNode = null;
 				}
 			}
-			this._flowedFinal = tryNode === pathRef.source;
+
 
 		} else {
 			var startIndex = pathRef.indexOf(node);
