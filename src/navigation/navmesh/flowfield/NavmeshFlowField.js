@@ -99,7 +99,7 @@ class NavMeshFlowField {
 				let edges = this.navMesh.graph._edges.get( n );
 				let len = edges.length;
 
-				
+
 				tryNode = null;
 
 
@@ -123,7 +123,7 @@ class NavMeshFlowField {
 						n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
 
 						if (getAll) n = tryNode;
-						
+
 					} else {
 						firstEdge = tryEdge;
 						resultArr.push(tryEdge);
@@ -175,8 +175,7 @@ class NavMeshFlowField {
 		let triangulation = null;
 		if (!this.triangulationMap) {	// non-persitant
 			if (!this.localTriangulation) {
-				// setup local triangulation with fromPortal to nextPortal
-				//this.localTriangulation =
+				this.localTriangulation = new FlowTriangulate(fromPortal, nextPortal);
 			}
 			triangulation = this.localTriangulation;
 
@@ -186,7 +185,7 @@ class NavMeshFlowField {
 			triangulation = triangulationMap.get(persistKey);
 			if (!triangulation) {
 				// setup triangulation o store in map
-				//triangulation =
+				triangulation = new FlowTriangulate(fromPortal, nextPortal);
 				triangulationMap.set(persistKey, triangulation);
 			}
 		}
@@ -440,7 +439,7 @@ class NavMeshFlowField {
 		}
 		if (this.savedRegionFlows) {
 			if (this.savedRegionFlows.has(fromNode + "," + node)) return;
-			this.savedRegionFlows.set(fromNode+","+node);
+			this.savedRegionFlows.add(fromNode+","+node);
 		}
 
 		let region = this.navMesh.regions[node];
