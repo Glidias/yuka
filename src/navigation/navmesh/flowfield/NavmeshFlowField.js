@@ -6,6 +6,7 @@ import { isNull } from 'util';
 const CALC_VEC = new Vector3();
 const CALC_VEC2 = new Vector3();
 const CALC_VEC3 = new Vector3();
+const LARGEST_NUM = 999999999;
 
 //a = new FlowVertex(this.curRegion.edge.vertex);
 //b = new FlowVertex(this.curRegion.edge.next.vertex);
@@ -88,7 +89,7 @@ class NavMeshFlowField {
 		if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
 			// iterate through all regions to find lowest costs
 			let costs = pathRef._cost;
-			let tryCost = 99999999999999;
+			let tryCost = LARGEST_NUM;
 			n = node;
 			if (node === pathRef.source) {
 				this._flowedFinal = true;
@@ -170,6 +171,21 @@ class NavMeshFlowField {
 	setupTriangulation(fromPortal, nextPortal) {
 		if (!fromPortal) {
 			// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
+			// OR simply pick largest edge that isn't nextPortal
+
+			// pick largest edge only
+			let longestEdgeDist = LARGEST_NUM*LARGEST_NUM;
+			let edge = nextPortal.polygon.edge;
+			do {
+				if (edge !== nextPortal) {
+					let dist = edge.squaredLength();
+					if (dist < longestEdgeDist) {
+						longestEdgeDist = dist;
+						fromPortal = edge;
+					}
+				}
+				edge = edge.next;
+			} while(edge !== nextPortal.polygon.edge);
 		}
 
 		let triangulation = null;
@@ -221,18 +237,18 @@ class NavMeshFlowField {
 
 		let isolatedV = edge.next.vertex;
 
-		a.x = isolatedV.vertex.x;
-		a.z = isolatedV.vertex.z;
+		a.x = isolatedV.x;
+		a.z = isolatedV.z;
 		b.x = (edge.vertex.x + edge.prev.vertex.x) * 0.5;
 		b.z = (edge.vertex.z + edge.prev.vertex.z) * 0.5;
 
 		edgeFieldMap.set(isolatedV, new FlowVertex(isolatedV).subVectors(b,a).normalize());
 
 		// Calculate destination portal flow vectors
-		this._calcDestPortalField(edgeFlows, isolatedV);
+		this._calcDestPortalField(edgeFlows, isolatedV, null, finalDestPt);
 	}
 
-	_calcDestPortalField(edgeFlows, iVertex, iVertex2) {
+	_calcDestPortalField(edgeFlows, iVertex, iVertex2, finalDestPt) {
 		const a = CALC_VEC;
 		const b = CALC_VEC2;
 		const c = CALC_VEC3;
@@ -337,6 +353,7 @@ class NavMeshFlowField {
 
 		let result = [leftFlowVertex, rightFlowVertex];
 		edgeFieldMap.set(edge, result);
+		return result;
 	}
 
 	_calcNonTriRegionField(triangulation, edgeFlows, finalDestPt) {
@@ -346,10 +363,10 @@ class NavMeshFlowField {
 		let edgeFieldMap = this.edgeFieldMap;
 
 		let edge = triangulation.fromPortal;	// from inside of region
-		let tryEdge = triangulation.toPortal; // from inside of region
+		let tryEdge = triangulation.nextPortal; // from inside of region
 
 		if (tryEdge !== edgeFlows[0]) {
-			throw new Error("Assertion failed: toPortal of triangulation should match edgeFlows[0] assumption!");
+			throw new Error("Assertion failed: nextPortal of triangulation should match edgeFlows[0] assumption!");
 		}
 
 		let leftFlowVertex = null;
@@ -357,7 +374,7 @@ class NavMeshFlowField {
 
 		// Determine fromPortal flow vectors
 
-		// towards toPortal on left border, fromPortal
+		// towards nextPortal on left border, fromPortal
 		if (edge.prev.vertex !== tryEdge.vertex) {
 			a.x = edge.prev.vertex.x;
 			a.y = edge.prev.vertex.y;
@@ -366,7 +383,7 @@ class NavMeshFlowField {
 			leftFlowVertex = new FlowVertex(edge.prev.vertex).subVectors(b, a).normalize();
 		} // else will share same vertex on fromPortal edge
 
-		// towards toPortal on right border, fromPortal
+		// towards nextPortal on right border, fromPortal
 		if (edge.vertex !== tryEdge.prev.vertex) {
 			a.x = edge.vertex.x;
 			a.y = edge.vertex.y;
@@ -379,11 +396,11 @@ class NavMeshFlowField {
 		edgeFieldMap.set(edge, fromPortalVectors = [leftFlowVertex, rightFlowVertex]);
 
 		// TODO: fan info
-		//  .. for all fan edges of triangulation towards toPortal
+		//  .. for all fan edges of triangulation towards nextPortal
 
 		// Calculate destination portal flow vectors
 		let result = this._calcDestPortalField(edgeFlows, leftFlowVertex ? leftFlowVertex.vertex : rightFlowVertex.vertex,
-			(leftFlowVertex && rightFlowVertex) ? rightFlowVertex.vertex : null);
+			(leftFlowVertex && rightFlowVertex) ? rightFlowVertex.vertex : null, finalDestPt);
 
 		if (!fromPortalVectors[0]) {
 			fromPortalVectors[0] = result[0];
@@ -405,7 +422,7 @@ class NavMeshFlowField {
 			do {
 				edgeFieldMap.set(edge.vertex, new FlowVertex(edge.vertex));
 				edge = edge.next;
-			} while(edge !== region.edge)
+			} while (edge !== region.edge)
 		}
 
 		edge = region.edge;
