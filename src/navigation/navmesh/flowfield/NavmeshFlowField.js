@@ -174,12 +174,12 @@ class NavMeshFlowField {
 			// OR simply pick largest edge that isn't nextPortal
 
 			// pick largest edge only
-			let longestEdgeDist = LARGEST_NUM*LARGEST_NUM;
+			let longestEdgeDist = 0;
 			let edge = nextPortal.polygon.edge;
 			do {
 				if (edge !== nextPortal) {
 					let dist = edge.squaredLength();
-					if (dist < longestEdgeDist) {
+					if (dist >= longestEdgeDist) {
 						longestEdgeDist = dist;
 						fromPortal = edge;
 					}
@@ -313,9 +313,9 @@ class NavMeshFlowField {
 		isolatedV = iVertex2 ? iVertex2 : iVertex;
 		a.x = edge.prev.vertex.x - isolatedV.x;
 		a.z = edge.prev.vertex.z - isolatedV.z;
-		// perp boundary normal
-		c.x = -a.z;
-		c.z = a.x;
+		// perp boundary normal (flipped in other direction for other side)
+		c.x = a.z;
+		c.z = -a.x;
 
 		tryEdge = edgeFlows[++t];
 		// find non-incident portal edge along flow to vertex

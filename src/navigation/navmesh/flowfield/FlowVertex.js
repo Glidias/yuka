@@ -21,7 +21,7 @@ class FlowVertex extends Vector3 {
 		// check edgeWithin.polygon if it's a triangle or a non-triangle?
 		// for triangle, can easily get split point along known boundary edge of polygon (left or right)
 		// Get spin edge accordingly and point along split edge for spinningRegion
-			//this.splitNormal = new Vector3();
+			this.splitNormal = new Vector3();
 			//this.splitPoint = new Vector3();
 		// flag that determines region check to then check for sub-triangles if needed for agent
 			//this.splitRegion = edgeWithin.polygon;
