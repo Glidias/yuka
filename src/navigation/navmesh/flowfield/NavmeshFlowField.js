@@ -377,7 +377,7 @@ class NavMeshFlowField {
 		// towards nextPortal on left border, fromPortal
 		if (edge.prev.vertex !== tryEdge.vertex) {
 			a.x = edge.prev.vertex.x;
-			a.y = edge.prev.vertex.y;
+			a.z = edge.prev.vertex.z;
 			b.x = tryEdge.vertex.x;
 			b.z = tryEdge.vertex.z;
 			leftFlowVertex = new FlowVertex(edge.prev.vertex).subVectors(b, a).normalize();
@@ -386,7 +386,7 @@ class NavMeshFlowField {
 		// towards nextPortal on right border, fromPortal
 		if (edge.vertex !== tryEdge.prev.vertex) {
 			a.x = edge.vertex.x;
-			a.y = edge.vertex.y;
+			a.z = edge.vertex.z;
 			b.x = tryEdge.prev.vertex.x;
 			b.z = tryEdge.prev.vertex.z;
 			rightFlowVertex = new FlowVertex(edge.vertex).subVectors(b, a).normalize();
@@ -394,9 +394,6 @@ class NavMeshFlowField {
 
 		let fromPortalVectors;
 		edgeFieldMap.set(edge, fromPortalVectors = [leftFlowVertex, rightFlowVertex]);
-
-		// TODO: fan info
-		//  .. for all fan edges of triangulation towards nextPortal
 
 		// Calculate destination portal flow vectors
 		let result = this._calcDestPortalField(edgeFlows, leftFlowVertex ? leftFlowVertex.vertex : rightFlowVertex.vertex,
@@ -432,7 +429,8 @@ class NavMeshFlowField {
 			a.z = edge.vertex.z;
 			b.x = finalDestPt.x;
 			b.z = finalDestPt.z;
-			flowVertex.subVectors(b, a).normalize();
+			flowVertex.subVectors(b, a);
+			flowVertex.initFinal(finalDestPt);
 
 			edge = edge.next;
 		} while(edge !== region.edge)
