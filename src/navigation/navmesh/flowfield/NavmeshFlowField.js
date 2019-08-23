@@ -22,8 +22,6 @@ class NavMeshFlowField {
 		this.navMesh = navMesh;
 
 		this._flowedFinal = false;
-
-		this._debugPath = [];
 	}
 
 	static cacheRegionIndexLookup(navMesh) {
