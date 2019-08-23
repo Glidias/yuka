@@ -6,7 +6,7 @@ const testPt = new Vector3();
 
 class FlowAgent {
 
-	// A navmesh flow agent to manage continuous flowfield movement across navmesh regions for an entity
+	// A navmesh flow agent to manage continuous flowfield movement across navmesh regions for a given entity
 
 	// FlowVertex(s) for current triangle
 	// a
@@ -24,7 +24,15 @@ class FlowAgent {
 
 	}
 
+
 	/*
+
+
+	if got lastSavedEdge and (lastSavedEdge no shared vertiices on flow vertex triangle) set to null for lastSavedEdge
+	if got prevEdge and (prevEdge no shared vertices on flow vertex triangle) set to null for prevEdge
+
+	if got shared vertices, use those flow vertices instead for last saved/prev edges
+
 	enterNewRegion(region, a, b, c, reset) {
 
 		// check vertex matches from lastSavedEdge
@@ -40,7 +48,7 @@ class FlowAgent {
 	*/
 
 	/**
-	 *  Set direction result vector for with a,b,c tri flow vertices from current position (assumed within triangle)
+	 * Update velocity of agent based off a,b,c flow vertices for agent
 	 * @param {Vector3} pt 	The position of agent
 	 * @param {Vector3} dir The result direction vector
 	 */
