@@ -22,7 +22,7 @@ class FlowVertex extends Vector3 {
 		// for triangle, can easily get split point along known boundary edge of polygon (left or right)
 		// Get spin edge accordingly and point along split edge for spinningRegion
 			this.splitNormal = new Vector3();
-			//this.splitPoint = new Vector3();
+			//this.splitPoint = new FlowVertex();
 		// flag that determines region check to then check for sub-triangles if needed for agent
 			//this.splitRegion = edgeWithin.polygon;
 
@@ -34,7 +34,7 @@ class FlowVertex extends Vector3 {
 		// Could this action be lazy-defered later until agent enters into splittingRegion?
 		// this.edgeOfFlowVertexToCheck = edgeNext???
 			// this.splitNormal2 = new Vector3();
-			// this.splitPoint2 = new Vector3();
+			// this.splitPoint2 = new FlowVertex();
 		// howver, if edgeNext is unavailable, then use assumed finalDestPt to determine 3rd sub-triangle split immediately
 
 		return this;
