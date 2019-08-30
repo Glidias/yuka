@@ -405,6 +405,8 @@ class NavMeshFlowField {
 			fromPortalVectors[1] = result[1];
 		}
 
+		// TODO: Calculate fanned edges flow vectors, triangulation.leftEdgeFlows / triangulation.rightEdgeFlows (null slots)
+
 	}
 
 	static calcFinalRegionField(region, finalDestPt, edgeFieldMap) {

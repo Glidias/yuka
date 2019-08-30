@@ -1,5 +1,6 @@
 import { HalfEdge } from '../../../math/HalfEdge.js';
 import { Vector3 } from '../../../math/Vector3.js';
+import { FlowVertex } from './FlowVertex.js';
 
 /**
  * Makeshift triangulation of a non-tri polygon using a prefered fromPortal to nextPortal main lane (`==0`) (within navmesh polygon region)
@@ -23,18 +24,23 @@ class FlowTriangulate {
 			this.diagonal.offset = this.diagonal.x * fromPortal.prev.vertex.x + this.diagonal.z * fromPortal.prev.vertex.z;
 		}
 
+		let isQuad = polygon.edge.next.next.next.next === polygon.edge;
+
 		// if quad and fromPortal and nextPortal is disconnected, don't need to proceed further as no additional edges to fan to nextPortal
-		if (polygon.edge.next.next.next.next === polygon.edge && isQuadCorridoor) return;
+		if (isQuad && isQuadCorridoor) return;
 
 
-		if (nextPortal.next !== prevPortal) {
+		if (nextPortal.next !== fromPortal) {
 			this.leftEdgeDirs = [new Vector3()];
-			this.leftEdgeFlows = [FlowTriangulate.calculateDirForFanEdge(fromPortal.vertex, nextPortal.vertex, this.leftEdgeDirs[0], false)];
+			this.leftEdgeFlows = [FlowTriangulate.calculateDirForFanEdge(fromPortal.prev.vertex, nextPortal.vertex, this.leftEdgeDirs[0], false)];
 		}
-		if (nextPortal.prev !== prevPortal) {
+		if (nextPortal.prev !== fromPortal) {
 			this.rightEdgeDirs = [new Vector3()];
-			this.rightEdgeFlows = [FlowTriangulate.calculateDirForFanEdge(fromPortal.prev.vertex, nextPortal.prev.vertex, this.rightEdgeDirs[0], true)];
+			this.rightEdgeFlows = [FlowTriangulate.calculateDirForFanEdge(fromPortal.vertex, nextPortal.prev.vertex, this.rightEdgeDirs[0], true)];
 		}
+
+
+
 
 		let edge = polygon.edge;
 		let fEdge;
@@ -42,18 +48,26 @@ class FlowTriangulate {
 		let vert;
 		let debugCount = 0;
 		let debugEdgeCount = 0;
+		let debugLeftCount = 0;
+		let debugRightCount = 0;
 		do { //  debug check this calculation quantities
 			debugEdgeCount++;
 			if (edge !== fromPortal && edge !== nextPortal) {
 				if ( (dir=(this.leftEdgeDirs ? this.leftEdgeDirs[0] : false)) && (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset) ) {
-					this.leftEdgeDirs.push(dir = new Vector3());
-					this.leftEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.vertex, dir, false));
-					debugCount++;
+					if (edge.vertex !== fromPortal.vertex && edge.vertex !== fromPortal.prev.vertex && edge.vertex !== nextPortal.vertex && edge.vertex !== nextPortal.prev.vertex) {
+						this.leftEdgeDirs.push(dir = new Vector3());
+						this.leftEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.vertex, dir, false));
+						debugCount++;
+						debugLeftCount++;
+					}
 				}
-				else if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*edge.prev.vertex.x + dir.z*edge.prev.vertex.z > dir.offset) ) {
-					this.rightEdgeDirs.push(dir = new Vector3());
-					this.rightEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.prev.vertex, nextPortal.prev.vertex, dir, true));
-					debugCount++;
+				else if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset) ) {
+					if (edge.vertex !== fromPortal.vertex && edge.vertex !== fromPortal.prev.vertex && edge.vertex !== nextPortal.vertex && edge.vertex !== nextPortal.prev.vertex) {
+						this.rightEdgeDirs.push(dir = new Vector3());
+						this.rightEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.prev.vertex, dir, true));
+						debugCount++;
+						debugRightCount++;
+					}
 				}
 			}
 			edge = edge.next;
@@ -62,6 +76,8 @@ class FlowTriangulate {
 		if (debugCount !== debugEdgeCount - 2 - (this.leftEdgeDirs ? 1 : 0) - (this.rightEdgeDirs ? 1 : 0)) {
 			console.warn("Debug count assertion mismatch!!: " + debugCount + " / "+ debugEdgeCount);
 			console.log(this);
+		} else {
+			console.log("Debug count succeeded:" + debugLeftCount + "," + debugRightCount);
 		}
 	}
 
@@ -99,26 +115,26 @@ class FlowTriangulate {
 	 */
 	static checkPrevFlowVertices(result, prevFlowEdge) {
 		let gotReplace = false;
-		if (prevFlowEdge[0] && result.a.vertex === prevFlowEdge[0].vertex  ) {
+		if (result.a.vertex === prevFlowEdge[0].vertex  ) {
 			result.a = prevFlowEdge[0];
 			gotReplace = true;
-		} else if (prevFlowEdge[1] && result.a.vertex === prevFlowEdge[1].vertex  ) {
+		} else if (result.a.vertex === prevFlowEdge[1].vertex  ) {
 			result.a = prevFlowEdge[1];
 			gotReplace = true;
 		}
 
-		if (prevFlowEdge[0] && result.b.vertex === prevFlowEdge[0].vertex  ) {
+		if (result.b.vertex === prevFlowEdge[0].vertex  ) {
 			result.b = prevFlowEdge[0];
 			gotReplace = true;
-		} else if  (prevFlowEdge[1] && result.b.vertex === prevFlowEdge[1].vertex  ) {
+		} else if (result.b.vertex === prevFlowEdge[1].vertex  ) {
 			result.b = prevFlowEdge[1];
 			gotReplace = true;
 		}
 
-		if ( prevFlowEdge[0] && result.c.vertex === prevFlowEdge[0].vertex  ) {
+		if (result.c.vertex === prevFlowEdge[0].vertex  ) {
 			result.c = prevFlowEdge[0];
 			gotReplace = true;
-		} else if  (prevFlowEdge[1] && result.c.vertex === prevFlowEdge[1].vertex  ) {
+		} else if (result.c.vertex === prevFlowEdge[1].vertex  ) {
 			result.c = prevFlowEdge[1];
 			gotReplace = true;
 		}
@@ -160,7 +176,11 @@ class FlowTriangulate {
 			let edgeFlow = tarEdgeFlows[index][subIndex];
 			index++;
 			let edgeFlow2 = tarEdgeFlows[index][subIndex];
-			let portalVertexFlow =  edgeFieldMap.get(this.nextPortal)[leftwards ? 0 : 1];
+
+
+			subIndex = leftwards ? 0 : 1;
+			let portalVertexFlow = tarEdgeFlows[index][subIndex];
+
 			// leftwards: edgeFlow, portalVertexFlow, edgeFlow2
 			// rightwards: edgeFlow, edgeFlow2, portalVertexFlow
 			if (leftwards) {
@@ -192,16 +212,19 @@ class FlowTriangulate {
 		let lane;
 		let len;
 		let i;
-		// todo: lane direction break check
+		// TODO: lane direction break check and updating of prevEdges/lastSavedEdge
 		if ( (dir=(this.leftEdgeDirs ? this.leftEdgeDirs[0] : false)) && (dir.x*pos.x + dir.z*pos.z > dir.offset) ) {
 			lane = -1;
 			len = this.leftEdgeDirs.length;
 			for (i=1; i<len; i++) {
 				dir = this.leftEdgeDirs[i];
 			}
-			if (lane < result.lane) { // agent inadvertedly backpedaled position, break continuity of motion
+			if (lane < result.lane) { // agent inadvertedly backpedaled position, break continuity of motion?
 				result.lastSavedEdge = null;
 				result.prevEdge = null;
+			} else if (lane > result.lane) {
+				// update prevEdge,
+				// keep lastSavedEdge if found, else set to same as prevEdge
 			}
 
 		} else if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*pos.x + dir.z*pos.z > dir.offset) ) {
@@ -210,13 +233,17 @@ class FlowTriangulate {
 			for (i=1; i<len; i++) {
 				dir = this.rightEdgeDirs[i];
 			}
-			if (lane > result.lane) {  // agent inadvertedly backpedaled position, break continuity of motion
+			if (lane > result.lane) {  // agent inadvertedly backpedaled position, break continuity of motion?
 				result.lastSavedEdge = null;
 				result.prevEdge = null;
+			} else if (lane < result.lane) {
+				// update prevEdge,
+				// keep lastSavedEdge if found, else set to same as prevEdge
 			}
 		} else {
 			lane = 0;
 		}
+
 
 		result.lane = lane;
 	}
