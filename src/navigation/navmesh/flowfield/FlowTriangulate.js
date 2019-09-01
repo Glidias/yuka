@@ -10,6 +10,8 @@ import { FlowVertex } from './FlowVertex.js';
  */
 class FlowTriangulate {
 	constructor(fromPortal, nextPortal) {
+		if (fromPortal.polygon !== nextPortal.polygon) throw new Error("Invalid portals -- dont belong to same polygon!")
+
 		this.fromPortal = fromPortal;
 		this.nextPortal = nextPortal;
 
@@ -52,7 +54,31 @@ class FlowTriangulate {
 		let debugRightCount = 0;
 		do { //  debug check this calculation quantities
 			debugEdgeCount++;
-			if (edge !== fromPortal && edge !== nextPortal) {
+			//if (edge !== fromPortal && edge !== nextPortal) {
+				if (edge.vertex !== fromPortal.vertex && edge.vertex !== fromPortal.prev.vertex && edge.vertex !== nextPortal.vertex && edge.vertex !== nextPortal.prev.vertex) {
+					dir = this.leftEdgeDirs ? this.leftEdgeDirs[0] : null;
+					let resolved = false;
+					if (dir &&  (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset ) ) {
+						this.leftEdgeDirs.push(dir = new Vector3());
+						this.leftEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.vertex, dir, false));
+						debugCount++;
+						debugLeftCount++;
+
+						resolved = true;
+					}
+					dir = this.rightEdgeDirs ? this.rightEdgeDirs[0] : null;
+					if (dir &&  (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset ) ) {
+						this.rightEdgeDirs.push(dir = new Vector3());
+						this.rightEdgeDirs.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.prev.vertex, dir, true));
+						debugCount++;
+						debugRightCount++;
+
+						resolved = true;
+					}
+					if (!resolved) console.warn("Failed to resolve vertex side...:"+(this.leftEdgeDirs ? " 1 ": "") + ", " + (this.rightEdgeDirs ? " 2 " : ""));
+				}
+
+				/*
 				if ( (dir=(this.leftEdgeDirs ? this.leftEdgeDirs[0] : false)) && (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset) ) {
 					if (edge.vertex !== fromPortal.vertex && edge.vertex !== fromPortal.prev.vertex && edge.vertex !== nextPortal.vertex && edge.vertex !== nextPortal.prev.vertex) {
 						this.leftEdgeDirs.push(dir = new Vector3());
@@ -61,7 +87,7 @@ class FlowTriangulate {
 						debugLeftCount++;
 					}
 				}
-				else if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset) ) {
+				if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset) ) {
 					if (edge.vertex !== fromPortal.vertex && edge.vertex !== fromPortal.prev.vertex && edge.vertex !== nextPortal.vertex && edge.vertex !== nextPortal.prev.vertex) {
 						this.rightEdgeDirs.push(dir = new Vector3());
 						this.rightEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.prev.vertex, dir, true));
@@ -69,13 +95,15 @@ class FlowTriangulate {
 						debugRightCount++;
 					}
 				}
-			}
+				*/
+			//}
 			edge = edge.next;
 		} while (edge!==polygon.edge)
 
-		if (debugCount !== debugEdgeCount - 2 - (this.leftEdgeDirs ? 1 : 0) - (this.rightEdgeDirs ? 1 : 0)) {
+		if (debugCount !== debugEdgeCount - (isQuadCorridoor ? 4 : 3) ) {
 			console.warn("Debug count assertion mismatch!!: " + debugCount + " / "+ debugEdgeCount);
 			console.log(this);
+			edge.polygon.gotErrorTriangulation = this;
 		} else {
 			console.log("Debug count succeeded:" + debugLeftCount + "," + debugRightCount);
 		}
@@ -256,9 +284,10 @@ class FlowTriangulate {
 		flowVertex.z = dz;
 		flowVertex.normalize();
 
-		let multSide = rightSided ? -1 : 1;
+		let multSide = rightSided ? 1 : -1;
 		dir.x = -dz*multSide;
 		dir.z = dx*multSide;
+		dir.normalize();
 		dir.offset = dir.x * startVertex.x + dir.z * startVertex.z;
 
 		// flow vertices below

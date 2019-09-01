@@ -175,9 +175,9 @@ class NavMeshFlowField {
 			let longestEdgeDist = 0;
 			let edge = nextPortal.polygon.edge;
 			do {
-				if (edge !== nextPortal) {
+				if (edge !== nextPortal ) {
 					let dist = edge.squaredLength();
-					if (dist >= longestEdgeDist) {
+					if (dist >= longestEdgeDist) {  // (fromPortal && (!fromPortal.twin && edge.twin))
 						longestEdgeDist = dist;
 						fromPortal = edge;
 					}
