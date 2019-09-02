@@ -73,7 +73,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 		let agent = vehicle.agent;
 		let flowField = this.flowField;
 		let lastRegion = agent.curRegion;
-		agent.curRegion = flowField.navMesh.getRegionForPoint(vehicle.position, epsilon);
+		agent.curRegion = flowField.navMesh.getRegionForPoint(vehicle.position, this.epsilon);
 		if (!agent.curRegion || agent.curRegion === lastRegion) return;
 		let lastNodeIndex = lastRegion ? flowField.navMesh.getNodeIndex(lastRegion) : null;
 		flowField.calcRegionFlow(lastNodeIndex, flowField.navMesh.getNodeIndex(agent.curRegion), this.pathRef, this.finalDestPt);
