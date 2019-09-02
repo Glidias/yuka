@@ -106,6 +106,7 @@ class FlowTriangulate {
 			this.rightEdgeDirs = null;
 			this.rightEdgeFlows = null;
 		}
+		// todo: check for spinning flowVertex splitNormal for subtriangle selection?
 	}
 
 	/**
@@ -137,6 +138,7 @@ class FlowTriangulate {
 		if (result.lastSavedEdge && result.lastSavedEdge !== result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.lastSavedEdge)) {
 			result.lastSavedEdge = null;
 		}
+		// todo: check for spinning flowVertex splitNormal for subtriangle selection?
 	}
 
 	/**
