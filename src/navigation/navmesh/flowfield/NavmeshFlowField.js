@@ -1,5 +1,5 @@
 import { Vector3 } from '../../../math/Vector3.js';
-import { FlowTriangulate } from './FlowTriangulate.js';
+import { FlowTriangulate, USE_HANDEDNESS } from './FlowTriangulate.js';
 import { FlowVertex } from './FlowVertex.js';
 import { isNull } from 'util';
 
@@ -255,6 +255,8 @@ class NavMeshFlowField {
 		let edge = edgeFlows[0];
 		let isolatedV;
 
+		const HANDEDNESS = USE_HANDEDNESS;
+
 		// Calculate destination portal flow vectors
 		let leftFlowVertex;
 		let rightFlowVertex;
@@ -266,9 +268,9 @@ class NavMeshFlowField {
 		edge = edgeFlows[0];
 		a.x = edge.vertex.x - isolatedV.x;
 		a.z = edge.vertex.z - isolatedV.z;
-		// perp boundary normal
-		c.x = -a.z;
-		c.z = a.x;
+		// perp boundary normal inward
+		c.x = a.z * HANDEDNESS;
+		c.z = -a.x * HANDEDNESS;
 
 		tryEdge = edgeFlows[++t];
 		// find non-incident portal edge along flow to vertex
@@ -297,23 +299,38 @@ class NavMeshFlowField {
 			a.x = tryEdge.prev.vertex.x - tryEdge.vertex.x;
 			a.z = tryEdge.prev.vertex.z - tryEdge.vertex.z;
 			// perp forward normal along edge flow X
-			c.x = -a.z;
-			c.z = a.x;
+			c.x = -a.z * HANDEDNESS;
+			c.z = a.x * HANDEDNESS;
 			if (leftFlowVertex.x * c.x + leftFlowVertex.z * c.z < 0) {
 				leftFlowVertex.initSpinning(tryEdge, false, edgeFlows[i+1], finalDestPt);
 				break;
 			}
 		}
+		// consider left to right non-tri triangulation diagonal case
+		// (from left entering portal vertex to right destination portal vertex along main triangulation corridoor, if any)
+		if (t === edgeFlows.length - 1) {
+			tryEdge = edgeFlows[t];
+			if (tryEdge.next.next.next !== tryEdge && tryEdge.prev.vertex !== edge.vertex) {
+				a.x = tryEdge.prev.vertex.x - edge.vertex.x;
+				a.z = tryEdge.prev.vertex.z - edge.vertex.z;
+				// perp forward normal along edge flow X
+				c.x = -a.z * HANDEDNESS;
+				c.z = a.x * HANDEDNESS;
+				if (leftFlowVertex.x * c.x + leftFlowVertex.z * c.z < 0) {
+					leftFlowVertex.initSpinning(tryEdge, false, null, finalDestPt, true);
+				}
+			}
+		}
 
-		// (C1) determine left B1, B2 edge to flow vertex check
+		// (C1) determine right B1, B2 edge to flow vertex check
 		t = 0;
 		edge = edgeFlows[0];
 		isolatedV = iVertex2 ? iVertex2 : iVertex;
 		a.x = edge.prev.vertex.x - isolatedV.x;
 		a.z = edge.prev.vertex.z - isolatedV.z;
-		// perp boundary normal (flipped in other direction for other side)
-		c.x = a.z;
-		c.z = -a.x;
+		// perp boundary normal inwards (flipped in other direction for other side)
+		c.x = -a.z * HANDEDNESS;
+		c.z = a.x * HANDEDNESS;
 
 		tryEdge = edgeFlows[++t];
 		// find non-incident portal edge along flow to vertex
@@ -341,8 +358,8 @@ class NavMeshFlowField {
 			a.x = tryEdge.prev.vertex.x - tryEdge.vertex.x;
 			a.z = tryEdge.prev.vertex.z - tryEdge.vertex.z;
 			// perp forward normal along edge flow X
-			c.x = -a.z;
-			c.z = a.x;
+			c.x = -a.z * HANDEDNESS;
+			c.z = a.x * HANDEDNESS;
 			if (rightFlowVertex.x * c.x + rightFlowVertex.z * c.z < 0) {
 				rightFlowVertex.initSpinning(tryEdge, true, edgeFlows[i+1], finalDestPt);
 				break;
@@ -405,7 +422,26 @@ class NavMeshFlowField {
 			fromPortalVectors[1] = result[1];
 		}
 
-		// TODO: Calculate fanned edges flow vectors, triangulation.leftEdgeFlows / triangulation.rightEdgeFlows (null slots)
+		let i;
+		let len;
+		let fanEdgeFlows;
+		if (triangulation.leftEdgeFlows) {
+			fanEdgeFlows = triangulation.leftEdgeFlows;
+			len = fanEdgeFlows.length - 1;
+			for (i=1; i<len; i++) {
+				result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][1].vertex, null, finalDestPt);
+				fanEdgeFlows[i][0] = result[0];
+			}
+		}
+
+		if (triangulation.rightEdgeFlows) {
+			fanEdgeFlows = triangulation.rightEdgeFlows;
+			len = fanEdgeFlows.length - 1;
+			for (i=1; i<len; i++) {
+				result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][0].vertex, null, finalDestPt);
+				fanEdgeFlows[i][1] = result[1];
+			}
+		}
 
 	}
 

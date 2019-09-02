@@ -11,7 +11,7 @@ class FlowVertex extends Vector3 {
 	 * http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.68.875&rep=rep1&type=pdf#page=3
 	 * @param {*} edgeWithin
 	 */
-	initSpinning(edgeWithin, onRight, edgeNext, finalDestPt) {
+	initSpinning(edgeWithin, onRight, edgeNext, finalDestPt, diagonalEdgeMode = false) {
 		this.spinningOnRight = onRight;
 
 		// pre-calculate normal proceeding outward from inner edgeWithin to determine when flow vertex starts to spin
