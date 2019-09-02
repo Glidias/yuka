@@ -1,8 +1,7 @@
 import { SteeringBehavior } from '../SteeringBehavior.js';
 import { FlowAgent } from '../../navigation/navmesh/flowfield/FlowAgent.js';
 import { FlowTriangulate } from '../../navigation/navmesh/flowfield/FlowTriangulate.js';
-
-// import { Vector3 } from '../../math/Vector3.js';
+import { Vector3 } from '../../math/Vector3.js';
 
 const desiredVelocity = new Vector3();
 
