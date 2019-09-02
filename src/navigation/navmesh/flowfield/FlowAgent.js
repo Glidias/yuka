@@ -135,7 +135,7 @@ class FlowAgent {
 			}
 			edge = edge.next;
 
-		} while ( edge !== this.edge );
+		} while ( edge !== curRegion.edge );
 	}
 }
 
