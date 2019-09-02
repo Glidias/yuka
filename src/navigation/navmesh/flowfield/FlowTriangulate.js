@@ -203,7 +203,7 @@ class FlowTriangulate {
 		} else {
 			let leftwards = result.lane < 0;
 			let tarEdgeFlows = leftwards ? this.leftEdgeFlows : this.rightEdgeFlows;
-			let index = leftwards ? -result.lane : result.lane;
+			let index = leftwards ? -result.lane - 1 : result.lane - 1;
 			let subIndex = leftwards ? 1 : 0;
 			let edgeFlow = tarEdgeFlows[index][subIndex];
 			index++;
@@ -257,7 +257,7 @@ class FlowTriangulate {
 				if (dir.offset >= dir.x * pos.x + dir.z * pos.z) {
 					break;
 				}
-
+				lane--;
 			}
 			if (lane < result.lane) { // agent inadvertedly dislodged/backpedaled position
 				// break continuity of motion

@@ -12,6 +12,7 @@ class FlowAgent {
 	// a
 	// b
 	// c
+	// curRegion	(FlowTriangulate OR Polygon)
 
 	// prevEdge: {[FlowVertex, FlowVertex]}
 	// lastSavedEdge: {[FlowVertex, FlowVertex]}
@@ -92,7 +93,8 @@ class FlowAgent {
 
 	withinFlowPlane(pt, epsilon = 1e-3) {
 		// distance to plane test
-		return Math.abs( this.curRegion.distanceToPoint( edge.vertex ) ) <= epsilon;
+		let curRegion = this.curRegion.fromPortal ? this.curRegion.fromPortal.polygon : this.curRegion;
+		return Math.abs( curRegion.distanceToPoint( pt ) ) <= epsilon;
 	}
 
 	static pointWithinTriangleBounds(pt, a, b, c) {
@@ -116,8 +118,12 @@ class FlowAgent {
 			   (b.x - px) * (c.z - py) - (c.x - px) * (b.z - py) >= 0;
 	}
 
+	getCurRegion() {
+		return this.curRegion && this.curRegion.fromPortal ? this.curRegion.fromPortal.polygon : this.curRegion;
+	}
+
 	withinCurrentRegionBounds(pt) {
-		let curRegion = this.curRegion;
+		let curRegion = this.curRegion.fromPortal ? this.curRegion.fromPortal.polygon : this.curRegion;
 		let edge = curRegion.edge;
 		// convex test
 		do {

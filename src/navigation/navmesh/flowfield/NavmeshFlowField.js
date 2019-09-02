@@ -167,11 +167,12 @@ class NavMeshFlowField {
 	}
 
 	setupTriangulation(fromPortal, nextPortal) {
-		if (!fromPortal) {
+		if (!fromPortal && !(fromPortal = nextPortal.polygon.defaultEdge)) {
 			// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
 			// OR simply pick largest edge that isn't nextPortal
 
 			// pick largest edge only
+
 			let longestEdgeDist = 0;
 			let edge = nextPortal.polygon.edge;
 			do {
@@ -184,6 +185,8 @@ class NavMeshFlowField {
 				}
 				edge = edge.next;
 			} while(edge !== nextPortal.polygon.edge);
+
+			nextPortal.polygon.defaultEdge = fromPortal;
 		}
 
 		let triangulation = null;
@@ -489,7 +492,7 @@ class NavMeshFlowField {
 			if (!pathRef) throw new Error("calcRegionFlow:: unable to retrieve pathRef!");
 		}
 		if (this.savedRegionFlows) {
-			if (this.savedRegionFlows.has(fromNode + "," + node)) return;
+			if (this.savedRegionFlows.has(fromNode + "," + node)) return false;
 			this.savedRegionFlows.add(fromNode+","+node);
 		}
 
@@ -532,6 +535,7 @@ class NavMeshFlowField {
 		if (region.edge.next.next.next !== region.edge) {	// >=4ngon region
 			let triangulation = this.setupTriangulation(fromPortal, nextPortal);
 			this._calcNonTriRegionField(triangulation, edgeFlows, finalDestPt);
+			this.lastTriangulation = triangulation;
 		} else {	// triangle region
 			this._calcTriRegionField(region, edgeFlows, finalDestPt);
 		}
