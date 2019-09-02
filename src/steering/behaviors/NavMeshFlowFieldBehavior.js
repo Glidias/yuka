@@ -6,13 +6,13 @@ import { Vector3 } from '../../math/Vector3.js';
 const desiredVelocity = new Vector3();
 
 /**
-* Flowfield behaviour through a navmesh
+* Flowfield behavior through a navmesh
 *
 * @author Glidias
 * @augments SteeringBehavior
 */
 
-class NavMeshFlowFieldBehaviour extends SteeringBehavior {
+class NavMeshFlowFieldBehavior extends SteeringBehavior {
 
 	/**
 	 *
@@ -92,4 +92,4 @@ class NavMeshFlowFieldBehaviour extends SteeringBehavior {
 	}
 }
 
-export { NavMeshFlowFieldBehaviour };
+export { NavMeshFlowFieldBehavior };

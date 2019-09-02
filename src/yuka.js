@@ -89,7 +89,7 @@ export { PursuitBehavior } from './steering/behaviors/PursuitBehavior.js';
 export { SeekBehavior } from './steering/behaviors/SeekBehavior.js';
 export { SeparationBehavior } from './steering/behaviors/SeparationBehavior.js';
 export { WanderBehavior } from './steering/behaviors/WanderBehavior.js';
-export { NavMeshFlowFieldBehaviour } from './steering/behaviors/NavMeshFlowFieldBehaviour.js';
+export { NavMeshFlowFieldBehavior } from './steering/behaviors/NavMeshFlowFieldBehavior.js';
 export { NavMeshFlowField } from './navigation/navmesh/flowfield/NavmeshFlowField.js';
 export { FlowAgent } from './navigation/navmesh/flowfield/FlowAgent.js';
 export { FlowVertex } from './navigation/navmesh/flowfield/FlowVertex.js';
