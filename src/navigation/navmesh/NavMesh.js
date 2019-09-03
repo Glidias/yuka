@@ -47,6 +47,12 @@ class NavMesh {
 		this.graph.digraph = true;
 
 		/**
+		 * Whether to merge polygons when constructing regions. Defaults to true unless set otherwise.
+		 * @type Boolean
+		 */
+		this.attemptMergePolies = true;
+
+		/**
 		* The list of convex regions.
 		* @type Array
 		*/
@@ -247,7 +253,9 @@ class NavMesh {
 		if ( this.spatialIndex !== null ) {
 
 			const index = this.spatialIndex.getIndexForPosition( point );
-			regions = this.spatialIndex.cells[ index ].entries;
+			regions = this.spatialIndex.cells[ index ];
+			if (!regions) return null;
+			regions = regions.entries;
 
 		} else {
 
@@ -590,7 +598,9 @@ class NavMesh {
 			const polygon = candidate.polygon;
 			polygon.edge = candidate.prev;
 
-			if ( polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
+			let attemptMergePolies = this.attemptMergePolies;
+
+			if ( attemptMergePolies && polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
 
 				// correct polygon reference of all edges
 

@@ -147,6 +147,8 @@ class FlowTriangulate {
 	 * @return Whether there were any incident vertices to the given prevFlowEdge parameter
 	 */
 	static checkPrevFlowVertices(result, prevFlowEdge) {
+		return false;
+
 		let gotReplace = false;
 		if (result.a.vertex === prevFlowEdge[0].vertex  ) {
 			result.a = prevFlowEdge[0];
@@ -175,12 +177,12 @@ class FlowTriangulate {
 	}
 
 	/**
-	 * Updates agent's a,b,c flow triangle flow-vertices based on it's lane
+	 * Updates agent's a,b,c flow triangle flow-vertices based on it's stored lane value
 	 * @param {Vector3} pos	The position of agent within polygon region
 	 * @param {Object} result Typically a FlowAgent object that has `a`, `b`, and `c` flow vertices, and `lane` index variable storage that was already updated based off it's position
 	 * @param {Map} edgeFieldMap Edge field map from flowfield to get flow vectors along main region portals along path corridoor
 	 */
-	updateFlowTri(pos, result, edgeFieldMap) {
+	updateFlowTriLaned(pos, result, edgeFieldMap) {
 		let norm;
 		let a;
 		let b;

@@ -13,6 +13,7 @@ class FlowAgent {
 	// b
 	// c
 	// curRegion	(FlowTriangulate OR Polygon)
+	// toEdge
 
 	// prevEdge: {[FlowVertex, FlowVertex]}
 	// lastSavedEdge: {[FlowVertex, FlowVertex]}
@@ -130,7 +131,8 @@ class FlowAgent {
 			const v1 = edge.tail();
 			const v2 = edge.head();
 
-			if ( curRegion.leftOn( v1, v2, point ) === false ) {
+			// MathUtils.area( v1, v2, pt ) < 0
+			if ( ( ( pt.x - v1.x ) * ( v2.z - v1.z ) ) - ( ( v2.x - v1.x ) * ( pt.z - v1.z ) ) < 0  ) {
 				return false;
 			}
 			edge = edge.next;
@@ -138,5 +140,13 @@ class FlowAgent {
 		} while ( edge !== curRegion.edge );
 	}
 }
+
+/*
+function leftOn( a, b, c ) {
+
+	return MathUtils.area( a, b, c ) >= 0;
+
+}
+*/
 
 export { FlowAgent };

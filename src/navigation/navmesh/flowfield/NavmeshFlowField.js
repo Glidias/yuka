@@ -46,7 +46,7 @@ class NavMeshFlowField {
 	initPersistant(pathRef) {
 		this.edgeFieldMap = new Map();	// <Edge (of portal), [vec1, vec2]>
 		this.triangulationMap = new Map();	// <Edge (of portal?|region), FlowTriangulate>
-		this.savedRegionFlows = new Set();
+		this.savedRegionFlows = new Map();
 		this.pathRef = pathRef;
 	}
 
@@ -450,7 +450,7 @@ class NavMeshFlowField {
 
 	static calcFinalRegionField(region, finalDestPt, edgeFieldMap) {
 		const a = CALC_VEC;
-		const b = CALV_VEC2;
+		const b = CALC_VEC2;
 
 		// calculate
 		if (!edgeFieldMap.has(region.edge.vertex)) {
@@ -491,9 +491,9 @@ class NavMeshFlowField {
 			pathRef = this.pathRef;
 			if (!pathRef) throw new Error("calcRegionFlow:: unable to retrieve pathRef!");
 		}
+		let flowKey = fromNode + "," + node;
 		if (this.savedRegionFlows) {
-			if (this.savedRegionFlows.has(fromNode + "," + node)) return false;
-			this.savedRegionFlows.add(fromNode+","+node);
+			if (this.savedRegionFlows.has(flowKey)) return this.savedRegionFlows.get(flowKey);
 		}
 
 		let region = this.navMesh.regions[node];
@@ -503,10 +503,16 @@ class NavMeshFlowField {
 
 
 		edgeFlows = this.getFlowEdges(node, pathRef);
+
+		if (this.savedRegionFlows) {
+			this.savedRegionFlows.set(flowKey, edgeFlows);
+		}
+
 		if (edgeFlows === null) {
 			// could not find path from "node" along pathRef
 			return null;
 		}
+
 
 		if (edgeFlows.length === 0) { // asssumed "node" is last region, finalDestPt must be included in order to calculate this
 			NavMeshFlowField.calcFinalRegionField(region, finalDestPt, edgeFieldMap);
