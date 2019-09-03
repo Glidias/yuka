@@ -6,6 +6,8 @@ const HANDEDNESS_RIGHT = 1;
 const HANDEDNESS_LEFT = -1;
 var USE_HANDEDNESS = HANDEDNESS_LEFT;
 
+var DISCONTINUOUS = false;
+
 /**
  * Makeshift triangulation of a non-tri polygon using a prefered fromPortal to nextPortal main lane (`==0`) (within navmesh polygon region)
  * and fanned edges leading to nextPortal that forms sub-lanes (`<0` for left fan lanes and `>0` for right fan lanes)
@@ -16,6 +18,10 @@ class FlowTriangulate {
 
 	static setRightHanded(rightHanded) {
 		USE_HANDEDNESS = rightHanded ? HANDEDNESS_RIGHT : HANDEDNESS_LEFT;
+	}
+
+	static setDiscontinuous(boo) {
+		DISCONTINUOUS = boo;
 	}
 
 	constructor(fromPortal, nextPortal) {
@@ -147,7 +153,7 @@ class FlowTriangulate {
 	 * @return Whether there were any incident vertices to the given prevFlowEdge parameter
 	 */
 	static checkPrevFlowVertices(result, prevFlowEdge) {
-		return false;
+		if (DISCONTINUOUS) return false;
 
 		let gotReplace = false;
 		if (result.a.vertex === prevFlowEdge[0].vertex  ) {
