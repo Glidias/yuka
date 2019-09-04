@@ -417,6 +417,7 @@ class NavMeshFlowField {
 		let result = this._calcDestPortalField(edgeFlows, leftFlowVertex ? leftFlowVertex.vertex : rightFlowVertex.vertex,
 			(leftFlowVertex && rightFlowVertex) ? rightFlowVertex.vertex : null, finalDestPt);
 
+
 		if (!fromPortalVectors[0]) {
 			fromPortalVectors[0] = result[0];
 		}
@@ -424,6 +425,14 @@ class NavMeshFlowField {
 		if (!fromPortalVectors[1]) {
 			fromPortalVectors[1] = result[1];
 		}
+
+		// debugging...
+		if (!fromPortalVectors[0] || !fromPortalVectors[1]) {
+			throw new Error("Could not resolve fromPortalVectors:"+fromPortalVectors);
+		}
+		let testEdgeVectors = edgeFieldMap.get(triangulation.nextPortal);
+		if (testEdgeVectors !== result) throw new Error("Should match!");
+		if (!testEdgeVectors[0] || !testEdgeVectors[1]) throw new Error("Should have all vectors!")
 
 		let i;
 		let len;
@@ -521,7 +530,7 @@ class NavMeshFlowField {
 				}
 			}
 
-			return null;
+			return -1;
 
 		} else {
 			var index = pathRef.indexOf(endIndex);

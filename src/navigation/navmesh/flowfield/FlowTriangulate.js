@@ -32,12 +32,12 @@ class FlowTriangulate {
 
 		//  normals and vectors
 		let polygon = this.fromPortal.polygon;
-
 		let isQuadCorridoor = nextPortal.next !== fromPortal && nextPortal.prev !== fromPortal;
 		if (isQuadCorridoor) {
 			let dx = nextPortal.prev.vertex.x - fromPortal.prev.vertex.x;
 			let dz = nextPortal.prev.vertex.z - fromPortal.prev.vertex.z;
-			this.diagonal = new Vector3(-dz, 0, dx);
+			this.diagonal = new Vector3(-dz*USE_HANDEDNESS, 0, dx*USE_HANDEDNESS);
+			this.diagonal.normalize(); // todo: remove and test not needed
 			this.diagonal.offset = this.diagonal.x * fromPortal.prev.vertex.x + this.diagonal.z * fromPortal.prev.vertex.z;
 		}
 
@@ -196,17 +196,17 @@ class FlowTriangulate {
 		if (result.lane === 0) {
 			if (this.diagonal) { // quad lane
 				norm = this.diagonal;
-				a = edgeFieldMap.get(this.fromPortal)[1]; // this.fromPortal.prev.vertex;
-				if (norm.x * pos.x + norm.z * pos.z >= 0) {	// left (top left)
+				a = edgeFieldMap.get(this.fromPortal)[0]; // this.fromPortal.prev.vertex;
+				if (norm.x * pos.x + norm.z * pos.z >= norm.offset) {	// left (top left)
 					b = edgeFieldMap.get(this.nextPortal)[1]; // this.nextPortal.prev.vertex;
 					c = edgeFieldMap.get(this.nextPortal)[0]; // this.nextPortal.vertex;
 				} else {	// right (bottom right)
-					b = edgeFieldMap.get(this.fromPortal)[0]; // this.fromPortal.vertex;
+					b = edgeFieldMap.get(this.fromPortal)[1]; // this.fromPortal.vertex;
 					c = edgeFieldMap.get(this.nextPortal)[1]; // this.nextPortal.prev.vertex;
 				}
 			} else { // tri lane
-				a = edgeFieldMap.get(this.fromPortal)[1]; // this.fromPortal.prev.vertex;
-				b = edgeFieldMap.get(this.fromPortal)[0]; // this.fromPortal.vertex;
+				a = edgeFieldMap.get(this.fromPortal)[0]; // this.fromPortal.prev.vertex;
+				b = edgeFieldMap.get(this.fromPortal)[1]; // this.fromPortal.vertex;
 				c = edgeFieldMap.get(this.nextPortal)[this.nextPortal.vertex !== a.vertex && this.nextPortal.vertex !== b.vertex ? 0 : 1];
 			}
 		} else {
@@ -235,9 +235,16 @@ class FlowTriangulate {
 			}
 		}
 
+		// if (!a || !b || !c) throw new Error("Should have abc vertices!");
+
 		result.a = a;
 		result.b = b;
 		result.c = c;
+
+		if (!result.withinCurrentTriangleBounds(pos)) {
+			//console.error("Assertion failed should be within triangle bounds!");
+			//console.log([a,b,c]);
+		}
 
 		if (result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.prevEdge)) {
 			result.prevEdge = null;
@@ -245,7 +252,7 @@ class FlowTriangulate {
 		if (result.lastSavedEdge && result.lastSavedEdge !== result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.lastSavedEdge)) {
 			result.lastSavedEdge = null;
 		}
-		// todo: check for spinning flowVertex splitNormal for subtriangle selection?
+		// TODO: check for spinning flowVertex splitNormal for subtriangle selection?
 	}
 
 	/**
@@ -313,7 +320,7 @@ class FlowTriangulate {
 		let flowVertex = new FlowVertex(startVertex);
 		flowVertex.x = dx;
 		flowVertex.z = dz;
-		flowVertex.normalize();
+		flowVertex.normalize();  // todo: remove and test not needed
 
 		// perp
 		let multSide = rightSided ? -USE_HANDEDNESS : USE_HANDEDNESS;
