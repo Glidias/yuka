@@ -475,6 +475,61 @@ class NavMeshFlowField {
 		} while(edge !== region.edge)
 	}
 
+	getFromNodeIndex(lastRegion, newRegion, pathRef) {
+		let startIndex = this.navMesh.getNodeIndex(lastRegion);
+		let endIndex = this.navMesh.getNodeIndex(newRegion);
+		if (!pathRef) pathRef = this.pathRef;
+
+		if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
+			// iterate through all regions to find lowest costs
+			let costs = pathRef._cost;
+			let tryCost = LARGEST_NUM;
+			let n = startIndex;
+			let tryNode;
+			let tryEdge;
+			let firstEdge = null;
+
+			while(n !== null) {
+				let edges = this.navMesh.graph._edges.get( n );
+				let len = edges.length;
+
+				tryNode = null;
+
+				for (let i=0; i<len; i++) {
+
+					let toN = edges[i].to;
+					if (toN === endIndex) {
+						return n;
+					}
+					if (costs.has(toN) && costs.get(toN) < tryCost) {
+						tryCost = costs.get(toN);
+						tryNode = toN;
+					}
+				}
+
+				// early break out continuiuty
+				if (tryNode !== null) {
+					tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
+					if (firstEdge !== null) {
+						n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
+					} else {
+						firstEdge = tryEdge;
+						n = tryNode;
+					}
+				} else {
+					return -1;
+				}
+			}
+
+			return null;
+
+		} else {
+			var index = pathRef.indexOf(endIndex);
+			if (index <= 0) return -1;
+			return pathRef[index - 1];
+		}
+	}
+
 	/**
 	 *
 	 * @param {Number} fromNode	Node index to originate from (if any). If unspecified, put as -1.
