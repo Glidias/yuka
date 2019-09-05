@@ -167,7 +167,7 @@ class NavMeshFlowField {
 	}
 
 	setupTriangulation(fromPortal, nextPortal) {
-		if (!fromPortal && !(fromPortal = nextPortal.polygon.defaultEdge)) {
+		if (!fromPortal && !(fromPortal = this.triangulationMap.get(nextPortal.polygon))) {
 			// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
 			// OR simply pick largest edge that isn't nextPortal
 
@@ -186,11 +186,11 @@ class NavMeshFlowField {
 				edge = edge.next;
 			} while(edge !== nextPortal.polygon.edge);
 
-			nextPortal.polygon.defaultEdge = fromPortal;
+			this.triangulationMap.set(nextPortal.polygon, fromPortal);
 		}
 
 		let triangulation = null;
-		if (!this.triangulationMap) {	// non-persitant
+		if (!this.triangulationMap) {	// non-persitant  // TODO: triangulationMap still required
 			if (!this.localTriangulation) {
 				this.localTriangulation = new FlowTriangulate(fromPortal, nextPortal);
 			}
