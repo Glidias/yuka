@@ -166,17 +166,33 @@ class NavMeshFlowField {
 		return resultArr;
 	}
 
+	collinear(portalEdge, edge) {
+		let x1 = portalEdge.prev.vertex.x;
+		let y1 = portalEdge.prev.vertex.z;
+		let x2 = portalEdge.vertex.x;
+		let y2 = portalEdge.vertex.z;
+		let tarVertex = portalEdge.prev === edge ? edge.prev.vertex : edge.vertex;
+		let x3 = tarVertex.x;
+		let y3 = tarVertex.z;
+		let collinear0 = x1 * (y2 - y3) +   x2 * (y3 - y1) +   x3 * (y1 - y2) === 0;
+		if (collinear0) console.log("Collinear detected");
+		return collinear0;
+	}
+
 	setupTriangulation(fromPortal, nextPortal) {
 		if (!fromPortal && !(fromPortal = this.triangulationMap.get(nextPortal.polygon))) {
 			// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
 			// OR simply pick largest edge that isn't nextPortal
 
 			// pick largest edge only
+			//var collinear0 = ( v_prev_x * v_next_y - v_prev_y * v_next_x );
+			//if ( Math.abs( collinear0 ) > Number.EPSILON ) {
+
 
 			let longestEdgeDist = 0;
 			let edge = nextPortal.polygon.edge;
 			do {
-				if (edge !== nextPortal ) {
+				if (edge !== nextPortal && !this.collinear(nextPortal, edge)) {
 					let dist = edge.squaredLength();
 					if (dist >= longestEdgeDist) {  // (fromPortal && (!fromPortal.twin && edge.twin))
 						longestEdgeDist = dist;

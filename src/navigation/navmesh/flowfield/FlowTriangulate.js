@@ -37,6 +37,10 @@ class FlowTriangulate {
 			let dx = nextPortal.prev.vertex.x - fromPortal.prev.vertex.x;
 			let dz = nextPortal.prev.vertex.z - fromPortal.prev.vertex.z;
 			this.diagonal = new Vector3(-dz*USE_HANDEDNESS, 0, dx*USE_HANDEDNESS);
+			if (this.diagonal.squaredLength() === 0) {
+				console.log([fromPortal, nextPortal]);
+				console.error("Diagonal zero length detected");
+			}
 			this.diagonal.normalize(); // todo: remove and test not needed
 			this.diagonal.offset = this.diagonal.x * fromPortal.prev.vertex.x + this.diagonal.z * fromPortal.prev.vertex.z;
 		}
