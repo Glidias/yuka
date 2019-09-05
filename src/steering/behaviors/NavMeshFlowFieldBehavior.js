@@ -43,7 +43,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 
 	/**
 	 *
-	 * @param {NavMeshFlowField} flowField For now, only accepts a persistant NavMeshFLowField
+	 * @param {NavMeshFlowField} flowField For now, only accepts a persistant NavMeshFLowField. (TODO: non-persitant flowfield case)
 	 */
 	constructor(flowField, finalDestPt, pathRef, epsilon = 1e-3) {
 		super();

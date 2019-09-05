@@ -441,7 +441,7 @@ class NavMeshFlowField {
 		let fanEdgeFlows;
 		if (triangulation.leftEdgeFlows) {
 			fanEdgeFlows = triangulation.leftEdgeFlows;
-			len = fanEdgeFlows.length - 1;
+			len = fanEdgeFlows.length;
 			for (i=1; i<len; i++) {
 				result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][1].vertex, null, finalDestPt);
 				fanEdgeFlows[i][0] = result[0];
@@ -450,11 +450,14 @@ class NavMeshFlowField {
 				}
 			}
 			fanEdgeFlows[0][0] = destResult[0];
+			if (!fanEdgeFlows[0][0] || !fanEdgeFlows[0][1]) {
+				throw new Error("Did not fill up fan edge flows...left000");
+			}
 		}
 
 		if (triangulation.rightEdgeFlows) {
 			fanEdgeFlows = triangulation.rightEdgeFlows;
-			len = fanEdgeFlows.length - 1;
+			len = fanEdgeFlows.length;
 			for (i=1; i<len; i++) {
 				result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][0].vertex, null, finalDestPt);
 				fanEdgeFlows[i][1] = result[1];
@@ -463,6 +466,9 @@ class NavMeshFlowField {
 				}
 			}
 			fanEdgeFlows[0][1] = destResult[1];
+			if (!fanEdgeFlows[0][0] || !fanEdgeFlows[0][1]) {
+				throw new Error("Did not fill up fan edge flows...right000");
+			}
 		}
 
 	}

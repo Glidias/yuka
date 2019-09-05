@@ -13,12 +13,9 @@ class FlowAgent {
 	// b
 	// c
 	// curRegion	(FlowTriangulate OR Polygon)
-	// toEdge
 
 	// prevEdge: {[FlowVertex, FlowVertex]}
 	// lastSavedEdge: {[FlowVertex, FlowVertex]}
-
-	// curFlowField: NavMeshFlowField
 
 	constructor() {
 
@@ -90,6 +87,14 @@ class FlowAgent {
 		// dir.y = 0;
 		dir.z = dz / sumArea;
 		// dir.normalize();
+	}
+
+	reset(clearCurRegion) {
+		this.prevEdge = null;
+		this.lastSavedEdge = null;
+		if (clearCurRegion) {
+			this.curRegion = null;
+		}
 	}
 
 	withinFlowPlane(pt, epsilon = 1e-3) {

@@ -20,7 +20,7 @@ class FlowTriangulate {
 		USE_HANDEDNESS = rightHanded ? HANDEDNESS_RIGHT : HANDEDNESS_LEFT;
 	}
 
-	static setDiscontinuous(boo) {
+	static setDiscontinuous(boo=true) {
 		DISCONTINUOUS = boo;
 	}
 
@@ -192,6 +192,7 @@ class FlowTriangulate {
 		let a;
 		let b;
 		let c;
+		let tarEdgeFlows;
 		if (result.lane === 0) {
 			if (this.diagonal) { // quad lane
 				norm = this.diagonal;
@@ -210,16 +211,14 @@ class FlowTriangulate {
 			}
 		} else {
 			let leftwards = result.lane < 0;
-			let tarEdgeFlows = leftwards ? this.leftEdgeFlows : this.rightEdgeFlows;
+			tarEdgeFlows = leftwards ? this.leftEdgeFlows : this.rightEdgeFlows;
 			let index = leftwards ? -result.lane - 1 : result.lane - 1;
 			let subIndex = leftwards ? 1 : 0;
 			let edgeFlow = tarEdgeFlows[index][subIndex];
 			index++;
 			let edgeFlow2 = tarEdgeFlows[index][subIndex];
+			let portalVertexFlow = tarEdgeFlows[index][leftwards ? 0 : 1];
 
-
-			subIndex = leftwards ? 0 : 1;
-			let portalVertexFlow = tarEdgeFlows[index][subIndex];
 
 			// leftwards: edgeFlow, portalVertexFlow, edgeFlow2
 			// rightwards: edgeFlow, edgeFlow2, portalVertexFlow
@@ -234,7 +233,7 @@ class FlowTriangulate {
 			}
 		}
 
-		// if (!a || !b || !c) throw new Error("Should have abc vertices!");
+		if (!a || !b || !c) throw new Error("Should have abc vertices! " + result.lane + " / " + (tarEdgeFlows ? tarEdgeFlows.length : '') + " ::"+a+","+b+","+c + "["+(leftwards ? "<" : ">")+"]");
 
 		result.a = a;
 		result.b = b;
@@ -262,7 +261,7 @@ class FlowTriangulate {
 		let prevLane;
 		if ( (dir=(this.leftEdgeDirs ? this.leftEdgeDirs[0] : false)) && (dir.x*pos.x + dir.z*pos.z > dir.offset) ) {
 			lane = -1;
-			len = this.leftEdgeDirs.length;
+			len = this.leftEdgeDirs.length - 1;
 			for (i=1; i<len; i++) {
 				dir = this.leftEdgeDirs[i];
 				if (dir.offset >= dir.x * pos.x + dir.z * pos.z) {
@@ -287,7 +286,7 @@ class FlowTriangulate {
 
 		} else if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*pos.x + dir.z*pos.z > dir.offset) ) {
 			lane = 1;
-			len = this.rightEdgeDirs.length;
+			len = this.rightEdgeDirs.length - 1;
 			for (i=1; i<len; i++) {
 				dir = this.rightEdgeDirs[i];
 				if (dir.offset >= dir.x * pos.x + dir.z * pos.z) {
