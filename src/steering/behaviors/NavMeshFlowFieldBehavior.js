@@ -81,25 +81,26 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 				if ((region.edge.next.next.next !== region.edge && agent.withinCurrentRegionBounds(vehicle.position)) && agent.withinFlowPlane(vehicle.position, this.epsilon) ) {
 					// update triangle from triangulation
 					agent.curRegion.updateLane(refPosition, agent);
-					console.log("New lane:"+agent.lane);
+					//console.log("New lane:"+agent.lane);
 					agent.curRegion.updateFlowTriLaned(refPosition, agent, this.flowField.edgeFieldMap);
 				} else { // doesn't belong to current region
 					let lastRegion = agent.curRegion;
-					this.setCurRegion(vehicle);
+
+					if (this.setCurRegion(vehicle) === false) {
+						force.x = desiredVelocity.x - vehicle.velocity.x;
+						force.z = desiredVelocity.z - vehicle.velocity.z;
+						return force;
+					}
 					if (!agent.curRegion) {
 						refPosition = clampPointWithinRegion(region, refPosition);
 						agent.curRegion = lastRegion;
-						// force.x = desiredVelocity.x - vehicle.velocity.x;
-						// force.z = desiredVelocity.z - vehicle.velocity.z;
-						// return force;
-
 						if (region.edge.next.next.next !== region.edge) {
 							if (agent.curRegion === region) {
 								console.error("SHOuld not be assertion failed");
 								console.log(agent.curRegion);
 							}
 							agent.curRegion.updateLane(refPosition, agent);
-							console.log("New lane222:"+agent.lane);
+							//console.log("New lane222:"+agent.lane);
 							agent.curRegion.updateFlowTriLaned(refPosition, agent, this.flowField.edgeFieldMap);
 						}
 					}
@@ -124,6 +125,16 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 		return force;
 	}
 
+	/**
+	 * Set current region based on vehicle's position to vehicle's agent
+	 * @param {Vehicle} vehicle The vehicle
+	 * @return {Null|Number|Boolean}
+	 * Null if no region could be picked.
+	 * True if same region detected from last saved region
+	 * False if no flow path could be found due to reaching final destination.
+	 * Zero `0` if no flow path  ould be found at all to reach final destination.
+	 * One `1` if no flow path could be found (not yet reached final destination).
+	 */
 	setCurRegion(vehicle) {
 		let agent = vehicle.agent;
 		let flowField = this.flowField;
@@ -131,25 +142,24 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 		let regionPicked = flowField.navMesh.getRegionForPoint(vehicle.position, this.epsilon);
 		if (!regionPicked) {
 			agent.curRegion = null;
-			return;
+			return null;
 		}
 		if (regionPicked === lastRegion) {
 			if (agent.curRegion !== regionPicked) {
 				agent.curRegion.updateLane(vehicle.position, agent);
 				agent.curRegion.updateFlowTriLaned(vehicle.position, agent, flowField.edgeFieldMap);
 			}
-			return;
+			return true;
 		}
 
-
 		let lastNodeIndex = lastRegion ? flowField.getFromNodeIndex(lastRegion, regionPicked, this.pathRef) : -1;
-		console.log(lastNodeIndex + ">>>");
+		//console.log(lastNodeIndex + ">>>");
 
 		let edgeFlows = flowField.calcRegionFlow(lastNodeIndex, flowField.navMesh.getNodeIndex(regionPicked), this.pathRef, this.finalDestPt);
 		if (!edgeFlows) {
 			agent.curRegion = null;
 			console.log("setCurRegion:: Could not find flow path from current position")
-			return;
+			return 0;
 		}
 
 		// TODO: setup final flow triangulation cases at last node
@@ -157,16 +167,18 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			agent.curRegion = regionPicked;
 			if (edgeFlows.length ===0) {
 				agent.curRegion = null;
+				//vehicle.velocity.set(0,0,0); // <-temp
 				console.log("ARRIVED at last triangle region");
-				return;
+				return false;
 			}
 			agent.lane = 0;
 			FlowTriangulate.updateTriRegion(agent.curRegion, agent, flowField.edgeFieldMap);
 		} else { // non-tri zone
 			if (edgeFlows.length === 0) {
 				agent.curRegion = null;
-				console.log("ARRIVED at last non-tri region")
-				return;
+				//vehicle.velocity.set(0,0,0);  // <-temp
+				console.log("ARRIVED at last non-tri region");
+				return false;
 			}
 
 
@@ -181,7 +193,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			agent.curRegion.updateLane(vehicle.position, agent);
 			agent.curRegion.updateFlowTriLaned(vehicle.position, agent, flowField.edgeFieldMap);
 		}
-
+		return 1;
 	}
 }
 

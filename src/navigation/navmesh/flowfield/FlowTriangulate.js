@@ -121,7 +121,6 @@ class FlowTriangulate {
 	 * @param {Map} edgeFieldMap Edge field map from flowfield to get flow vectors along main region portals along path corridoor
 	 */
 	static updateTriRegion(region, result, edgeFieldMap) {
-		//edgeFieldMap.get(region.a);
 		let targetEdge =
 			edgeFieldMap.has(region.edge) ? region.edge :
 			edgeFieldMap.has(region.edge.prev) ? region.edge.prev :
@@ -241,11 +240,6 @@ class FlowTriangulate {
 		result.b = b;
 		result.c = c;
 
-		if (!result.withinCurrentTriangleBounds(pos)) {
-			//console.error("Assertion failed should be within triangle bounds!");
-			//console.log([a,b,c]);
-		}
-
 		if (result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.prevEdge)) {
 			result.prevEdge = null;
 		}
@@ -283,8 +277,12 @@ class FlowTriangulate {
 			} else if (lane > result.lane) {
 				// update prevEdge
 				prevLane = lane - 1;
-				result.prevEdge = -prevLane < this.leftEdgeDirs.length ? this.leftEdgeDirs[-prevLane] : null;
+				result.prevEdge = -prevLane < this.leftEdgeDirs.length - 1 ? this.leftEdgeDirs[-prevLane] : null;
 				if (!result.lastSavedEdge) result.lastSavedEdge = result.prevEdge;
+				if (result.prevEdge === null) {
+					result.lastSavedEdge = null;
+					console.warn("Out of bounds detected for position..left");
+				}
 			}
 
 		} else if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*pos.x + dir.z*pos.z > dir.offset) ) {
@@ -303,13 +301,19 @@ class FlowTriangulate {
 				result.prevEdge = null;
 			} else if (lane < result.lane) {
 				prevLane = lane + 1;
-				result.prevEdge = prevLane < this.rightEdgeDirs.length ? this.rightEdgeDirs[prevLane] : null;
+				result.prevEdge = prevLane < this.rightEdgeDirs.length - 1 ? this.rightEdgeDirs[prevLane] : null;
 				if (!result.lastSavedEdge) result.lastSavedEdge = result.prevEdge;
+				if (result.prevEdge === null) {
+					result.lastSavedEdge = null;
+					console.warn("Out of bounds detected for position..right");
+				}
 			}
 		} else {
 			lane = 0;
 		}
 
+		// debug
+		if (lane != 0) console.log("Lane != 0 case detected:"+lane +" / "+ (lane < 0 ? this.leftEdgeDirs : this.rightEdgeDirs ).length);
 
 		result.lane = lane;
 	}

@@ -426,6 +426,8 @@ class NavMeshFlowField {
 			fromPortalVectors[1] = result[1];
 		}
 
+		let destResult = result;
+
 		// debugging...
 		if (!fromPortalVectors[0] || !fromPortalVectors[1]) {
 			throw new Error("Could not resolve fromPortalVectors:"+fromPortalVectors);
@@ -443,7 +445,11 @@ class NavMeshFlowField {
 			for (i=1; i<len; i++) {
 				result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][1].vertex, null, finalDestPt);
 				fanEdgeFlows[i][0] = result[0];
+				if (!fanEdgeFlows[i][0] || !fanEdgeFlows[i][1]) {
+					throw new Error("Did not fill up fan edge flows...left");
+				}
 			}
+			fanEdgeFlows[0][0] = destResult[0];
 		}
 
 		if (triangulation.rightEdgeFlows) {
@@ -452,7 +458,11 @@ class NavMeshFlowField {
 			for (i=1; i<len; i++) {
 				result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][0].vertex, null, finalDestPt);
 				fanEdgeFlows[i][1] = result[1];
+				if (!fanEdgeFlows[i][0] || !fanEdgeFlows[i][1]) {
+					throw new Error("Did not fill up fan edge flows...right");
+				}
 			}
+			fanEdgeFlows[0][1] = destResult[1];
 		}
 
 	}
