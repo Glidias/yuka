@@ -90,8 +90,10 @@ class FlowAgent {
 	}
 
 	reset(clearCurRegion) {
+		// TODO: consider reset (this.lane === null BUT !!this.curRegion marker) to update curRegion context and flow vectors
 		this.prevEdge = null;
 		this.lastSavedEdge = null;
+		// this.lane = 0;
 		if (clearCurRegion) {
 			this.curRegion = null;
 		}
@@ -110,6 +112,13 @@ class FlowAgent {
 		return (c.x - px) * (a.z - py) - (a.x - px) * (c.z - py) >= 0 &&
 			   (a.x - px) * (b.z - py) - (b.x - px) * (a.z - py) >= 0 &&
 			   (b.x - px) * (c.z - py) - (c.x - px) * (b.z - py) >= 0;
+	}
+
+	currentTriArea() {
+		let a = this.a.vertex;
+		let b = this.b.vertex;
+		let c = this.c.vertex;
+		return ( ( c.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( c.z - a.z ) );
 	}
 
 	withinCurrentTriangleBounds(pt) {

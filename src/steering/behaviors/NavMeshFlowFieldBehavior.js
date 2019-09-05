@@ -108,7 +108,15 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			}
 		}
 
+
+
 		agent.calcDir(refPosition, desiredVelocity);
+
+		if (isNaN(desiredVelocity.x)) {
+			console.log([agent.a, agent.b, agent.c, agent.curRegion])
+			throw new Error("NaN desired velocity calculated!"+agent.currentTriArea() + " :: "+agent.lane);
+		}
+
 		// desiredVelocity.multiplyScalar( vehicle.maxSpeed );
 		desiredVelocity.x *= vehicle.maxSpeed;
 		desiredVelocity.z *= vehicle.maxSpeed;
