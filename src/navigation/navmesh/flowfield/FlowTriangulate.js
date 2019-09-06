@@ -165,26 +165,26 @@ class FlowTriangulate {
 		if (DISCONTINUOUS) return false;
 
 		let gotReplace = false;
-		if (result.a.vertex === prevFlowEdge[0].vertex  ) {
+		if ( prevFlowEdge[0] && result.a.vertex === prevFlowEdge[0].vertex  ) {
 			result.a = prevFlowEdge[0];
 			gotReplace = true;
-		} else if (result.a.vertex === prevFlowEdge[1].vertex  ) {
+		} else if (prevFlowEdge[1] && result.a.vertex === prevFlowEdge[1].vertex  ) {
 			result.a = prevFlowEdge[1];
 			gotReplace = true;
 		}
 
-		if (result.b.vertex === prevFlowEdge[0].vertex  ) {
+		if (prevFlowEdge[0] && result.b.vertex === prevFlowEdge[0].vertex  ) {
 			result.b = prevFlowEdge[0];
 			gotReplace = true;
-		} else if (result.b.vertex === prevFlowEdge[1].vertex  ) {
+		} else if (prevFlowEdge[1] && result.b.vertex === prevFlowEdge[1].vertex  ) {
 			result.b = prevFlowEdge[1];
 			gotReplace = true;
 		}
 
-		if (result.c.vertex === prevFlowEdge[0].vertex  ) {
+		if (prevFlowEdge[0] && result.c.vertex === prevFlowEdge[0].vertex  ) {
 			result.c = prevFlowEdge[0];
 			gotReplace = true;
-		} else if (result.c.vertex === prevFlowEdge[1].vertex  ) {
+		} else if (prevFlowEdge[1] && result.c.vertex === prevFlowEdge[1].vertex  ) {
 			result.c = prevFlowEdge[1];
 			gotReplace = true;
 		}
