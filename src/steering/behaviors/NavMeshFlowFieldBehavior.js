@@ -190,13 +190,16 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			}
 
 
-			agent.curRegion = flowField.triangulationMap.get(lastNodeIndex >= 0 ?
+			/*
+			(lastNodeIndex >= 0 ?
 					regionPicked.getEdgeTo(flowField.navMesh.regions[lastNodeIndex]) :
-					flowField.triangulationMap.get(regionPicked) );
+					flowField.triangulationMap.get(regionPicked)
+			*/
+			agent.curRegion = flowField.triangulationMap.get(edgeFlows[0]);
 
 
 			if (!agent.curRegion) {
-				agent.curRegion = flowField.setupTriangulation(null, edgeFlows[0]);
+				agent.curRegion = flowField.setupTriangulation(null, edgeFlows[0], edgeFlows[0]);
 			}
 			agent.curRegion.updateLane(vehicle.position, agent);
 			agent.curRegion.updateFlowTriLaned(vehicle.position, agent, flowField.edgeFieldMap);

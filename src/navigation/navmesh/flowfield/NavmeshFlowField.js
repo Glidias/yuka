@@ -179,16 +179,11 @@ class NavMeshFlowField {
 		return collinear0;
 	}
 
-	setupTriangulation(fromPortal, nextPortal) {
-		if (!fromPortal && !(fromPortal = this.triangulationMap.get(nextPortal.polygon))) {
-			// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
-			// OR simply pick largest edge that isn't nextPortal
+	setupTriangulation(fromPortal, nextPortal, persistKey) {
+		// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
+		// OR simply pick largest edge that isn't nextPortal
 
-			// pick largest edge only
-			//var collinear0 = ( v_prev_x * v_next_y - v_prev_y * v_next_x );
-			//if ( Math.abs( collinear0 ) > Number.EPSILON ) {
-
-
+		if (!fromPortal) {
 			let longestEdgeDist = 0;
 			let edge = nextPortal.polygon.edge;
 			do {
@@ -201,12 +196,11 @@ class NavMeshFlowField {
 				}
 				edge = edge.next;
 			} while(edge !== nextPortal.polygon.edge);
-
-			this.triangulationMap.set(nextPortal.polygon, fromPortal);
 		}
 
+
 		let triangulation = null;
-		if (!this.triangulationMap) {	// non-persitant  // TODO: triangulationMap still required
+		if (!this.triangulationMap) {
 			if (!this.localTriangulation) {
 				this.localTriangulation = new FlowTriangulate(fromPortal, nextPortal);
 			}
@@ -214,7 +208,7 @@ class NavMeshFlowField {
 
 		} else {	// persitant
 			let triangulationMap = this.triangulationMap;
-			let persistKey = fromPortal;
+			if (!persistKey) persistKey = fromPortal;
 			triangulation = triangulationMap.get(persistKey);
 			if (!triangulation) {
 				// setup triangulation o store in map
@@ -635,7 +629,8 @@ class NavMeshFlowField {
 		if (!this._flowedFinal) finalDestPt = null;
 
 		if (region.edge.next.next.next !== region.edge) {	// >=4ngon region
-			let triangulation = this.setupTriangulation(fromPortal, nextPortal);
+			//if (fromPortal && this.collinear(fromPortal, nextPortal)) fromPortal = null;
+			let triangulation = this.setupTriangulation(null, nextPortal, nextPortal);
 			this._calcNonTriRegionField(triangulation, edgeFlows, finalDestPt);
 			this.lastTriangulation = triangulation;
 		} else {	// triangle region

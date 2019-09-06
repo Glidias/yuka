@@ -38,7 +38,7 @@ class FlowTriangulate {
 			let dz = nextPortal.prev.vertex.z - fromPortal.prev.vertex.z;
 			this.diagonal = new Vector3(-dz*USE_HANDEDNESS, 0, dx*USE_HANDEDNESS);
 			if (this.diagonal.squaredLength() === 0) {
-				console.log([fromPortal, nextPortal]);
+				console.log(this);
 				console.error("Diagonal zero length detected");
 			}
 			this.diagonal.normalize(); // todo: remove and test not needed
@@ -69,6 +69,7 @@ class FlowTriangulate {
 		let debugRightCount = 0;
 
 
+
 		do { //  debug check this calculation quantities
 			debugEdgeCount++;
 
@@ -76,8 +77,10 @@ class FlowTriangulate {
 				dir = this.leftEdgeDirs ? this.leftEdgeDirs[0] : null;
 				let resolved = false;
 				if (dir &&  (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset ) ) {
-					this.leftEdgeDirs.push(dir = new Vector3());
-					this.leftEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.vertex, dir, false));
+					dir = new Vector3();
+					fEdge = FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.vertex, dir, false);
+					this.leftEdgeDirs.push(dir);
+					this.leftEdgeFlows.push(fEdge);
 					debugCount++;
 					debugLeftCount++;
 
@@ -85,8 +88,11 @@ class FlowTriangulate {
 				}
 				dir = this.rightEdgeDirs ? this.rightEdgeDirs[0] : null;
 				if (dir &&  (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset ) ) {
-					this.rightEdgeDirs.push(dir = new Vector3());
-					this.rightEdgeFlows.push(FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.prev.vertex, dir, true));
+					dir = new Vector3()
+					fEdge = FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.prev.vertex, dir, true);
+
+					this.rightEdgeDirs.push(dir);
+					this.rightEdgeFlows.push(fEdge);
 					debugCount++;
 					debugRightCount++;
 
