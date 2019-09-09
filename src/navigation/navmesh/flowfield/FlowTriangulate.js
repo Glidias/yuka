@@ -8,6 +8,17 @@ var USE_HANDEDNESS = HANDEDNESS_LEFT;
 
 var DISCONTINUOUS = false;
 
+function pointInTriangle( a, b, c, p ) {
+	return ( ( p.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( p.z - a.z ) ) >= 0 &&
+	( ( p.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( p.z - b.z ) ) >= 0 &&
+	( ( p.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( p.z - c.z ) ) >= 0;
+	/*
+	return ( cx - px ) * ( ay - py ) - ( ax - px ) * ( cy - py ) >= 0 &&
+	( ax - px ) * ( by - py ) - ( bx - px ) * ( ay - py ) >= 0 &&
+	( bx - px ) * ( cy - py ) - ( cx - px ) * ( by - py ) >= 0;
+	*/
+}
+
 /**
  * Makeshift triangulation of a non-tri polygon using a prefered fromPortal to nextPortal main lane (`==0`) (within navmesh polygon region)
  * and fanned edges leading to nextPortal that forms sub-lanes (`<0` for left fan lanes and `>0` for right fan lanes)
@@ -113,7 +124,6 @@ class FlowTriangulate {
 		}
 		edge.polygon.debugTriangulation = this;
 
-		// Nullify degenerate triangle fan cases (eg. caused by collinear edges)
 		if (this.leftEdgeDirs && this.leftEdgeDirs.length === 1) {
 			this.leftEdgeDirs = null;
 			this.leftEdgeFlows = null;
@@ -142,10 +152,6 @@ class FlowTriangulate {
 		result.b = targetEdge[1];
 		result.c = targetEdge[0];
 
-		if (!result.a || !result.b || !result.c) {
-			throw new Error("Failed to get default triangle flowfield for flowfield updateTriRegion");
-		}
-
 		if (result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.prevEdge)) {
 			result.prevEdge = null;
 		}
@@ -153,6 +159,68 @@ class FlowTriangulate {
 			result.lastSavedEdge = null;
 		}
 		// todo: check for spinning flowVertex splitNormal for subtriangle selection?
+	}
+
+		/*	// alternate approach, check with fan
+		let foundTriEdge = null;
+		let dx;
+		let dz;
+		let handedness = USE_HANDEDNESS;
+		do {
+			dz = -edge.prev.vertex.x + finalDestPt.x;
+			dx = edge.prev.vertex.z - finalDestPt.z;
+			dz *= handedness;
+			dx *+ handedness;
+			if (dz * pos.z + dx * pos.x < 0) {
+				edge = edge.next;
+				continue;
+			}
+
+			dz = -edge.vertex.x + finalDestPt.x;
+			dx = edge.vertex.z - finalDestPt.z;
+			dz *= handedness;
+			dx *+ handedness;
+			if (dz * pos.z + dx * pos.x > 0) {
+				edge = edge.next;
+				continue;
+			}
+
+			foundTriEdge = edge;
+			break;
+
+		} while (edge !== region.edge)
+		*/
+
+	/**
+	 * Updates agent's a,b,c flow triangle flow-vertices for final destination's n-gon region based off agent's position
+	 * @param {Vector3} pos	The position of agent within polygon region
+	 * @param {Object} result Typically a FlowAgent object that has `a`, `b`, and `c` flow vertice
+	 * @param {Map} edgeFieldMap Edge field map from flowfield to get flow vectors
+	 * @param {Vector3} finalDestPt The final destination point
+	 */
+	static updateNgonFinalTri(region, pos, result, edgeFieldMap, finalDestPt) {
+		let edge = region.edge;
+		let foundTriEdge = null;
+		do {
+			if (pointInTriangle(finalDestPt, edge.prev.vertex, edge.vertex, pos)) {
+				foundTriEdge = edge;
+				break;
+			}
+			edge = edge.next;
+		} while (edge !== region.edge)
+
+		if (foundTriEdge === null) throw new Error("Failed to find final destination center fan triangle");
+
+		result.a = edgeFieldMap.get(finalDestPt);
+		result.b = edgeFieldMap.get(foundTriEdge.prev.vertex);
+		result.c = edgeFieldMap.get(foundTriEdge.vertex);
+
+		if (result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.prevEdge)) {
+			result.prevEdge = null;
+		}
+		if (result.lastSavedEdge && result.lastSavedEdge !== result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.lastSavedEdge)) {
+			result.lastSavedEdge = null;
+		}
 	}
 
 	/**

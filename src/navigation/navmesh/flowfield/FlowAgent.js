@@ -93,7 +93,7 @@ class FlowAgent {
 		// TODO: consider reset (this.lane === null BUT !!this.curRegion marker) to update curRegion context and flow vectors
 		this.prevEdge = null;
 		this.lastSavedEdge = null;
-		// this.lane = 0;
+		this.lane = null;
 		if (clearCurRegion) {
 			this.curRegion = null;
 		}

@@ -8,10 +8,6 @@ const CALC_VEC2 = new Vector3();
 const CALC_VEC3 = new Vector3();
 const LARGEST_NUM = 999999999;
 
-//a = new FlowVertex(this.curRegion.edge.vertex);
-//b = new FlowVertex(this.curRegion.edge.next.vertex);
-//c = new FlowVertex(this.curRegion.edge.prev.vertex);
-
 /**
  * Gridless flowfield on navmesh generation
  * https://gingkoapp.com/how-to-gridless-rts
@@ -496,18 +492,46 @@ class NavMeshFlowField {
 			} while (edge !== region.edge)
 		}
 
+		if (!edgeFieldMap.has(finalDestPt)) {
+			edgeFieldMap.set(finalDestPt, new FlowVertex(finalDestPt));
+		}
+
 		edge = region.edge;
+		//let longestTest;
+		//let longestLength = 0;
+
 		do {
 			flowVertex = edgeFieldMap.get(edge.vertex);
 			a.x = edge.vertex.x;
 			a.z = edge.vertex.z;
 			b.x = finalDestPt.x;
 			b.z = finalDestPt.z;
-			flowVertex.subVectors(b, a);
-			flowVertex.initFinal(finalDestPt);
+			flowVertex.subVectors(b, a).initFinal(finalDestPt);
 
+			flowVertex.normalize();
+			/*
+			longestTest = flowVertex.x * flowVertex.x + flowVertex.z * flowVertex.z;
+			if (longestTest > longestLength) {
+				longestLength = longestTest;
+			}
+			*/
 			edge = edge.next;
 		} while(edge !== region.edge)
+
+		/*
+		if (longestLength === 0) throw new Error("Exception longest length zero found!");
+
+		longestLength = 1/Math.sqrt(longestLength);
+
+		do {
+			flowVertex = edgeFieldMap.get(edge.vertex);
+			longestTest = Math.sqrt(flowVertex.x * flowVertex.x + flowVertex.z * flowVertex.z);
+			longestTest *= longestLength;
+			flowVertex.x *= longestTest;
+			flowVertex.z *= longestTest;
+			edge = edge.next;
+		} while(edge !== region.edge)
+		/*/
 	}
 
 	getFromNodeIndex(lastRegion, newRegion, pathRef) {

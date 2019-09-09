@@ -3,6 +3,7 @@ import { FlowAgent } from '../../navigation/navmesh/flowfield/FlowAgent.js';
 import { FlowTriangulate } from '../../navigation/navmesh/flowfield/FlowTriangulate.js';
 import { Vector3 } from '../../math/Vector3.js';
 import { LineSegment } from '../../math/LineSegment.js';
+import { NavMeshFlowField } from '../../navigation/navmesh/flowfield/NavmeshFlowField.js';
 
 const desiredVelocity = new Vector3();
 
@@ -45,12 +46,15 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 	 *
 	 * @param {NavMeshFlowField} flowField For now, only accepts a persistant NavMeshFLowField. (TODO: non-persitant flowfield case)
 	 */
-	constructor(flowField, finalDestPt, pathRef, epsilon = 1e-3) {
+	constructor(flowField, finalDestPt, pathRef, epsilon = 1e-3, arrivalDist = 0, arrivalCallback=null) {
 		super();
 		this.flowField = flowField;
 		this.finalDestPt = finalDestPt;
 		this.epsilon = epsilon;
 		this.pathRef = pathRef;
+		this.arrivalSqDist = arrivalDist === 0 ? this.epsilon : arrivalDist;
+		this.arrivalSqDist *= this.arrivalSqDist;
+		this.arrivalCallback = arrivalCallback;
 	}
 
 	onAdded(vehicle) {
@@ -67,6 +71,22 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 		desiredVelocity.x = 0;
 		desiredVelocity.z = 0;
 		let refPosition = vehicle.position;
+
+		if (agent.lane === false || agent.lane === true) {	// arrival routine
+			if (vehicle.position.squaredDistanceTo(this.finalDestPt) < this.arrivalSqDist) {
+				if (agent.lane === false) {
+					if (this.arrivalCallback !== null) this.arrivalCallback(vehicle);
+					agent.lane = true;
+				}
+			} else {
+				agent.calcDir(refPosition, desiredVelocity);
+			}
+			desiredVelocity.x *= vehicle.maxSpeed;
+			desiredVelocity.z *= vehicle.maxSpeed;
+			force.x = desiredVelocity.x - vehicle.velocity.x;
+			force.z = desiredVelocity.z - vehicle.velocity.z;
+			return force;
+		}
 
 		if (!agent.curRegion) {
 			this.setCurRegion(vehicle);
@@ -86,11 +106,24 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 				} else { // doesn't belong to current region
 					let lastRegion = agent.curRegion;
 
-					if (this.setCurRegion(vehicle) === false) {
+
+					if (this.setCurRegion(vehicle) === false) { // trigger arrival and exit out
+						// ARRIVED
+						//vehicle.velocity.x = 0;
+						//vehicle.velocity.y = 0;
+
+						agent.lane = false;
+						agent.calcDir(refPosition, desiredVelocity);
+						desiredVelocity.x *= vehicle.maxSpeed;
+						desiredVelocity.z *= vehicle.maxSpeed;
+
 						force.x = desiredVelocity.x - vehicle.velocity.x;
 						force.z = desiredVelocity.z - vehicle.velocity.z;
+
 						return force;
 					}
+
+
 					if (!agent.curRegion) {
 						refPosition = clampPointWithinRegion(region, refPosition);
 						agent.curRegion = lastRegion;
@@ -109,13 +142,14 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 		}
 
 
-
 		agent.calcDir(refPosition, desiredVelocity);
 
+		/*
 		if (isNaN(desiredVelocity.x)) {
 			console.log([agent.a, agent.b, agent.c, agent.curRegion])
 			throw new Error("NaN desired velocity calculated!"+agent.currentTriArea() + " :: "+agent.lane);
 		}
+		*/
 
 		// desiredVelocity.multiplyScalar( vehicle.maxSpeed );
 		desiredVelocity.x *= vehicle.maxSpeed;
@@ -174,21 +208,19 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 		if (regionPicked.edge.next.next.next === regionPicked.edge) { // triangle
 			agent.curRegion = regionPicked;
 			if (edgeFlows.length ===0) {
-				agent.curRegion = null;
-				//vehicle.velocity.set(0,0,0); // <-temp
-				console.log("ARRIVED at last triangle region");
+				//console.log("ARRIVED at last triangle region");
+				FlowTriangulate.updateNgonFinalTri(regionPicked, vehicle.position, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
 				return false;
 			}
 			agent.lane = 0;
 			FlowTriangulate.updateTriRegion(agent.curRegion, agent, flowField.edgeFieldMap);
 		} else { // non-tri zone
 			if (edgeFlows.length === 0) {
-				agent.curRegion = null;
-				//vehicle.velocity.set(0,0,0);  // <-temp
-				console.log("ARRIVED at last non-tri region");
+				//console.log("ARRIVED at last non-tri region");
+				agent.curRegion = regionPicked;
+				FlowTriangulate.updateNgonFinalTri(regionPicked, vehicle.position, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
 				return false;
 			}
-
 
 			/*
 			(lastNodeIndex >= 0 ?
