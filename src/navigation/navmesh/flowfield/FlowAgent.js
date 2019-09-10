@@ -90,7 +90,6 @@ class FlowAgent {
 	}
 
 	reset(clearCurRegion) {
-		// TODO: consider reset (this.lane === null BUT !!this.curRegion marker) to update curRegion context and flow vectors
 		this.prevEdge = null;
 		this.lastSavedEdge = null;
 		this.lane = null;
@@ -135,6 +134,22 @@ class FlowAgent {
 
 	getCurRegion() {
 		return this.curRegion && this.curRegion.fromPortal ? this.curRegion.fromPortal.polygon : this.curRegion;
+	}
+
+	static pointWithinRegion(pt, curRegion) {
+		let edge = curRegion.edge;
+		// convex test
+		do {
+			const v1 = edge.tail();
+			const v2 = edge.head();
+
+			// MathUtils.area( v1, v2, pt ) < 0
+			if ( ( ( pt.x - v1.x ) * ( v2.z - v1.z ) ) - ( ( v2.x - v1.x ) * ( pt.z - v1.z ) ) < 0  ) {
+				return false;
+			}
+			edge = edge.next;
+
+		} while ( edge !== curRegion.edge );
 	}
 
 	withinCurrentRegionBounds(pt) {

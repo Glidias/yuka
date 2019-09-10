@@ -161,6 +161,7 @@ class FlowTriangulate {
 		// todo: check for spinning flowVertex splitNormal for subtriangle selection?
 	}
 
+		// Method 1 , check fan sector
 		/*	// alternate approach, check with fan
 		let foundTriEdge = null;
 		let dx;
@@ -191,6 +192,14 @@ class FlowTriangulate {
 		} while (edge !== region.edge)
 		*/
 
+		/*	// Method 2 , check sector triangle
+		if (pointInTriangle(finalDestPt, edge.prev.vertex, edge.vertex, pos)) {
+			foundTriEdge = edge;
+			break;
+		}
+		edge = edge.next;
+		*/
+
 	/**
 	 * Updates agent's a,b,c flow triangle flow-vertices for final destination's n-gon region based off agent's position
 	 * @param {Vector3} pos	The position of agent within polygon region
@@ -201,15 +210,37 @@ class FlowTriangulate {
 	static updateNgonFinalTri(region, pos, result, edgeFieldMap, finalDestPt) {
 		let edge = region.edge;
 		let foundTriEdge = null;
+		let dx;
+		let dz;
+		let handedness = USE_HANDEDNESS;
 		do {
-			if (pointInTriangle(finalDestPt, edge.prev.vertex, edge.vertex, pos)) {
-				foundTriEdge = edge;
-				break;
+			dz = -edge.prev.vertex.x + finalDestPt.x;
+			dx = edge.prev.vertex.z - finalDestPt.z;
+			dz *= handedness;
+			dx *+ handedness;
+			if (dz * pos.z + dx * pos.x < 0) {
+				edge = edge.next;
+				continue;
 			}
-			edge = edge.next;
+
+			dz = -edge.vertex.x + finalDestPt.x;
+			dx = edge.vertex.z - finalDestPt.z;
+			dz *= handedness;
+			dx *+ handedness;
+			if (dz * pos.z + dx * pos.x > 0) {
+				edge = edge.next;
+				continue;
+			}
+
+			foundTriEdge = edge;
+			break;
+
 		} while (edge !== region.edge)
 
-		if (foundTriEdge === null) throw new Error("Failed to find final destination center fan triangle");
+		if (foundTriEdge === null) {
+			console.log(region);
+			throw new Error("Failed to find final destination center fan triangle");
+		}
 
 		result.a = edgeFieldMap.get(finalDestPt);
 		result.b = edgeFieldMap.get(foundTriEdge.prev.vertex);

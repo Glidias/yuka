@@ -6,7 +6,6 @@ import { isNull } from 'util';
 const CALC_VEC = new Vector3();
 const CALC_VEC2 = new Vector3();
 const CALC_VEC3 = new Vector3();
-const LARGEST_NUM = 999999999;
 
 /**
  * Gridless flowfield on navmesh generation
@@ -63,6 +62,12 @@ class NavMeshFlowField {
 		return "";	// return string-based key for external LRU cache storage
 	}
 
+	hasFlowFromRegion(fromRegion, pathRef) {
+		if (!pathRef) pathRef = this.pathRef;
+		return !Array.isArray(pathRef) ? pathRef._cost.has(this.navMesh.getNodeIndex(fromRegion)) // Dijkstra assumed pre-searched (ie. source is fill "destination")
+			: pathRef.indexOf(this.navMesh.getNodeIndex(fromRegion)) >= 0; // Pathed array
+	}
+
 	/**
 	 *
 	 * @param {Number} node	Node index to start from
@@ -83,7 +88,10 @@ class NavMeshFlowField {
 		if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
 			// iterate through all regions to find lowest costs
 			let costs = pathRef._cost;
-			let tryCost = LARGEST_NUM;
+			if (!costs.has(node)) {
+				return null;
+			}
+			let tryCost = Infinity;
 			n = node;
 			if (node === pathRef.source) {
 				this._flowedFinal = true;
@@ -542,7 +550,7 @@ class NavMeshFlowField {
 		if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
 			// iterate through all regions to find lowest costs
 			let costs = pathRef._cost;
-			let tryCost = LARGEST_NUM;
+			let tryCost = Infinity;
 			let n = startIndex;
 			let tryNode;
 			let tryEdge;

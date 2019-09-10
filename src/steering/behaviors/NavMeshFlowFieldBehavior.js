@@ -91,13 +91,23 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 		if (!agent.curRegion) {
 			this.setCurRegion(vehicle);
 			if (!agent.curRegion) {
-				force.x = desiredVelocity.x - vehicle.velocity.x;
-				force.z = desiredVelocity.z - vehicle.velocity.z;
+				force.x = -vehicle.velocity.x;
+				force.z = -vehicle.velocity.z;
 				return force;
 			}
 		} else {
+			let region;
+			if (agent.lane === null) {
+				region = agent.getCurRegion();
+				if (this.flowField.hasFlowFromRegion(region)) this.setCurRegion(vehicle, region);
+				else {
+					force.x = -vehicle.velocity.x;
+					force.z = -vehicle.velocity.z;
+					return force;
+				}
+			}
 			if (!agent.withinCurrentTriangleBounds(refPosition)) { // TODO: not necessarily triangle refers to current region for saved split triangle cases
-				let region = agent.getCurRegion();
+				region = agent.getCurRegion();
 				if ((region.edge.next.next.next !== region.edge && agent.withinCurrentRegionBounds(vehicle.position)) && agent.withinFlowPlane(vehicle.position, this.epsilon) ) {
 					// update triangle from triangulation
 					agent.curRegion.updateLane(refPosition, agent);
@@ -123,24 +133,18 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 						return force;
 					}
 
-
 					if (!agent.curRegion) {
 						refPosition = clampPointWithinRegion(region, refPosition);
 						agent.curRegion = lastRegion;
-						if (region.edge.next.next.next !== region.edge) {
-							if (agent.curRegion === region) {
-								console.error("SHOuld not be assertion failed");
-								console.log(agent.curRegion);
-							}
-							agent.curRegion.updateLane(refPosition, agent);
+						if (region.edge.next.next.next !== region.edge && lastRegion !== region) { // 2nd && case for FlowTriangulate
+							lastRegion.updateLane(refPosition, agent);
 							//console.log("New lane222:"+agent.lane);
-							agent.curRegion.updateFlowTriLaned(refPosition, agent, this.flowField.edgeFieldMap);
+							lastRegion.updateFlowTriLaned(refPosition, agent, this.flowField.edgeFieldMap);
 						}
 					}
 				}
 			}
 		}
-
 
 		agent.calcDir(refPosition, desiredVelocity);
 
@@ -170,6 +174,9 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 	/**
 	 * Set current region based on vehicle's position to vehicle's agent
 	 * @param {Vehicle} vehicle The vehicle
+	 * @param {Polygon} forceSetRegion (Optional) A region to force a vehicle to be assosiated with, else attempt will search a suitable region on navmesh.
+	 *  Setting this parameter to a falsey value that isn't undefined (eg. null) will perform additional within bounds refPosition clamp check.
+	 *  WARNING: It is assumed this `forceSetRegion` will be able to reach final destination node
 	 * @return {Null|Number|Boolean}
 	 * Null if no region could be picked.
 	 * True if same region detected from last saved region
@@ -177,19 +184,27 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 	 * Zero `0` if no flow path  ould be found at all to reach final destination.
 	 * One `1` if no flow path could be found (not yet reached final destination).
 	 */
-	setCurRegion(vehicle) {
+	setCurRegion(vehicle, forceSetRegion) {
 		let agent = vehicle.agent;
 		let flowField = this.flowField;
-		let lastRegion = agent.getCurRegion();
-		let regionPicked = flowField.navMesh.getRegionForPoint(vehicle.position, this.epsilon);
+		let lastRegion = !forceSetRegion ? agent.getCurRegion() : null;
+		let regionPicked = !forceSetRegion ? flowField.navMesh.getRegionForPoint(vehicle.position, this.epsilon) : forceSetRegion;
 		if (!regionPicked) {
 			agent.curRegion = null;
 			return null;
 		}
+
+		let refPosition = vehicle.position;
+
+		// ensure refPosition clamped is within forceSetRegion
+		if (forceSetRegion !== undefined && !FlowAgent.pointWithinRegion(refPosition, regionPicked)) {
+			refPosition = clampPointWithinRegion(regionPicked, refPosition);
+		}
+
 		if (regionPicked === lastRegion) {
 			if (agent.curRegion !== regionPicked) {
-				agent.curRegion.updateLane(vehicle.position, agent);
-				agent.curRegion.updateFlowTriLaned(vehicle.position, agent, flowField.edgeFieldMap);
+				agent.curRegion.updateLane(refPosition, agent);
+				agent.curRegion.updateFlowTriLaned(refPosition, agent, flowField.edgeFieldMap);
 			}
 			return true;
 		}
@@ -209,7 +224,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			agent.curRegion = regionPicked;
 			if (edgeFlows.length ===0) {
 				//console.log("ARRIVED at last triangle region");
-				FlowTriangulate.updateNgonFinalTri(regionPicked, vehicle.position, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
+				FlowTriangulate.updateNgonFinalTri(regionPicked, refPosition, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
 				return false;
 			}
 			agent.lane = 0;
@@ -218,7 +233,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			if (edgeFlows.length === 0) {
 				//console.log("ARRIVED at last non-tri region");
 				agent.curRegion = regionPicked;
-				FlowTriangulate.updateNgonFinalTri(regionPicked, vehicle.position, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
+				FlowTriangulate.updateNgonFinalTri(regionPicked, refPosition, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
 				return false;
 			}
 
@@ -233,8 +248,8 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			if (!agent.curRegion) {
 				agent.curRegion = flowField.setupTriangulation(null, edgeFlows[0], edgeFlows[0]);
 			}
-			agent.curRegion.updateLane(vehicle.position, agent);
-			agent.curRegion.updateFlowTriLaned(vehicle.position, agent, flowField.edgeFieldMap);
+			agent.curRegion.updateLane(refPosition, agent);
+			agent.curRegion.updateFlowTriLaned(refPosition, agent, flowField.edgeFieldMap);
 		}
 		return 1;
 	}
