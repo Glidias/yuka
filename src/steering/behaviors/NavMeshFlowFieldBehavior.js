@@ -44,7 +44,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 
 	/**
 	 *
-	 * @param {NavMeshFlowField} flowField For now, only accepts a persistant NavMeshFLowField. (TODO: non-persitant flowfield case)
+	 * @param {NavMeshFlowField} flowField For now, only accepts a persistant NavMeshFLowField. (todo: non-persitant flowfield case)
 	 */
 	constructor(flowField, finalDestPt, pathRef, epsilon = 1e-3, arrivalDist = 0, arrivalCallback=null) {
 		super();
@@ -106,7 +106,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 					return force;
 				}
 			}
-			if (!agent.withinCurrentTriangleBounds(refPosition)) { // TODO: not necessarily triangle refers to current region for saved split triangle cases
+			if (!agent.withinCurrentTriangleBounds(refPosition)) {
 				region = agent.getCurRegion();
 				if ((region.edge.next.next.next !== region.edge && agent.withinCurrentRegionBounds(vehicle.position)) && agent.withinFlowPlane(vehicle.position, this.epsilon) ) {
 					// update triangle from triangulation
@@ -117,7 +117,7 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 					let lastRegion = agent.curRegion;
 
 
-					if (this.setCurRegion(vehicle) === false) { // trigger arrival and exit out
+					if (this.setCurRegion(vehicle) === false) {
 						// ARRIVED
 						//vehicle.velocity.x = 0;
 						//vehicle.velocity.y = 0;
@@ -219,7 +219,6 @@ class NavMeshFlowFieldBehavior extends SteeringBehavior {
 			return 0;
 		}
 
-		// TODO: setup final flow triangulation cases at last node
 		if (regionPicked.edge.next.next.next === regionPicked.edge) { // triangle
 			agent.curRegion = regionPicked;
 			if (edgeFlows.length ===0) {
