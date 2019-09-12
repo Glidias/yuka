@@ -1,3 +1,4 @@
+import resolve from 'rollup-plugin-node-resolve';
 const fs = require( 'fs' );
 const commenting = require( 'commenting' );
 
@@ -10,7 +11,11 @@ export default {
 			return commenting( '@license\n' + text, { extension: '.js' } );
 
 		}
-	} ],
+	},
+
+	resolve()
+
+],
 	output: [
 		{
 			format: 'umd',

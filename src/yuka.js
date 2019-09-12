@@ -93,10 +93,15 @@ export { NavMeshFlowFieldBehavior } from './steering/behaviors/NavMeshFlowFieldB
 export { NavMeshFlowField } from './navigation/navmesh/flowfield/NavmeshFlowField.js';
 export { FlowAgent } from './navigation/navmesh/flowfield/FlowAgent.js';
 export { FlowVertex } from './navigation/navmesh/flowfield/FlowVertex.js';
+export { FlowTriangulate } from './navigation/navmesh/flowfield/FlowTriangulate.js';
 export { Task } from './task/Task.js';
 export { TaskQueue } from './task/TaskQueue.js';
 export { RectangularTriggerRegion } from './trigger/regions/RectangularTriggerRegion.js';
 export { SphericalTriggerRegion } from './trigger/regions/SphericalTriggerRegion.js';
 export { TriggerRegion } from './trigger/TriggerRegion.js';
 export { Trigger } from './trigger/Trigger.js';
+
+// My Kralchester stuffs
+export { SVGCityReader } from './towngen/SVGCityReader.js';
+
 export * from './constants.js';
