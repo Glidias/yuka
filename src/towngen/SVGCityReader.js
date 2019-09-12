@@ -130,12 +130,13 @@ class SVGCityReader {
 			let dx;
 			let dy;
 
-
+			let count = 0;
 			let vLen = arr.length;
 			let pointsForBuilding = [];
+			let addedStr;
 
 			if (vLen <= 4) {
-				newPathStr += "M "+building + " Z";
+				newPathStr += (addedStr = "M "+building + " Z");
 				buildingsArr.push(vLen);
 				for (v=0; v<vLen; v++) {
 					let pArr = arr[v].split(",");
@@ -146,10 +147,12 @@ class SVGCityReader {
 					pArr.length = 2;
 
 
+
 					lx = x;
 					ly = y;
 
 					wardObj.vertices.push(pArr);
+					count++;
 
 				}
 
@@ -162,17 +165,20 @@ class SVGCityReader {
 					y = pArr[1];
 					pArr.length = 2;
 
+					dx =
+
 					lx = x;
 					ly = y;
 
 					pointsForBuilding.push(pArr);
+
 				}
 
 				var del = Delaunay.from(pointsForBuilding);
-				var renderedHull = del.renderHull();
-				newPathStr += renderedHull;  //  + "Z"
-				arr = renderedHull.slice(1).split("L");
-				console.log(renderedHull);
+				addedStr = del.renderHull();
+				newPathStr += addedStr;  //  + "Z"
+				arr = addedStr.slice(1).split("L");
+
 				//console.log(arr.length + " VS " + vLen  + " :: "+indexTrace+","+i);
 				vLen = arr.length;
 				for (v=0; v<vLen; v++) {
@@ -183,10 +189,18 @@ class SVGCityReader {
 					y = pArr[1];
 					pArr.length = 2;
 
-					lx = x;
-					ly = y;
+					dx = x- lx;
+					dy = y - ly;
 
-					wardObj.vertices.push(pArr);
+					// todo: remove collinear from previous
+
+					if (count===0 || dx*dx+dy*dy>=1) {
+						lx = x;
+						ly = y;
+
+						wardObj.vertices.push(pArr);
+						count++;
+					}
 
 
 				}
@@ -195,13 +209,11 @@ class SVGCityReader {
 			}
 
 
+			if (count > 4) {
 
-
-			if (vLen > 4) {
-
-				//console.log(vLen+ " ? " + pointsForBuilding.length  + " :: "+indexTrace+","+i);
-			} else {
-
+				console.log(count+ " ? " + pointsForBuilding.length  + " :: "+indexTrace+","+i +  " >> "+addedStr);
+			} else if (count < 3) {
+				console.warn("Degenerate path found!");
 			}
 
 
