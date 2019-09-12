@@ -88,25 +88,29 @@ class SVGCityReader {
 			let wardObj = {vertices:[], neighborhoods:[]};
 			item.children("path").each((i, hood)=> {
 				hood = $(hood);
-				this.setupNeighborhoodFromPath(hood.attr("d"), wardObj);
+				var newStr = this.setupNeighborhoodFromPath(hood.attr("d"), wardObj, i);
+				hood.attr("d", newStr);
 			});
 			this.wards.push(wardObj);
 		});
 	}
 
 	// array of buildings
-	setupNeighborhoodFromPath(pathStr, wardObj) {
+	setupNeighborhoodFromPath(pathStr, wardObj, indexTrace) {
 		let buildings = pathStr.split("M ");
 		if (buildings[0] === "") buildings.shift();
 
 		let i;
 		let len = buildings.length;
 		let arr;
+		var newPathStr = "";
+
 
 		let buildingsArr = [];
 		let building;
 		let closePath;
-		// polygons
+		// polygons per building
+
 		for (i=0; i<len; i++) {
 			building = buildings[i];
 			building = building.trim();
@@ -117,7 +121,7 @@ class SVGCityReader {
 			arr = building.split("L ");
 			if (arr[0] === "") arr.shift();
 
-			let vLen = arr.length;
+
 			let v;
 			let x;
 			let lx;
@@ -126,30 +130,87 @@ class SVGCityReader {
 			let dx;
 			let dy;
 
-			let count = 0;
+
+			let vLen = arr.length;
 			let pointsForBuilding = [];
-			for (v=0; v<vLen; v++) {
-				let pArr = arr[v].split(",");
-				pArr = pArr.map((p=>{return parseFloat(p.trim())}))
 
-				x = pArr[0];
-				y = pArr[1];
+			if (vLen <= 4) {
+				newPathStr += "M "+building + " Z";
+				buildingsArr.push(vLen);
+				for (v=0; v<vLen; v++) {
+					let pArr = arr[v].split(",");
+					pArr = pArr.map((p=>{return parseFloat(p.trim())}))
 
-				wardObj.vertices.push(pArr);
-				count++;
-				lx = x;
-				ly = y;
+					x = pArr[0];
+					y = pArr[1];
+					pArr.length = 2;
+
+
+					lx = x;
+					ly = y;
+
+					wardObj.vertices.push(pArr);
+
+				}
+
+			} else {
+				for (v=0; v<vLen; v++) {
+					let pArr = arr[v].split(",");
+					pArr = pArr.map((p=>{return parseFloat(p.trim())}))
+
+					x = pArr[0];
+					y = pArr[1];
+					pArr.length = 2;
+
+					lx = x;
+					ly = y;
+
+					pointsForBuilding.push(pArr);
+				}
+
+				var del = Delaunay.from(pointsForBuilding);
+				var renderedHull = del.renderHull();
+				newPathStr += renderedHull;  //  + "Z"
+				arr = renderedHull.slice(1).split("L");
+				console.log(renderedHull);
+				//console.log(arr.length + " VS " + vLen  + " :: "+indexTrace+","+i);
+				vLen = arr.length;
+				for (v=0; v<vLen; v++) {
+					let pArr = arr[v].split(",");
+					pArr = pArr.map((p=>{return parseFloat(p.trim())}))
+
+					x = pArr[0];
+					y = pArr[1];
+					pArr.length = 2;
+
+					lx = x;
+					ly = y;
+
+					wardObj.vertices.push(pArr);
+
+
+				}
+
 
 			}
 
-			buildingsArr.push(count);
-			if (count > 4) {
+
+
+
+			if (vLen > 4) {
+
+				//console.log(vLen+ " ? " + pointsForBuilding.length  + " :: "+indexTrace+","+i);
+			} else {
 
 			}
+
+
 
 		}
 
 		wardObj.neighborhoods.push(buildingsArr);
+
+		return newPathStr;
 
 	}
 
