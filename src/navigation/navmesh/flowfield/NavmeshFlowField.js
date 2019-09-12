@@ -1,7 +1,6 @@
 import { Vector3 } from '../../../math/Vector3.js';
 import { FlowTriangulate, USE_HANDEDNESS } from './FlowTriangulate.js';
 import { FlowVertex } from './FlowVertex.js';
-import { isNull } from 'util';
 
 const CALC_VEC = new Vector3();
 const CALC_VEC2 = new Vector3();
