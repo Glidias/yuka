@@ -71,6 +71,7 @@ function collinear(p1, p2, p3, threshold) {
 	let x3 = p3[0];
 	let y3 =  p3[1];
 	let collinear0 = x1 * (y2 - y3) +   x2 * (y3 - y1) +   x3 * (y1 - y2) <= threshold;
+	//let collinear0 = ( x3 - x1 ) * ( y2 - y1 )  -  ( x2 - x1 ) * ( y3 - y1 ) <= threshold;
 	return collinear0;
 }
 
@@ -101,6 +102,7 @@ class SVGCityReader {
 		this.selectorRoads = "g[fill=none]"  // polyline
 
 		this.collinearThreshold = 0.001;
+		this.collinearAreaThreshold = 0.01;
 		this.sqWeldDistThreshold = 0.01;
 
 	}
@@ -232,6 +234,7 @@ class SVGCityReader {
 			let x = 0;
 			let y = 0;
 
+
 			let hullAABB = new AABB();
 			let hullPoints = [];
 			let pt;
@@ -241,18 +244,61 @@ class SVGCityReader {
 			let cy = 0;
 			let startHullEdgeCount;
 
+
 			len = hull.length;
+			let addCount = 0;
+
 			for (i=0; i<len; i++) {
 				let baseI = (hull[i] << 1);
 				x = points[baseI];
 				y = points[baseI+1];
-				cx += x;
-				cy += y;
-				hullAABB.expand(pt =  new Vector3(x,0,y));
-				hullPoints.push(pt);
-				item.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:x, cy:y}));
+				let i1 = i >= 1 ? i - 1 : len - 1;
+				let i3 = i >= len - 1 ? 0 : i + 1;
+				let x1 = points[(hull[i1] << 1)];
+				let y1 = points[(hull[i1] << 1)+1];
+				let x3 = points[(hull[i3] << 1)];
+				let y3 = points[(hull[i3] << 1)+1];
+				let x2 = x;
+				let y2 = y;
+				//console.log(x1 * (y2 - y3) +   x2 * (y3 - y1) +   x3 * (y1 - y2) )
+				let isCollinear = ( x3 - x1 ) * ( y2 - y1 )  -  ( x2 - x1 ) * ( y3 - y1 ) <= this.collinearAreaThreshold;
 
-				hullVerticesSoup.push([x,y]);
+				/*
+				if (isCollinear) {
+					continue;
+				}
+				*/
+
+				// console.log("ADDING");
+
+				if (!isCollinear) {
+					cx += x;
+					cy += y;
+					hullAABB.expand(pt =  new Vector3(x,0,y));
+					hullPoints.push(pt);
+				}
+
+				/*
+				if (i === 2) {
+					let coloring =  isCollinear ? "red" : "green";
+					item.append(this.makeSVG("circle", {r:0.5, fill:coloring, cx:x1, cy:y1}));
+					item.append(this.makeSVG("circle", {r:0.5, fill:"pink", cx:x, cy:y}));
+					item.append(this.makeSVG("circle", {r:0.5, fill:coloring, cx:x3, cy:y3}));
+				}
+				*/
+				if (!isCollinear) item.append(this.makeSVG("circle", {r:0.5, fill:"green", cx:x, cy:y}));
+
+
+
+			}
+
+
+
+			len = hullPoints.length;
+
+
+			for (i=0; i<len; i++) {
+				hullVerticesSoup.push([hullPoints[i].x, hullPoints[i].z]);
 				if (i > 0) {
 					if (i < len - 1) {
 						hullEdgesSoup.push([hullEdgeCount, ++hullEdgeCount]);
@@ -266,9 +312,9 @@ class SVGCityReader {
 				}
 			}
 
+
 			cx /= len;
 			cy /= len;
-
 
 			wardObj.aabb = hullAABB;
 			wardObj.polygon = new Polygon().fromContour(hullPoints);
@@ -326,7 +372,7 @@ class SVGCityReader {
 
 		//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,0,0,0.2)", "stroke-width":0.15, d: cdtSVG}));
 
-		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.2)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,1)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 		//del.triangles = theTris;
 	}
 
