@@ -57,12 +57,16 @@
     "node-fetch": "2.3.0",
     "nyc": "14.1.1",
     "rollup": "1.12.0",
+    "rollup-plugin-commonjs": "^10.1.0",
     "rollup-plugin-inject": "^3.0.1",
+    "rollup-plugin-node-globals": "^1.4.0",
     "rollup-plugin-node-resolve": "^5.2.0",
     "text-encoding": "0.7.0",
     "tui-jsdoc-template": "1.2.2"
   },
   "dependencies": {
+    "cdt2d": "^1.0.0",
+    "clean-pslg": "^1.1.2",
     "d3-delaunay": "^5.1.5",
     "jquery": "^3.4.1"
   }

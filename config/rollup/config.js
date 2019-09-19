@@ -1,6 +1,9 @@
 import resolve from 'rollup-plugin-node-resolve';
+import commonjs from 'rollup-plugin-commonjs';
 const fs = require( 'fs' );
 const commenting = require( 'commenting' );
+import globals from 'rollup-plugin-node-globals';
+
 
 export default {
 	input: 'src/yuka.js',
@@ -12,7 +15,15 @@ export default {
 
 		}
 	},
-
+	commonjs(),
+	globals({
+		process: false,
+		global: false,
+		dirname: false,
+		buffer: true,
+	    filename: false,
+		baseDir: false
+	}),
 	resolve()
 
 ],
