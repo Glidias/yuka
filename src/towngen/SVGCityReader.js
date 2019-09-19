@@ -1,12 +1,16 @@
 import { Vector3 } from "../math/Vector3.js";
 import { Polygon } from "../math/Polygon.js";
 import { AABB } from "../math/AABB.js";
+import { LineSegment } from "../math/LineSegment.js";
 import {Delaunay} from "d3-delaunay";
 
 import cdt2d from "cdt2d";
 import cleanPSLG from "clean-pslg";
 
 import {NavMesh} from "../navigation/navmesh/NavMesh.js";
+
+const lineSegment = new LineSegment();
+const pointOnLineSegment = new Vector3();
 
 function renderTrianglesOf(del) {
 	let val = "";
@@ -38,6 +42,24 @@ function collectBuildingHole(collector, buildingLen) {
 	}
 }
 
+function polygonToCell(polygon) {
+	let edge = polygon.edge;
+	let arr = [];
+
+	do {
+		arr.push([edge.vertex.x, edge.vertex.z]);
+		edge = edge.next;
+	} while (edge !== polygon.edge);
+	return arr;
+}
+
+
+function cellToPolygon(cell) {
+	let poly = new Polygon();
+	poly.fromContour(cell.map((p)=>{return new Vector3(p[0], 0, p[1])}));
+	return poly;
+}
+
 function polygonSVGString(polygon) {
 	let edge = polygon.edge;
 	let str = "";
@@ -51,6 +73,22 @@ function polygonSVGString(polygon) {
 
 	return str;
 }
+
+function cellSVGString(cell) {
+	let len = cell.length;
+	let str = "";
+	let c = cell[0];
+
+	str += "M"+c[0]+","+c[1] + " ";
+	for (let i=1; i<len; i++) {
+		c = cell[i];
+		str += "L"+c[0]+","+c[1] + " ";
+	}
+	str += "Z";
+	return str;
+}
+
+
 function triSVGString(vertSoup, tri) {
 	return `M${vertSoup[tri[2]][0]},${vertSoup[tri[2]][1]} L${vertSoup[tri[1]][0]},${vertSoup[tri[1]][1]} L${vertSoup[tri[0]][0]},${vertSoup[tri[0]][1]} Z`;
 }
@@ -104,6 +142,13 @@ class SVGCityReader {
 		this.collinearThreshold = 0.001;
 		this.collinearAreaThreshold = 0.01;
 		this.sqWeldDistThreshold = 0.01;
+
+		this.minPillarRadius = 1.7;
+		this.maxPillarRadius = 3;
+		this.pillarSpacing = 0.5;
+		this.pillarStrengthRatio =2.4;
+
+		this.omitUpperWardsOutliers = true;
 
 	}
 
@@ -205,7 +250,11 @@ class SVGCityReader {
 		hullVerticesSoup.push([-this.svgWidth*.5, this.svgHeight*.5]);
 
 		verticesSoup = hullVerticesSoup.concat();
+		let baseVerticesSoup = hullVerticesSoup.concat();
+		let baseHullEdges = hullEdgesSoup.concat();
 		let buildingEdges = hullEdgesSoup.concat();
+
+		let tempWardBuildingEdgesList = [];
 
 		jSel.each((index, item)=>{
 			item = $(item);
@@ -243,6 +292,8 @@ class SVGCityReader {
 			let cx = 0;
 			let cy = 0;
 			let startHullEdgeCount;
+
+
 
 
 			len = hull.length;
@@ -325,6 +376,11 @@ class SVGCityReader {
 
 			verticesSoup = verticesSoup.concat(wardObj.vertices);
 			collectWardBuildings(buildingEdges, wardObj.neighborhoods);
+			let buildingEdgesForWard = baseHullEdges.concat();
+			tempWardBuildingEdgesList.push(buildingEdgesForWard);
+			collectWardBuildings(buildingEdgesForWard, wardObj.neighborhoods);
+
+			//collectWardBuildings(building)
 
 			this.wards.push(wardObj);
 		});
@@ -335,15 +391,20 @@ class SVGCityReader {
 		//let del;
 		//del = Delaunay.from(hullVerticesSoup);
 
+		let navmesh;
+
+		this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
 
 		//console.log(verticesSoup.length + " : "+buildingEdges.length);
-		///*
+		// Streetmap navmesh
+		/*
 		let cdt = cdt2d(hullVerticesSoup, hullEdgesSoup, {exterior:false});
 		cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
-		let navmesh = new NavMesh();
+		navmesh = new NavMesh();
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(hullVerticesSoup, tri)}));
-		//*/
+		*/
 
+		// Entire floors+buildings navmesh
 		/*
 		console.log(verticesSoup);
 		console.log(buildingEdges);
@@ -351,7 +412,7 @@ class SVGCityReader {
 
 		let cdt = cdt2d(verticesSoup, buildingEdges, {exterior:false});
 		cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
-		let navmesh = new NavMesh();
+		navmesh = new NavMesh();
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(verticesSoup, tri)}));
 		*/
 
@@ -372,8 +433,247 @@ class SVGCityReader {
 
 		//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,0,0,0.2)", "stroke-width":0.15, d: cdtSVG}));
 
-		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,1)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+
+		if (navmesh) {
+			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		}
 		//del.triangles = theTris;
+	}
+
+	setupUpperWards(tempWardBuildingEdgesList, baseVerticesSoup) {
+		let len = tempWardBuildingEdgesList.length;
+		let g;
+		let sites = [];
+		for (let i=0; i<len; i++) {
+			let verticesSoup = baseVerticesSoup.concat(this.wards[i].vertices);
+			let buildingEdges = tempWardBuildingEdgesList[i];
+			cleanPSLG(verticesSoup, buildingEdges);
+
+			let cdt = cdt2d(verticesSoup, buildingEdges, {exterior:false});
+			cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
+			let navmesh = new NavMesh();
+			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(verticesSoup, tri)}));
+
+			///*
+			let g = $(this.makeSVG("g", {}));
+			this.map.append(g, {});
+			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			//*/
+
+			/*
+			var g = $(this.makeSVG("g", {}));
+			this.map.append(g, {});
+			g.append(this.makeSVG("circle", {r:0.5, fill:"blue", cx:cx, cy:cy}));
+			*/
+
+			let spots = SVGCityReader.getEmptyRegionsFromNavmesh(navmesh, this.minPillarRadius+this.pillarSpacing, this.maxPillarRadius+this.pillarSpacing);
+			spots.forEach((beyondMaxRad, region, map) => {
+
+				sites.push({region:region, ward:this.wards[i], beyondMaxRad:beyondMaxRad});
+			});
+		}
+
+		let del = Delaunay.from(sites.map((s)=>{return [s.region.centroid.x, s.region.centroid.z]}));
+		let vor = del.voronoi([-this.svgWidth*.5, -this.svgHeight*.5, this.svgWidth*.5, this.svgHeight*.5]);
+
+		//1.5
+		//g = $(this.makeSVG("g", {}));
+		//this.map.append(g, {});
+		//g.append(this.makeSVG("path", {stroke:"blue", "stroke-width":0.25, d: vor.render()}));
+
+		/*
+		g = $(this.makeSVG("g", {}));
+		this.map.append(g, {});
+		g.append(this.makeSVG("circle", {r:(beyondMaxRad ? this.maxPillarRadius : this.minPillarRadius), fill:(beyondMaxRad ? "red" : "red"), cx:region.centroid.x, cy:region.centroid.z}));
+		*/
+
+		let cells = vor.cellPolygons();
+
+		let wBound = this.svgWidth*.5;
+		let hBound = this.svgHeight*.5;
+		let count = 0;
+		let navmeshPolygons = [];
+		for (let c of cells) {
+			let s = sites[count];
+			g = $(this.makeSVG("g", {}));
+			this.map.append(g, {});
+
+
+			let beyondMaxRad = s.beyondMaxRad;
+			let atEdge = false;
+
+			if (this.omitUpperWardsOutliers) {
+				for (let i in c) {
+					let p = c[i];
+					if ( p[0] <= -wBound || p[1] >= wBound || p[1] <= -hBound || p[1]>=hBound ) {
+						atEdge = true;
+						break;
+					}
+				}
+			}
+
+			if (!atEdge) {
+				let navmeshPoly = cellToPolygon(c);
+				navmeshPoly.s = s;
+				navmeshPolygons.push(navmeshPoly);
+				g.append(this.makeSVG("circle", {r:(beyondMaxRad ? this.maxPillarRadius : this.minPillarRadius), fill:(beyondMaxRad ? "red" : "red"), cx:s.region.centroid.x, cy:s.region.centroid.z}));
+				if (beyondMaxRad) {
+					let upperWardCell = SVGCityReader.resizeHullPoints(s.region.centroid.x, s.region.centroid.z, polygonToCell(s.ward.polygon), this.pillarStrengthRatio * this.maxPillarRadius * 2, this.maxPillarRadius+this.pillarSpacing);
+					s.upperWardCell = upperWardCell;
+					g.append(this.makeSVG("path", {fill:"rgba(0,0,255,0.5)", "stroke-width":0.5, d: cellSVGString(upperWardCell)}));
+
+				}
+			}
+			/*
+			for (let p in c) {
+				g.append(this.makeSVG("circle", {r:0.5, fill:"orange", cx:c[p][0], cy:c[p][1]}));
+			}
+			*/
+			count++;
+		}
+
+		// create navmesh from cell polygons to easily track neighbors
+		let navmesh = new NavMesh();
+		navmesh.attemptMergePolies = false;
+
+		navmesh.fromPolygons(navmeshPolygons);
+		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.1)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+
+		// connect 'em!
+		len = navmesh.regions.length;
+		for (let i=0; i<len; i++) {
+
+			// check for intersections with neighbours, if have, merge into 1 convex hull
+
+			//
+		}
+
+	}
+
+	static resizeHullPoints(centerX, centerY, cell, maxRadius, minRadius) {
+		let len = cell.length;
+		let arr = [];
+		let longestDist = 0;
+
+		for (let i=0; i<len; i++) {
+			let p = cell[i];
+			let dx = p[0] - centerX;
+			let dy = p[1] - centerY;
+			let testLongestDist = dx*dx + dy*dy;
+			if (testLongestDist > longestDist) {
+				longestDist = testLongestDist;
+			}
+		}
+
+		longestDist = 1/Math.sqrt(longestDist);
+		for (let i=0; i<len; i++) {
+			let p = cell[i];
+			let dx = p[0] - centerX;
+			let dy = p[1] - centerY;
+			dx *= longestDist;
+			dy *= longestDist;
+			dx *= maxRadius;
+			dy *= maxRadius;
+			arr.push([centerX + dx, centerY + dy]);
+		}
+
+		let minRadiusSq = minRadius*minRadius;
+
+		let prev = new Vector3();
+		let cur = new Vector3();
+		let centroid = new Vector3(centerX, 0, centerY);
+		let lp = arr[len - 1];
+		for (let i=0; i<len; i++) {
+			let p = arr[i];
+			prev.x = lp[0];
+			prev.z = lp[1];
+			cur.x = p[0];
+			cur.z = p[1];
+			lineSegment.set( prev, cur );
+
+			let t = lineSegment.closestPointToPointParameter( centroid, false);
+			lineSegment.at( t, pointOnLineSegment );
+			let distance = pointOnLineSegment.squaredDistanceTo( centroid );
+			if (distance < minRadiusSq) {
+				let px = pointOnLineSegment.x - centerX;
+				let py = pointOnLineSegment.z - centerY;
+				let d = Math.sqrt(distance);
+				px /= d;
+				py /= d;
+				px *= minRadius;
+				py *= minRadius;
+
+
+				let dx;
+				let dy;
+				let sc;
+				dx = p[0] - centerX;
+				dy = p[1] - centerY;
+				d = Math.sqrt(dx*dx + dy*dy);
+				dx /= d;
+				dy /= d;
+				sc = dx * px + dy * py;
+
+				dx *= sc;
+				dy *= sc;
+				p[0] += dx;
+				p[1] +=  dy;
+
+				dx = lp[0] - centerX;
+				dy = lp[1] - centerY;
+				d = Math.sqrt(dx*dx + dy*dy);
+				dx /= d;
+				dy /= d;
+				sc = dx * px + dy * py;
+				dx *= sc;
+				dy *= sc;
+				lp[0] +=  dx;
+				lp[1] +=  dy;
+			}
+			lp = p;
+		}
+		return arr;
+	}
+
+	static getEmptyRegionsFromNavmesh(navmesh, minRadius, maxRadius) {
+		let map = new Map();
+		minRadius *= minRadius;
+		maxRadius *= maxRadius;
+
+
+		let len = navmesh.regions.length;
+		for (let i=0; i<len; i++) {
+			let r = navmesh.regions[i];
+
+			let edge = r.edge;
+			let beyondMaxRadius = true;
+			let isValid = true;
+			do {
+				let distToEdge = edge
+				lineSegment.set( edge.prev.vertex, edge.vertex );
+
+				let t = lineSegment.closestPointToPointParameter( r.centroid, false);
+				lineSegment.at( t, pointOnLineSegment );
+				let distance = pointOnLineSegment.squaredDistanceTo( r.centroid );
+
+				if (distance >= minRadius) {
+					if (distance < maxRadius) {
+						beyondMaxRadius = false;
+					}
+				} else {
+					isValid = false;
+					break;
+				}
+
+				edge = edge.next;
+			} while( edge !== r.edge);
+
+			if (isValid) {
+				map.set(r, beyondMaxRadius);
+			}
+		}
+
+		return map;
 	}
 
 	filterTriangles(points, triangles, cancelingMethod, del) {
