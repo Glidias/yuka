@@ -391,10 +391,15 @@ class SVGCityReader {
 		//let del;
 		//del = Delaunay.from(hullVerticesSoup);
 
-		let navmesh;
 
+		// Key stuffs
+		// this.setupRoads
 		this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
 
+
+		// temp misc tests
+
+		let navmesh;
 		//console.log(verticesSoup.length + " : "+buildingEdges.length);
 		// Streetmap navmesh
 		/*
@@ -542,10 +547,16 @@ class SVGCityReader {
 		// connect 'em!
 		len = navmesh.regions.length;
 		for (let i=0; i<len; i++) {
+			let region = navmesh.regions[i];
+			if (region.done) continue;
+			// if distance between polygons are too close, merge 'em.
 
-			// check for intersections with neighbours, if have, merge into 1 convex hull
+			// else connect via bridge... (lowest width)
+				// got voronoi perpendicxular connection?
 
-			//
+			// pillar
+
+
 		}
 
 	}
