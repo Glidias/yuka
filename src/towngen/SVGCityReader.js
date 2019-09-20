@@ -12,6 +12,174 @@ import {NavMesh} from "../navigation/navmesh/NavMesh.js";
 const lineSegment = new LineSegment();
 const pointOnLineSegment = new Vector3();
 
+function svgLineFromTo(from, to) {
+	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
+}
+
+function setsIntersection(a,b) {
+	return new Set(
+		[...a].filter(x => b.has(x)));
+}
+
+function get_side(a , b, c, point1, point2) {
+	var s1 = a * point1.x + b * point1.z - c;
+	var s1i = s1 > 0 ? 1 : s1 < 0 ? -1 : 0;
+
+	var s2 = a * point2.x + b * point2.z - c;
+	var s2i = s2 > 0 ? 1 : s2 < 0 ? -1 : 0;
+
+	var side = s1i * s2i;
+	return side < 0 ? -2 : side > 0 ? s1i : s1i == 0 ? s2i : s2i == 0 ? s1i : -2;
+}
+
+function setPolygonAABB(polygon) {
+	let edge = polygon.edge;
+	polygon.aabb = new AABB();
+	do {
+		polygon.aabb.expand(edge.vertex);
+		edge = edge.next;
+	} while(edge !== polygon.edge);
+}
+
+function getShortestSqDistanceToEdge(polygon, point, info) {
+	let edge = polygon.edge;
+	let shortestDistance = Infinity;
+	do {
+		lineSegment.set(edge.prev.vertex, edge.vertex);
+		let t = lineSegment.closestPointToPointParameter( point, true);
+		lineSegment.at( t, pointOnLineSegment );
+		let distance = pointOnLineSegment.squaredDistanceTo( point );
+		if (distance < shortestDistance) {
+			shortestDistance = distance;
+			if (info) {
+				info.edge = edge;
+				info.t = t;
+			}
+		}
+		edge = edge.next;
+	} while(edge !== polygon.edge);
+	return shortestDistance;
+}
+
+function polygonWithinDistanceOf(polygon, point, dist) {
+	dist *= dist;
+	let edge = polygon.edge;
+
+	if (polygon.aabb && !polygon.aabb.containsPoint(point) ) {
+		return false;
+	}
+
+	do {
+		lineSegment.set(edge.prev.vertex, edge.vertex);
+		let t = lineSegment.closestPointToPointParameter( point, true);
+		lineSegment.at( t, pointOnLineSegment );
+		let distance = pointOnLineSegment.squaredDistanceTo( point );
+		if (distance <= dist) {
+			return true;
+		}
+		edge = edge.next;
+	} while(edge !== polygon.edge);
+	return false;
+}
+
+function overlapsFaces2D(myFace, face) {
+	var v2 = null;
+	var w2;
+	var v = null;
+	var w;
+
+	var a;
+	var b;
+	var c;
+
+	var lastVertex;
+	var lastVertex2;
+
+	w = myFace.edge;
+
+	lastVertex = myFace.edge.prev.vertex;
+
+	w = face.edge;
+	lastVertex2 = face.edge.prev.vertex;
+
+	v = lastVertex;
+	w = myFace.edge;
+	do {
+		var v0 = v;
+		v = w.vertex;
+		var v1 = w.next.vertex;
+
+		v2 = lastVertex2;
+		w2 = face.edge;
+		do {
+			var v2_0 = v2;
+			v2 = w2.vertex;
+			var v2_1 =  w2.next.vertex;
+
+			a = -(v2.z - (v.z));
+			b = (v2.x - v.x);	// the other guy's one have this as negative
+			c = a * v.x + b * (v.z);
+			var sideA = get_side(a, b, c, v0, v1);
+			if (sideA < -1) {
+				w2 = w2.next;
+				continue;
+			}
+			var sideB = get_side(a, b, c, v2_0, v2_1);
+			if (sideB < -1) {
+
+				w2 = w2.next;
+				continue;
+			}
+			if (sideA * sideB < 0) {
+				return false;
+			}
+
+			w2 = w2.next;
+		} while (w2 !== face.edge)
+
+		w = w.next;
+	} while (w !== myFace.edge)
+
+	return true;
+}
+
+function mergeCellsNewHull(cellA, cellB) {
+	let del =  Delaunay.from(cellB ? cellA.concat(cellB) : cellA);
+	let points = del.points;
+	let hull = del.hull;
+	let arr = [];
+	let len = hull.length;
+	for (let i=0; i<len; i++) {
+		let baseI = (hull[i] << 1);
+		arr.push([points[baseI],points[baseI+1]]);
+	}
+	return arr;
+}
+
+function isOverlappingCells(cellA, cellB) {
+	return overlapsFaces2D(cellToPolygon(cellA) , cellToPolygon(cellB));
+}
+
+function getSignedAreaCell(cell) {
+	var areaAccum = 0;
+	let p = cell[0];
+	let len = cell.length - 1;
+	let x1 = p[0];
+	let y1 = p[1];
+
+	for (let i=0; i<len; i++) {
+		let i2 = i < len - 1 ? i + 1 : 0;
+		p = cell[i];
+		let x2 = p[0];
+		let y2 = p[1];
+		p = cell[i2];
+		let x3 = p[0];
+		let y3 = p[1];
+		areaAccum += ( x3 - x1 ) * ( y2 - y1 )  -  ( x2 - x1 ) * ( y3 - y1 )
+	}
+	return areaAccum;
+}
+
 function renderTrianglesOf(del) {
 	let val = "";
 	for ( let i = 0, l = del.triangles.length/3; i < l; i ++ ) {
@@ -54,7 +222,7 @@ function polygonToCell(polygon) {
 }
 
 
-function cellToPolygon(cell) {
+function cellToPolygon(cell, addAABB) {
 	let poly = new Polygon();
 	poly.fromContour(cell.map((p)=>{return new Vector3(p[0], 0, p[1])}));
 	return poly;
@@ -116,8 +284,24 @@ function collinear(p1, p2, p3, threshold) {
 const samplePt = new Vector3();
 
 /**
- * Analyses city SVG file that can be generated from https://watabou.itch.io/medieval-fantasy-city-generator .
- * Acts as a springboard to generate street map, navigation graphs, etc. from SVG city layout
+ * Analyses city SVG files generated from https://watabou.itch.io/medieval-fantasy-city-generator .
+ * Acts as a springboard to generate street map, navigation graphs, etc. from SVG city layout, which is useful for conversion to 3D visualisations and games.
+ *
+ * Can do the following:
+ * - Retrieves Wards: their neighborhoods, and building shapes within neighbourhoods for easy extrusion, among other things
+ * - Retrieves Streetmap Navmesh (Or Highway-only navmesh Or Road-only Navmesh) for easy extrusion
+ * - Able to divide out Streetmap Navmesh regions into seperate unique road sections
+ * - Retrieves Floor navmeshes from individual Wards, or their neighbourhoods, or of entire world for easy extrusion, or gameplay navigation, etc.
+ * - Retrieves out shape of City Wall
+ * - Marks Wards that are within the boundaries of City Wall
+ * - Retrives highway exits points
+ * - Retrieves Citadel building blocks shape
+ * - Retrieves plaza region points and landmark
+ * - Calculate ward-distances and centroid-to-point euclidean distances of Wards from Citadel and City Wall respectively
+ *
+ * Future considerations:
+ * - Mark out City Walls linked to Citadel
+ * - Retrieves BSP tree from Ward of all its buildings, to allow for optimized near-hit first raycasting in-game on large maps.
 */
 class SVGCityReader {
 
@@ -139,16 +323,29 @@ class SVGCityReader {
 
 		this.selectorRoads = "g[fill=none]"  // polyline
 
+		// General epsilon settings
 		this.collinearThreshold = 0.001;
 		this.collinearAreaThreshold = 0.01;
 		this.sqWeldDistThreshold = 0.01;
 
+		// Upper ward settings
 		this.minPillarRadius = 1.7;
 		this.maxPillarRadius = 3;
 		this.pillarSpacing = 0.5;
-		this.pillarStrengthRatio =2.4;
-
+		this.pillarStrengthRatio =4.4;
 		this.omitUpperWardsOutliers = true;
+		this.maxBridgeDistance = 35;
+		this.maxBridgeCheckpointRatio = 2;
+
+		this.fullUpperWardCollideCheck = true;
+
+		this.linkBridgesToHighways = true;
+
+		// bridge anti-filters
+		this.noBridgeAcrossCityWallRamp = true;
+		this.noBridgeAcrossCityWall = true;
+
+		this.supportPillarBlockLevel = 2;
 
 	}
 
@@ -178,6 +375,11 @@ class SVGCityReader {
 		this.svgWidth = parseInt(svj.attr("width"));
 		this.svgHeight = parseInt(svj.attr("height"));
 		this.map = map;
+
+
+		var g = $(this.makeSVG("g", {}));
+		this.map.append(g, {});
+		g.append(this.makeSVG("path", {stroke:"orange", "stroke-width":1, d: svgLineFromTo(new Vector3(-this.svgWidth*.5, 0, -this.svgHeight*.5), new Vector3(-this.svgWidth*.5 + this.maxBridgeDistance,0,-this.svgHeight*.5)) }));
 
 
 		let dummySelector = $("<g></g>");
@@ -292,9 +494,6 @@ class SVGCityReader {
 			let cx = 0;
 			let cy = 0;
 			let startHullEdgeCount;
-
-
-
 
 			len = hull.length;
 			let addCount = 0;
@@ -449,6 +648,9 @@ class SVGCityReader {
 		let len = tempWardBuildingEdgesList.length;
 		let g;
 		let sites = [];
+		const maxBridgeSqDist = this.maxBridgeDistance*this.maxBridgeDistance;
+		const maxBridgeSqDist2 = (this.maxBridgeDistance*this.maxBridgeCheckpointRatio)*(this.maxBridgeDistance*this.maxBridgeCheckpointRatio);
+
 		for (let i=0; i<len; i++) {
 			let verticesSoup = baseVerticesSoup.concat(this.wards[i].vertices);
 			let buildingEdges = tempWardBuildingEdgesList[i];
@@ -546,17 +748,192 @@ class SVGCityReader {
 
 		// connect 'em!
 		len = navmesh.regions.length;
+
+		// Merge/cleanup upper wards cells pass
 		for (let i=0; i<len; i++) {
 			let region = navmesh.regions[i];
-			if (region.done) continue;
-			// if distance between polygons are too close, merge 'em.
+			let edge = region.edge;
+			let upperWardCell = region.s.upperWardCell;
 
-			// else connect via bridge... (lowest width)
-				// got voronoi perpendicxular connection?
+			do {
+				if (edge.done || !edge.twin || edge.twin.polygon === (edge.prev.twin ? edge.prev.twin.polygon : null) ) {
+					edge = edge.next;
+					continue;
+				}
 
-			// pillar
+				let region2 = edge.twin.polygon;
+				let upperWardCell2 = region2.s.upperWardCell;
+
+				if (upperWardCell && upperWardCell2 ) {
+					if (region2.upperChecked) {
+						edge = edge.next;
+						continue;
+					}
+					region.upperChecked = true;
+					region2.upperChecked = true;
+
+					if (isOverlappingCells(upperWardCell, upperWardCell2)) {
+						let mergedCell = mergeCellsNewHull(upperWardCell, upperWardCell2);
+						region.s.upperWardCell = mergedCell;
+						region2.s.upperWardCell = mergedCell;
+						g.append(this.makeSVG("path", {fill:"rgba(0,0,255,0.5)", "stroke-width":0.5, d: cellSVGString(mergedCell)}));
+						edge.twin.done = true;
+						edge.done = true;
+					} else {
+						//mergeCellsNewHull(upperWardCell);
+						//mergeCellsNewHull(upperWardCell2);
+					}
+					// upperCellsSet.set(mergedCell, [region,region2]);
+				}
+				edge = edge.next;
+			} while( edge !== region.edge)
+
+			if (upperWardCell && !region.upperChecked) {
+				//mergeCellsNewHull(upperWardCell);
+			}
+
+		}
+
+		if (this.fullUpperWardCollideCheck) {
+			for (let i=0; i<len; i++) {
+				let region = navmesh.regions[i];
+				for (let u = i+1; u<len; u++) {
+					let region2 = navmesh.regions[u];
+					if (region.s.upperWardCell && region2.s.upperWardCell && region.s.upperWardCell !== region2.s.upperWardCell && isOverlappingCells(region.s.upperWardCell, region2.s.upperWardCell)) {
+						let mergedCell = mergeCellsNewHull(region.s.upperWardCell,  region2.s.upperWardCell);
+						region.s.upperWardCell = mergedCell;
+						region2.s.upperWardCell = mergedCell;
+						g.append(this.makeSVG("path", {fill:"rgba(0,0,255,0.5)", "stroke-width":0.5, d: cellSVGString(mergedCell)}));
+					}
+				}
+			}
+		}
+
+		let allUpperCells = new Set();
+		for (let i=0; i<len; i++) {
+			let region = navmesh.regions[i];
+			if (region.s.upperWardCell) {
+				allUpperCells.add(region.s.upperWardCell);
+			}
+		}
+
+		allUpperCells = allUpperCells.values();
+		let upperCellPolygons = [];
+		for (let entry of allUpperCells) {
+			let poly = cellToPolygon(entry);
+			setPolygonAABB(poly);
+			poly.r = entry;
+			upperCellPolygons.push(poly);
+		}
+
+		// TODO: Store list of pillars, small + large, and whether it's has connections or not to/from it and it's support+supportInfo
+		// Store list of upper ward regions
+		// Store links that connect pillars to pillars or upper ward region edges to pillars
+		// post process:::
+		// function to generate subidivision of buildings for UpperWard (on demand or for all) filtered by any blocking supporting pillars
+
+		// set any region small pillars supporting any upper ward cells
+		for (let i=0; i<len; i++) {
+			let region = navmesh.regions[i];
+			let edge = region.edge;
+			let upperWardCell = region.s.upperWardCell;
+
+			if (!upperWardCell) {
+				let supports = new Set();
+				let supportsInfo = new Map();
+				for (let entry of upperCellPolygons) {
+					let containsTest;
+					if ((containsTest=entry.contains(region.s.region.centroid)) || polygonWithinDistanceOf(entry, region.s.region.centroid, this.minPillarRadius)) {
+						supports.add(entry.r);
+						let dist = getShortestSqDistanceToEdge(entry, region.s.region.centroid);
+						dist = Math.sqrt(dist);
+						supportsInfo.set(entry.r, dist < this.minPillarRadius + this.pillarSpacing ?  !containsTest || dist <=this.minPillarRadius ? 2 : 1 : 0 );
+						edge = edge.next;
+
+					}
+				}
+				if (supports.size) {
+					region.supports = supports;
+					region.supportsInfo = supportsInfo;
+				}
+			}
+		}
+
+		// Connect neighbours pass
+		for (let i=0; i<len; i++) {
+			let region = navmesh.regions[i];
+			let edge = region.edge;
+			let upperWardCell = region.s.upperWardCell;
+
+			do {
+				if (edge.done || !edge.twin || edge.twin.polygon === (edge.prev.twin ? edge.prev.twin.polygon : null) ) {
+					edge = edge.next;
+					continue;
+				}
+				let region2 = edge.twin.polygon;
+				let upperWardCell2 = region2.s.upperWardCell;
+
+				edge.twin.done = true;
+				edge.done = true;
+
+				// Check if same upperward cell
+				if (upperWardCell && upperWardCell === upperWardCell2) {
+					edge = edge.next;
+					continue;
+				}
+
+				// Check both small pillars within same cell
+				if (region.supports && region2.supports && setsIntersection(region.supports, region2.supports).size) {
+					edge = edge.next;
+					continue;
+				}
+
+				// Check small pillar contained within upperward cell
+				if (!!upperWardCell !== !!upperWardCell2) {
+					let upperRegion = upperWardCell ? region : region2;
+					let pillarRegion = (upperWardCell ? region2 : region);
+					if ( pillarRegion.supports && pillarRegion.supports.has(upperRegion.s.upperWardCell) ) {
+						let supportingPillarInfo = pillarRegion.supportsInfo.get(upperRegion.s.upperWardCell);
+						if (supportingPillarInfo >= this.supportPillarBlockLevel) {
+							g.append(this.makeSVG("circle", {r:0.5, fill:supportingPillarInfo === 2 ? "pink" : "orange", cx:pillarRegion.s.region.centroid.x, cy:pillarRegion.s.region.centroid.z}));
+						}
+						edge = edge.next;
+						continue;
+					}
+
+				}
+
+				// Link 'em up!
+				lineSegment.set( edge.prev.vertex, edge.vertex );
+				let t = lineSegment.closestPointToPointParameter(region.centroid, false);
+				if (t >= 0 && t <= 1) { // perpendicular neighboring edge check (hmm..didn't work for some cases dunno why)
+					let distCheck = region.s.region.centroid.squaredDistanceTo(region2.s.region.centroid);
+					if (distCheck <= maxBridgeSqDist2) { // distance check
+						let needCheckpoint = distCheck <= maxBridgeSqDist;
+
+						if (this.noBridgeAcrossCityWallRamp) {
+							// todo: filter
+						}
+						if (this.noBridgeAcrossCityWall) {
+							// todo: filter
+						}
+
+						// todo: perp/area-clip threshold check to link to either tower or edge of centroid
+
+						// register
+						g.append(this.makeSVG("path", {"stroke":`rgba(255,0,0,${needCheckpoint ? 1 : 0.3})`, "stroke-width":1, d:svgLineFromTo(region.s.region.centroid, region2.s.region.centroid) }));
+					}
+
+				}
+
+				edge = edge.next;
+			} while( edge !== region.edge)
 
 
+			if (this.linkBridgesToHighways && (upperWardCell || !region.supports)) {  // && region.s.ward.withinCityWalls
+				// todo: link bridges to highways
+				// console.log(region.s.ward);
+			}
 		}
 
 	}
