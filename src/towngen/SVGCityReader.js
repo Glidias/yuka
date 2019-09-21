@@ -32,6 +32,31 @@ function get_side(a , b, c, point1, point2) {
 	return side < 0 ? -2 : side > 0 ? s1i : s1i == 0 ? s2i : s2i == 0 ? s1i : -2;
 }
 
+function insertIntoPathOfPoints(pt, points) {
+	///*
+	if (Array.isArray(pt)) {
+		let len = pt.length;
+		for (let i=0;i<len; i++) {
+			points.push(pt[i]);
+		}
+	}
+	else points.push(pt);
+	//*/
+	
+}
+
+function getSegmentPointsFromSVGLinePath(pathString) {
+	return (" " + pathString).split(" M ").map((s)=>{
+		return s.split(" L ").map((s)=>{		
+			s = s.trim();
+			s = s.split(",");
+			let p = new Vector3(parseFloat(s[0]), 0, parseFloat(s[1]));
+			//g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
+			return p;
+		});
+	}).filter((pts)=>{return pts.length > 1});
+}
+
 function setPolygonAABB(polygon) {
 	let edge = polygon.edge;
 	polygon.aabb = new AABB();
@@ -256,6 +281,15 @@ function cellSVGString(cell) {
 	return str;
 }
 
+function svgPolyStrToPolygon(str) {
+	return new Polygon().fromContour(str.split(" ").map((s) => {
+		s = s.split(",");
+		return new Vector3(parseFloat(s[0]), 0, parseFloat(s[1]));
+	}));
+}
+function getBBoxCenter(rect) {
+	return new Vector3(rect.x + rect.width*.5, 0, rect.y + rect.height*.5);
+}
 
 function triSVGString(vertSoup, tri) {
 	return `M${vertSoup[tri[2]][0]},${vertSoup[tri[2]][1]} L${vertSoup[tri[1]][0]},${vertSoup[tri[1]][1]} L${vertSoup[tri[0]][0]},${vertSoup[tri[0]][1]} Z`;
@@ -298,10 +332,12 @@ const samplePt = new Vector3();
  * - Retrieves Citadel building blocks shape
  * - Retrieves plaza region points and landmark
  * - Calculate ward-distances and centroid-to-point euclidean distances of Wards from Citadel and City Wall respectively
+ * 
+ * - Create insetted navmesh
  *
  * Future considerations:
- * - Mark out City Walls linked to Citadel
  * - Retrieves BSP tree from Ward of all its buildings, to allow for optimized near-hit first raycasting in-game on large maps.
+ * - Adjust wards
 */
 class SVGCityReader {
 
@@ -323,16 +359,25 @@ class SVGCityReader {
 
 		this.selectorRoads = "g[fill=none]"  // polyline
 
+		// stroke-width="1.9" 
+		this.selectorCityWallPath = "g > path[fill='none'][stroke='#1A1917'][stroke-linejoin='round'][stroke-linecap='round']";
+		this.findCityWallByCitadel = false;
+		// ----------
+
 		// General epsilon settings
 		this.collinearThreshold = 0.001;
 		this.collinearAreaThreshold = 0.01;
 		this.sqWeldDistThreshold = 0.01;
 
+
+		// City wall settings
+		this.cityWallPillarByAABBCenter = true;
+
 		// Upper ward settings
 		this.minPillarRadius = 1.7;
 		this.maxPillarRadius = 3;
 		this.pillarSpacing = 0.5;
-		this.pillarStrengthRatio =4.4;
+		this.pillarStrengthRatio = 2.4;
 		this.omitUpperWardsOutliers = true;
 		this.maxBridgeDistance = 35;
 		this.maxBridgeCheckpointRatio = 2;
@@ -381,6 +426,14 @@ class SVGCityReader {
 		this.map.append(g, {});
 		g.append(this.makeSVG("path", {stroke:"orange", "stroke-width":1, d: svgLineFromTo(new Vector3(-this.svgWidth*.5, 0, -this.svgHeight*.5), new Vector3(-this.svgWidth*.5 + this.maxBridgeDistance,0,-this.svgHeight*.5)) }));
 
+		var tempContainer = null;
+		if (previewContainer) {
+			$(previewContainer).append(svj);
+		} else {
+			tempContainer = $(document.body).append($("<div></div>"));
+		}
+
+
 
 		let dummySelector = $("<g></g>");
 		if (this.selectorRoads) {
@@ -394,10 +447,43 @@ class SVGCityReader {
 		if (this.selectorCitadel) {
 			this.selectorCitadel = map.children(this.selectorCitadel);
 
+
 		}
 		if (this.selectorLandmark) {
 			this.selectorLandmark = map.children(this.selectorLandmark);
+		}
 
+		if (this.selectorCityWallPath) {
+			this.selectorCityWallPath = map.find(this.selectorCityWallPath);
+			
+			if (this.selectorCityWallPath.length > 1 ) {
+				if (this.findCityWallByCitadel && this.selectorCitadel && this.selectorCitadel.length) {
+					// consider find by citadel location
+				} else {	// differentate by size
+					// or issit alwas the first one by convention?
+					if (this.selectorCityWallPath.length > 2) {
+						alert("TOo many matches found for selectorCityWallPath!! " + this.selectorCityWallPath.length);
+					}
+					let a = this.selectorCityWallPath.parent()[0].getBBox();
+					let b = this.selectorCityWallPath.parent()[1].getBBox();
+					let cityWallIndex = a.width* a.height >= b.width*b.height ? 0 : 1;
+					let citadelWallIndex = cityWallIndex === 0 ? 1 : 0;
+				
+					this.selectorCitadelWall = $(this.selectorCityWallPath[citadelWallIndex]).parent();
+					this.selectorCityWallPath = $(this.selectorCityWallPath[cityWallIndex]);
+					this.selectorCityWall = this.selectorCityWallPath.parent();
+				
+				}
+			} else {
+				this.selectorCityWall =this.selectorCityWallPath.parent();
+			}
+
+			if (this.selectorCityWall.length) {
+				this.parseCityWalls(this.selectorCityWall, this.selectorCityWallPath, this.selectorCitadelWall);
+			} else {
+				console.warn("Could not find City/Citadel wall selector!");
+			}
+			
 		}
 
 		if (this.selectorWards) {
@@ -406,7 +492,8 @@ class SVGCityReader {
 			if (this.selectorLandmark) this.selectorWards = this.selectorWards.not(this.selectorLandmark);
 			//if (this.selectorRoads) this.selectorWards = this.selectorWards.not(this.selectorRoads);
 			//if (this.selectorFarmhouses) this.selectorWards = this.selectorWards.not(this.selectorFarmhouses);
-			this.parseWards(this.selectorWards);
+			
+			//this.parseWards(this.selectorWards);
 		}
 
 
@@ -420,10 +507,11 @@ class SVGCityReader {
 		}
 		*/
 
-		if (previewContainer) {
-			$(previewContainer).append(svj);
-		}
+	
 
+		if (tempContainer !== null) {
+			tempContainer.remove();
+		}
 
 	}
 
@@ -432,6 +520,105 @@ class SVGCityReader {
 		for (var k in attrs)
 			el.setAttribute(k, attrs[k]);
 		return el;
+	}
+
+	parseCityWalls(jSel, jSelPath, jSelCitadelWall) {
+		// assumed already arranged seperately in anticlockwise order
+		let jEntrances = jSel.children("g");
+		let jPillars = jSel.children("polygon");
+
+
+		// previewing
+		let g = $(this.makeSVG("g", {}));
+		this.map.append(g);
+
+
+		let pathString = jSelPath.attr("d");
+		
+		this.cityWallPillars = [];
+		this.cityWallEntrancePoints = [];
+		this.cityWallSegments = getSegmentPointsFromSVGLinePath(pathString);;
+		this.citadelWallPillars = [];
+		this.citadelWallSegments = null;
+		
+		
+
+		jPillars.each((index, item)=>{
+			let poly;
+			this.cityWallPillars.push(poly=svgPolyStrToPolygon($(item).attr("points")));	
+		});
+
+		jEntrances.each((index, item)=>{
+			let pt = getBBoxCenter($(item).children()[0].getBBox());
+			this.cityWallEntrancePoints.push(pt);
+		});
+
+		
+		g.append(
+			this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
+				d: this.cityWallSegments.map((pts)=>{
+					return pts.map((p, index)=>{
+						return (index >= 1 ? `L ${p.x},${p.z}` : `M ${p.x},${p.z}`)
+					}).join("");
+				}).join(" ") } 
+		));
+
+
+		if (jSelCitadelWall) {
+			let collectedPoints = [];
+			jSelCitadelWall.children("polygon").each((index, item)=>{
+				let poly;
+				this.citadelWallPillars.push(poly=svgPolyStrToPolygon($(item).attr("points")));	
+				let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
+				collectedPoints.push(pt);
+			});
+
+			this.citadelWallSegments = getSegmentPointsFromSVGLinePath(jSelCitadelWall.children("path").attr("d"));
+			g.append(
+					this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
+						d: this.citadelWallSegments.map((pts)=>{
+							return pts.map((p, index)=>{
+								return (index >= 1 ? `L ${p.x},${p.z}` : `M ${p.x},${p.z}`)
+							}).join("");
+						}).join(" ") } 
+				));
+		}
+
+	
+		// Calculate boundary reference to see if within city walls
+		let pathSpl = pathString.replace(/M /g, "").replace(/L /g, "").split(" ").map((s)=>{
+			s = s.split(",");
+			let p = new Vector3(parseFloat(s[0]), 0, parseFloat(s[1]));
+			//g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
+			return p;
+		});
+		
+		let edgesBoundary = [];
+		pathSpl.forEach((val, index)=>{
+			edgesBoundary.push([index > 0 ? index - 1 : pathSpl.length - 1, index])
+		});
+		
+		let edgeVertices = pathSpl.map((v)=>{return [v.x, v.z]});
+		//cleanPSLG(edgeVertices, edgesBoundary);
+
+		let cdt = cdt2d(edgeVertices, edgesBoundary, {exterior:true});
+		this.cityWallCDTBoundary = {tris:cdt, vertices:edgeVertices};
+		
+		/*
+		g.append(
+			this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
+				d: cdt.map((tri)=>{return triSVGString(edgeVertices, tri)}).join(" ")})
+		);
+		*/
+		//
+
+		/*
+		let del = Delaunay.from(edgeVertices);
+		//Delaunay.from(this.cityWallBoundary.map((p)=>{return [p.x, p.z]}));
+		g.append(this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange", d:del.render()})); 
+		g.append(this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"green", d:del.renderHull()})); 
+		*/
+
 	}
 
 	parseWards(jSel) {
@@ -905,8 +1092,8 @@ class SVGCityReader {
 
 				// Link 'em up!
 				lineSegment.set( edge.prev.vertex, edge.vertex );
-				let t = lineSegment.closestPointToPointParameter(region.centroid, false);
-				if (t >= 0 && t <= 1) { // perpendicular neighboring edge check (hmm..didn't work for some cases dunno why)
+				let t = lineSegment.closestPointToPointParameter(region.s.region.centroid, false);
+				if (t >= 0 && t <= 1) { 
 					let distCheck = region.s.region.centroid.squaredDistanceTo(region2.s.region.centroid);
 					if (distCheck <= maxBridgeSqDist2) { // distance check
 						let needCheckpoint = distCheck <= maxBridgeSqDist;
