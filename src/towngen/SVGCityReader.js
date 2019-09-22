@@ -21,6 +21,21 @@ function setsIntersection(a,b) {
 		[...a].filter(x => b.has(x)));
 }
 
+
+function explode2DArray(arr) {
+	let newArr = [];
+	let len = arr.length;
+	for (let i=0; i<len; i++) {
+		let a = arr[i];
+		let uLen = a.length;
+		for (let u=0; u < uLen; u++) {
+			newArr.push(a[u]);
+		}
+	}
+	return newArr;
+}
+
+
 function get_side(a , b, c, point1, point2) {
 	var s1 = a * point1.x + b * point1.z - c;
 	var s1i = s1 > 0 ? 1 : s1 < 0 ? -1 : 0;
@@ -42,19 +57,20 @@ function insertIntoPathOfPoints(pt, points) {
 	}
 	else points.push(pt);
 	//*/
-	
 }
 
-function getSegmentPointsFromSVGLinePath(pathString) {
-	return (" " + pathString).split(" M ").map((s)=>{
+function getSegmentPointsFromSVGLinePath(pathString, filteredIndices) {
+	let arr = (" " + pathString).split(" M ").map((s)=>{
 		return s.split(" L ").map((s)=>{		
 			s = s.trim();
 			s = s.split(",");
-			let p = new Vector3(parseFloat(s[0]), 0, parseFloat(s[1]));
-			//g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
+			let p = [parseFloat(s[0]), parseFloat(s[1])];
+			//g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p[0], cy:p[1]}));
 			return p;
 		});
-	}).filter((pts)=>{return pts.length > 1});
+	}).filter((pts, index)=>{if (filteredIndices && pts.length <= 1) filteredIndices.push(index); return filteredIndices ? true : pts.length > 1});
+	arr.isLine = true;
+	return arr;
 }
 
 function setPolygonAABB(polygon) {
@@ -281,12 +297,21 @@ function cellSVGString(cell) {
 	return str;
 }
 
-function svgPolyStrToPolygon(str) {
-	return new Polygon().fromContour(str.split(" ").map((s) => {
+function svgPolyStrToContour(str) {
+	return str.split(" ").map((s) => {
 		s = s.split(",");
 		return new Vector3(parseFloat(s[0]), 0, parseFloat(s[1]));
-	}));
+	});
 }
+
+function svgPolyStrToPoints(str) {
+	return str.split(" ").map((s) => {
+		s = s.split(",");
+		return [parseFloat(s[0]), parseFloat(s[1])];
+	});
+}
+
+
 function getBBoxCenter(rect) {
 	return new Vector3(rect.x + rect.width*.5, 0, rect.y + rect.height*.5);
 }
@@ -392,6 +417,77 @@ class SVGCityReader {
 
 		this.supportPillarBlockLevel = 2;
 
+	}
+
+	extrudePathOfPoints(points, radius, loop, cap, newPoints, _isLooping) {
+		if (!newPoints) newPoints = [];
+		if (_isLooping === true) {
+			points = points.concat();
+			points.reverse();
+		}
+		let len = points.length;
+		let capFactor = cap ? 1 : 0;
+
+		capFactor = 0; // tmep for now, caps dont work...unsure why
+
+		for (let i=1; i<len; i++) {
+			let p = points[i];
+			let p0 = points[i-1];
+			let p1 = i < len - 1 ? points[i+1] : null;
+			let ex = p[0] - p0[0];
+			let ey = p[1] - p0[1];
+			let enx = ey;
+			let eny = -ex;
+			let nx;
+			let ny;
+			let d;
+			let x = p[0];
+			let y = p[1];
+			if (p1 !== null) {
+				let dx = p[0] - p0[0];
+				let dy = p[1] - p0[1];
+				let dnx = ey;
+				let dny = -ex;
+				nx = (dnx + enx) * 0.5;
+				ny = (dny + eny) * 0.5;
+			} else { 
+				nx = enx;
+				ny = eny;
+				// extend end cap for p1 by radius
+				d = Math.sqrt(ex*ex * ey*ey);
+				ex /=d;
+				ey /=d;
+
+				x+= ex * radius * capFactor;
+				y+= ey * radius * capFactor;
+			}
+			d = Math.sqrt(nx*nx + ny*ny);
+			nx /=d;
+			ny /=d;
+			//console.log(d + "  vs "+Math.sqrt(nx*nx * ny*ny));
+			d = Math.sqrt(enx*enx + eny*eny);
+			enx /=d;
+			eny /=d;
+
+			// miter corner projection for radius outward
+			let sc = enx * radius * nx + eny * radius * ny;
+
+			if (i === 1) { // start cap for p0
+				// extended start cap for p0 by radius 
+				d = Math.sqrt(ex*ex * ey*ey);
+				ex /=d;
+				ey /=d;
+				ex *= capFactor;
+				ey *= capFactor;
+				newPoints.push([(p0[0]- ex * radius) + nx * radius, (p0[1] - ey * radius) + ny * radius]);
+			}
+
+			newPoints.push([x + nx * radius * sc, y + ny * radius * sc]);
+		}
+
+		if (loop) return this.extrudePathOfPoints(points, radius, false, cap, newPoints, true);
+
+		return newPoints;
 	}
 
 
@@ -522,6 +618,28 @@ class SVGCityReader {
 		return el;
 	}
 
+	getCDTObjFromPointsList(pointsList, cleanup, params, processPointsMethod) {
+		let vertices = params.vertices ? params.vertices.concat() : [];
+		let edges = params.edges ? params.edges.concat() : [];
+		pointsList.forEach((points, index)=> {
+			let baseCount = vertices.length;
+			if (processPointsMethod) points = processPointsMethod(points, index);
+			let count = baseCount;
+			points.forEach((p, index)=> {
+				if (index >= 1) edges.push([count-1, count]);
+				if (index === points.length - 1) edges.push([count, baseCount]);
+				count++;
+				vertices.push(p);
+			});
+		});
+		
+		if (cleanup) {
+			cleanPSLG(vertices, edges);
+		}
+		let cdt = cdt2d(vertices, edges, (params ? params : {exterior:true}));
+		return {vertices:vertices, edges:edges, cdt:cdt};
+	}
+
 	parseCityWalls(jSel, jSelPath, jSelCitadelWall) {
 		// assumed already arranged seperately in anticlockwise order
 		let jEntrances = jSel.children("g");
@@ -537,15 +655,26 @@ class SVGCityReader {
 		
 		this.cityWallPillars = [];
 		this.cityWallEntrancePoints = [];
-		this.cityWallSegments = getSegmentPointsFromSVGLinePath(pathString);;
-		this.citadelWallPillars = [];
-		this.citadelWallSegments = null;
+		this.cityWallEntranceTowers = []; // TODO:
+		let filteredAtCitadel = [];
+		this.cityWallSegments = getSegmentPointsFromSVGLinePath(pathString);
+		if (filteredAtCitadel.length !== 0) {
+			//let rearrange = [this.cityWallSegments[this.cityWallSegments.length-1]].concat(this.cityWallSegments.slice(1,4)).concat(this.cityWallSegments.slice(5, this.cityWallSegments.length-1))
+			//this.cityWallSegments = this.cityWallSegments.slice(filteredAtCitadel[0]);
+			//this.cityWallSegments = rearrange;
+		}
+		console.log(filteredAtCitadel);
+		this.cityWallSegmentsUpper = [explode2DArray(this.cityWallSegments)]; // todo: break and rearrange from start/end citadel
+		this.citadelWallSegmentsUpper = [];
 		
+		this.cityWallCDTBoundary = null;
+		this.citadelWallPillars = [];
+		this.citadelWallSegments = [];
 		
 
 		jPillars.each((index, item)=>{
 			let poly;
-			this.cityWallPillars.push(poly=svgPolyStrToPolygon($(item).attr("points")));	
+			this.cityWallPillars.push(poly=svgPolyStrToPoints($(item).attr("points")));	
 		});
 
 		jEntrances.each((index, item)=>{
@@ -557,39 +686,40 @@ class SVGCityReader {
 		g.append(
 			this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
 				d: this.cityWallSegments.map((pts)=>{
-					return pts.map((p, index)=>{
-						return (index >= 1 ? `L ${p.x},${p.z}` : `M ${p.x},${p.z}`)
+					return this.extrudePathOfPoints(pts, 1, true, true).map((p, index)=>{
+						return (index >= 1 ? `L ${p[0]},${p[1]}` : `M ${p[0]},${p[1]}`)
 					}).join("");
-				}).join(" ") } 
+				}).join(" Z ") + " Z"} 
 		));
 
 
 		if (jSelCitadelWall) {
-			let collectedPoints = [];
+			//let collectedPoints = [];
 			jSelCitadelWall.children("polygon").each((index, item)=>{
 				let poly;
-				this.citadelWallPillars.push(poly=svgPolyStrToPolygon($(item).attr("points")));	
-				let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
-				collectedPoints.push(pt);
+				this.citadelWallPillars.push(poly=svgPolyStrToPoints($(item).attr("points")));	
+				//let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
+				//collectedPoints.push(pt);
 			});
 
 			this.citadelWallSegments = getSegmentPointsFromSVGLinePath(jSelCitadelWall.children("path").attr("d"));
 			g.append(
 					this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
 						d: this.citadelWallSegments.map((pts)=>{
-							return pts.map((p, index)=>{
-								return (index >= 1 ? `L ${p.x},${p.z}` : `M ${p.x},${p.z}`)
+							return this.extrudePathOfPoints(pts, 1, true, true).map((p, index)=>{
+								return (index >= 1 ? `L ${p[0]},${p[1]}` : `M ${p[0]},${p[1]}`)
 							}).join("");
-						}).join(" ") } 
+						}).join(" Z ") + " Z" } 
 				));
+			this.citadelWallSegmentsUpper = [explode2DArray(this.citadelWallSegments)]; // todo: break and rearrange from start/end citadel
 		}
 
-	
+
 		// Calculate boundary reference to see if within city walls
 		let pathSpl = pathString.replace(/M /g, "").replace(/L /g, "").split(" ").map((s)=>{
 			s = s.split(",");
 			let p = new Vector3(parseFloat(s[0]), 0, parseFloat(s[1]));
-			//g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
+			g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
 			return p;
 		});
 		
@@ -603,13 +733,38 @@ class SVGCityReader {
 
 		let cdt = cdt2d(edgeVertices, edgesBoundary, {exterior:true});
 		this.cityWallCDTBoundary = {tris:cdt, vertices:edgeVertices};
+
+		let wallRadius = 1;
+		let verticesSoup = [];
+		verticesSoup.push([-this.svgWidth*.5, -this.svgHeight*.5]);
+		verticesSoup.push([this.svgWidth*.5, -this.svgHeight*.5]);
+		verticesSoup.push([this.svgWidth*.5, this.svgHeight*.5]);
+		verticesSoup.push([-this.svgWidth*.5, this.svgHeight*.5]);
+		let edges =  [[0,1], [1,2], [2,3], [3,0]];
+		//, edges:edges, vertices:verticesSoup
+
+		//
+
+		// [edgeVertices]
+		let groundMode = false;
+		let lineSegments = groundMode ? this.citadelWallSegments.concat(this.cityWallSegments) : this.citadelWallSegments.concat(this.cityWallSegmentsUpper);
 		
-		/*
+		//.concat(this.citadelWallPillars).concat(this.cityWallPillars).concat(this.cityWallEntranceTowers);
+		let cdtObj = this.getCDTObjFromPointsList(lineSegments,
+			true, {exterior:false}, 
+			(points, index)=>{
+				//points = points.concat().reverse();
+				return !groundMode || index < lineSegments.length ? this.extrudePathOfPoints(points, wallRadius, true, true) : points;
+			});
+		
+		cdt = cdtObj.cdt;
+		//cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
+		
 		g.append(
-			this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
-				d: cdt.map((tri)=>{return triSVGString(edgeVertices, tri)}).join(" ")})
+			this.makeSVG("path", {"fill":"rgba(255,255,0,1)", "stroke-width":0.1, "stroke":"red",
+				d: cdt.map((tri)=>{return triSVGString(cdtObj.vertices, tri)}).join(" ")})
 		);
-		*/
+		
 		//
 
 		/*
@@ -1177,7 +1332,6 @@ class SVGCityReader {
 				py /= d;
 				px *= minRadius;
 				py *= minRadius;
-
 
 				let dx;
 				let dy;
