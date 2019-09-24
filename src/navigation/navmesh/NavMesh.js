@@ -47,10 +47,17 @@ class NavMesh {
 		this.graph.digraph = true;
 
 		/**
-		 * Whether to merge polygons when constructing regions. Defaults to true unless set otherwise.
+		 * Whether to merge polygons when constructing regions. Defaults to true.
 		 * @type Boolean
 		 */
 		this.attemptMergePolies = true;
+
+		/**
+		 * Whether to build navigation graph via it's own internal method. Defaults to true.
+		 * You may set this to false if you intend to manually set up the graph yourself through other methods.
+		 * @type Boolean
+		 */
+		this.attemptBuildGraph = true;
 
 		/**
 		* The list of convex regions.
@@ -167,7 +174,7 @@ class NavMesh {
 
 		// now build the navigation graph
 
-		this._buildGraph();
+		if (this.attemptBuildGraph) this._buildGraph();
 
 		return this;
 
