@@ -44,6 +44,18 @@ class NavMeshUtils {
     // boundary edge: add polygon extrude..
     // boundary edge: inset
 
+     static checkAllValidPolygons(polygons) {
+         let regions = polygons.regions || polygons;
+         let len = regions.length;
+        for (let i=0; i< len; i++) {
+            // consider..create new one ?
+           if (!regions[i].convex(true)) {
+               return false;
+           }
+        }
+        return true;
+     }
+
     static unlinkPolygons(polygons) {
         let regions = polygons.regions || polygons;
         let len = regions.length;

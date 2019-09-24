@@ -17,6 +17,17 @@ function svgLineFromTo(from, to) {
 	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
 }
 
+function pointInTriangle(px, py, c, b, a ) {
+	return ( ( px - a[0] ) * ( b[1] - a[1] ) ) - ( ( b[0] - a[0] ) * ( py - a[1] ) ) >= 0 &&
+	( ( px - b[0] ) * ( c[1] - b[1] ) ) - ( ( c[0] - b[0] ) * ( py - b[1] ) ) >= 0 &&
+	( ( px - c[0] ) * ( a[1] - c[1] ) ) - ( ( a[0] - c[0] ) * ( py - c[1] ) ) >= 0;
+	/*
+	return ( ( p.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( p.z - a.z ) ) >= 0 &&
+	( ( p.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( p.z - b.z ) ) >= 0 &&
+	( ( p.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( p.z - c.z ) ) >= 0;
+	*/
+}
+
 function setsIntersection(a,b) {
 	return new Set(
 		[...a].filter(x => b.has(x)));
@@ -122,7 +133,6 @@ function chamferEndsOfPointsList(pointsList, radius, wrapAround) {
 			newArr.push(curPointsList[curPointsList.length - 1]);
 		}
 
-		console.log(newArr, p0, p1, p);
 		pointsList[i] = newArr;
 	}
 }
@@ -199,7 +209,6 @@ function weldArrayOfPoints(arr, weldThreshold) {
 		x /= len;
 		y /= len;
 
-		console.log("WEDINGIN:"+arr.indexOf(points[0]) + ", "+len);
 		arr.splice(arr.indexOf(points[0]), len, [x,y]);
 		lenReduced += len - 1;
 		
@@ -482,11 +491,13 @@ const samplePt = new Vector3();
  *
  * Can do the following:
  * - Retrieves Wards: their neighborhoods, and building shapes within neighbourhoods for easy extrusion, among other things
+ *  - Retrieves out shape polygon geometries of City/Citadel Wall and Bastions
+ *  -Identify Wards (or any arbituary position) that are within the boundaries of City Wall
+ *  - Retrieves Floor navmeshes from individual Wards, or their neighbourhoods, or of entire world for easy extrusion, or gameplay navigation, etc.
+ * 
  * - Retrieves Streetmap Navmesh (Or Highway-only navmesh Or Road-only Navmesh) for easy extrusion
  * - Able to divide out Streetmap Navmesh regions into seperate unique road sections
- * - Retrieves Floor navmeshes from individual Wards, or their neighbourhoods, or of entire world for easy extrusion, or gameplay navigation, etc.
- * - Retrieves out shape of City Wall
- * - Marks Wards that are within the boundaries of City Wall
+
  * - Retrives highway exits points
  * - Retrieves Citadel building blocks shape
  * - Retrieves plaza region points and landmark
@@ -543,6 +554,10 @@ class SVGCityReader {
 		this.chamferForEntranceWall = true;
 		this.weldWallPathThreshold = 1;
 
+		// Road settings
+		this.maxRoadEdgeLength = 999;
+		this.highwayMinWidth = 1.2;
+		this.highwayMaxWidth = 2 * 1.3 * 1.3;
 
 		// Upper ward settings
 		this.minPillarRadius = 1.7;
@@ -745,7 +760,7 @@ class SVGCityReader {
 			//if (this.selectorRoads) this.selectorWards = this.selectorWards.not(this.selectorRoads);
 			//if (this.selectorFarmhouses) this.selectorWards = this.selectorWards.not(this.selectorFarmhouses);
 			
-			//this.parseWards(this.selectorWards);
+			this.parseWards(this.selectorWards);
 		}
 
 
@@ -822,7 +837,6 @@ class SVGCityReader {
 		this.cityWallPillarPoints = [];
 
 		this.cityWallEntrancePoints = [];
-		this.cityWallEntranceTowers = []; // TODO:
 		let filteredAtCitadel = [];
 		this.cityWallSegments = getSegmentPointsFromSVGLinePath(pathString, filteredAtCitadel, this.weldWallPathThreshold);
 
@@ -968,11 +982,18 @@ class SVGCityReader {
 		});
 		
 		let edgeVertices = pathSpl.map((v)=>{return [v.x, v.z]});
-		//cleanPSLG(edgeVertices, edgesBoundary);
+		cleanPSLG(edgeVertices, edgesBoundary);
 
 	
 		let cdt = cdt2d(edgeVertices, edgesBoundary, {exterior:true});
 		this.cityWallCDTBoundary = {tris:cdt, vertices:edgeVertices};
+		/*
+		g.append(
+			this.makeSVG("path", {"fill":"rgba(255,255,0,0.3)", "stroke-width":0.1, "stroke":"red",
+				d: cdt.map((tri)=>{return triSVGString(this.cityWallCDTBoundary.vertices, tri)}).join(" ")})
+		);
+		*/
+
 
 		let wallRadius = 1;
 		let verticesSoup = [];
@@ -989,7 +1010,7 @@ class SVGCityReader {
 		let groundMode = false;
 		let lineSegments = groundMode ? this.citadelWallSegments.concat(this.cityWallSegments) : this.citadelWallSegments.concat(this.cityWallSegmentsUpper);
 
-		//.concat(this.citadelWallPillars).concat(this.cityWallPillars).concat(this.cityWallEntranceTowers);
+		//.concat(this.citadelWallPillars).concat(this.cityWallPillars);
 		let cdtObj = this.getCDTObjFromPointsList(lineSegments,
 			true, {exterior:false}, 
 			(points, index)=>{
@@ -1028,19 +1049,6 @@ class SVGCityReader {
 				d: cdt.map((tri)=>{return triSVGString(cdtObj.vertices, tri)}).join(" ")})
 		);
 		*/
-
-
-		
-		
-		//
-
-		/*
-		let del = Delaunay.from(edgeVertices);
-		//Delaunay.from(this.cityWallBoundary.map((p)=>{return [p.x, p.z]}));
-		g.append(this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange", d:del.render()})); 
-		g.append(this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"green", d:del.renderHull()})); 
-		*/
-
 	}
 
 	parseWards(jSel) {
@@ -1145,8 +1153,7 @@ class SVGCityReader {
 					item.append(this.makeSVG("circle", {r:0.5, fill:coloring, cx:x3, cy:y3}));
 				}
 				*/
-				if (!isCollinear) item.append(this.makeSVG("circle", {r:0.5, fill:"green", cx:x, cy:y}));
-
+				//if (!isCollinear) item.append(this.makeSVG("circle", {r:0.5, fill:"green", cx:x, cy:y}));
 
 
 			}
@@ -1157,7 +1164,9 @@ class SVGCityReader {
 
 
 			for (i=0; i<len; i++) {
-				hullVerticesSoup.push([hullPoints[i].x, hullPoints[i].z]);
+				let hullVertex;
+				hullVerticesSoup.push(hullVertex = [hullPoints[i].x, hullPoints[i].z]);
+				hullVertex.id = index; // ward index
 				if (i > 0) {
 					if (i < len - 1) {
 						hullEdgesSoup.push([hullEdgeCount, ++hullEdgeCount]);
@@ -1177,10 +1186,11 @@ class SVGCityReader {
 
 			wardObj.aabb = hullAABB;
 			wardObj.polygon = new Polygon().fromContour(hullPoints);
+			wardObj.isCenter = this.checkWithinCityWall(cx, cy);
 
 			wardCentroids.push([cx,cy]);
 			//item.append(this.makeSVG("path", {fill:"gray", "stroke-width":0.5, "stroke":"none", d:wardObj.delaunay.renderHull()}));
-			item.append(this.makeSVG("circle", {r:0.5, fill:"blue", cx:cx, cy:cy}));
+			item.append(this.makeSVG("circle", {r:0.5, fill:(wardObj.isCenter ? "red" : "blue"), cx:cx, cy:cy}));
 
 			verticesSoup = verticesSoup.concat(wardObj.vertices);
 			collectWardBuildings(buildingEdges, wardObj.neighborhoods);
@@ -1202,20 +1212,36 @@ class SVGCityReader {
 
 		// Key stuffs
 		// this.setupRoads
-		this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
+		//this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
 
+
+		// test preview
+		var g = $(this.makeSVG("g", {}));
+		this.map.append(g, {});
 
 		// temp misc tests
 
 		let navmesh;
 		//console.log(verticesSoup.length + " : "+buildingEdges.length);
 		// Streetmap navmesh
-		/*
+		///*
 		let cdt = cdt2d(hullVerticesSoup, hullEdgesSoup, {exterior:false});
 		cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
+
+		let hullVerticesSoup3D = hullVerticesSoup.map((v)=> {
+			let vertex = new Vector3(v[0], 0, v[1]);
+			vertex.id = v.id;
+			return vertex;
+		});
+		
 		navmesh = new NavMesh();
-		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(hullVerticesSoup, tri)}));
-		*/
+		navmesh.fromPolygons(cdt.map((tri)=>{
+			return new Polygon().fromContour([ hullVerticesSoup3D[tri[2]], hullVerticesSoup3D[tri[1]], hullVerticesSoup3D[tri[0]] ]);
+		}));
+		this.setupHighwaysVsRoads(navmesh);
+
+
+		//*/
 
 		// Entire floors+buildings navmesh
 		/*
@@ -1236,8 +1262,7 @@ class SVGCityReader {
 		//this.voronoiWards = del.voronoi([-this.svgWidth*.5, -this.svgHeight*.5, this.svgWidth*.5, this.svgHeight*.5]);
 
 		//this.voronoiWards = del.voronoi([aabbWards.min.x, aabbWards.min.z, aabbWards.max.x, aabbWards.max.z]);
-		var g = $(this.makeSVG("g", {}));
-		this.map.append(g, {});
+	
 		//g.append(this.makeSVG("path", {stroke:"blue", "stroke-width":0.15, d: this.voronoiWards.render()}));
 
 		//let theTris = this.filterTriangles(del.points, del.triangles, (c)=>{return false && !!this.hitWardAtPoint3D(c);}, del);
@@ -1251,6 +1276,82 @@ class SVGCityReader {
 			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 		}
 		//del.triangles = theTris;
+	}
+
+	setupHighwaysVsRoads(navmesh) {
+		var g = $(this.makeSVG("g", {}));
+		this.map.append(g, {});
+
+		let regions = navmesh.regions;
+		let len = regions.length;
+		let r;
+		let edge;
+
+
+
+		let highwayMaxWidthSq = this.highwayMaxWidth * this.highwayMaxWidth;
+		let highwayMinWidthSq = this.highwayMinWidth * this.highwayMinWidth;
+		let maxRoadEdgeLengthSq =  this.maxRoadEdgeLength* this.maxRoadEdgeLength;
+		// highways vs roads (regions)
+		let highways = [];
+		let roads = [];
+
+		for (let i=0; i<len; i++) {
+			r = regions[i];
+			edge = r.edge;
+			do {
+				if (edge.twin !== null && 
+					edge.prev.vertex.id >= 0 && edge.vertex.id >= 0 && 
+					edge.vertex.id !== edge.prev.vertex.id
+				) {
+					
+					// consider perpdeicular distnce required for better accruacy?
+					let oppEdge = edge.next;
+					while (oppEdge.vertex !== edge.prev.vertex) {
+						oppEdge = oppEdge.next;
+					}
+					let distance = edge.prev.vertex.squaredDistanceTo(edge.vertex);
+					if (distance > maxRoadEdgeLengthSq) {
+						edge = edge.next;
+						continue;
+					}
+					lineSegment.set(oppEdge.prev.vertex, oppEdge.vertex);
+					let t = lineSegment.closestPointToPointParameter(edge.vertex, true);
+					lineSegment.at( t, pointOnLineSegment );
+					
+					let dist =  pointOnLineSegment.squaredDistanceTo( edge.vertex ); 
+					if (dist <= highwayMaxWidthSq) {
+						if (dist < highwayMinWidthSq) { // normal street
+							g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.25, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
+								g.append(this.makeSVG("line", {stroke:"rgb(0,122,110)", "stroke-width":0.25, x1:edge.prev.vertex.x, y1: edge.prev.vertex.z, x2:edge.vertex.x, y2:edge.vertex.z}));
+						} else { // highway
+							g.append(this.makeSVG("line", {stroke:"rgb(255,0,0)", "stroke-width":0.25, x1:edge.prev.vertex.x, y1: edge.prev.vertex.z, x2:edge.vertex.x, y2:edge.vertex.z}));
+						}
+					} 
+				}
+				edge = edge.next;
+			} while(edge !== r.edge);
+	
+
+		}
+
+
+
+		// highway exits to ward roads
+	}
+
+	checkWithinCityWall(x, y, defaultVal=false) {
+		if (!this.cityWallCDTBoundary) return defaultVal;
+		let tris = this.cityWallCDTBoundary.tris;
+		let vertices = this.cityWallCDTBoundary.vertices;
+		let len = tris.length;
+		for (let i=0; i<len; i++) {
+			let tri = tris[i];
+			if (pointInTriangle(x, y, vertices[tri[0]], vertices[tri[1]], vertices[tri[2]])) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	setupUpperWards(tempWardBuildingEdgesList, baseVerticesSoup) {
