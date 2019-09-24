@@ -6,7 +6,6 @@ import { Polygon } from '../../math/Polygon.js';
 
 var MAX_HOLE_LEN = 16;
 
-
 // dfs search through edges by related mapped edge.prev vertices
 function searchEdgeList(map, builtContour, startingEdge) {
     let edgeList = map.get(startingEdge.vertex);
@@ -41,11 +40,15 @@ function searchEdge(map, builtContour, edge, startingEdge, bi) {
 
 class NavMeshUtils {
 
+    // TODO: extrude boundary edges/ retrieve holes to fill up by boundary edges
+    // boundary edge: add polygon extrude..
+    // boundary edge: inset
+
     static unlinkPolygons(polygons) {
         let regions = polygons.regions || polygons;
         let len = regions.length;
         for (let i=0; i< len; i++) {
-            // consider..create new one
+            // consider..create new one ?
             regions[i].twin = null;
         }
         return regions;
@@ -106,37 +109,15 @@ class NavMeshUtils {
             edge = r.edge;
             do {
                 if (edge.twin === null) { 
-                    /*
-                      let e = edge;
-                      bi = 0;
-                    do {
-                        // tODO: DFS recursion across all branches
-                        e = map.has(e.vertex) ? map.get(e.vertex) : null;
-                       // if (e===null)console.log("TO Break");
-                        if (e===null) break;
-                        e = e[0];
-                        builtContour[bi++] = e;
-                        if (bi >= MAX_HOLE_LEN) {
-                           bi = 0;
-                           break;
-                        }
-                    } while ( e !== edge)
-
-                    if (e === edge) {
-                        console.log("Loop hole detected");
-                    }
-                    */
-                    
-                   
                     bi =  searchEdgeList(map, builtContour, edge);
 
                     //e === edge &&
                     if ( bi>=3) {
                         builtContour.length = bi;
-                        console.log("Adding hole");
+                        //console.log("Adding hole");
                         holesAdded.push( new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) )
                         if (isUsingFullNavmesh) {
-                            // link respective polygon holes to full navmesh to connect it
+                            // link respective polygon holes to full navmesh to connect it. add arc to graph.
                         }
                     }
                 }

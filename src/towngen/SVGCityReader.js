@@ -88,9 +88,65 @@ function getSegmentPointsFromSVGLinePath(pathString, filteredIndices) {
 
 function chamferEndsOfPointsList(pointsList, radius, wrapAround) {
 	let len = pointsList.length;
+	
+	wrapAround = false; // wrapAround not working, temp disabled for now, but it seems a certain case already appears to wrap around ?
+
 	for (let i =0;i<len; i++) {
+		let newArr = [];
+		let curPointsList = pointsList[i];
+		let p0;
+		let p;
+		let p1;
+
+		let prevI = i > 0 ? i - 1 : (wrapAround ? len - 1 : -1);
+		let nextI = i < len - 1 ? i + 1 : (wrapAround ? 0 : -1);
+		if (prevI >= 0) {
+			p = curPointsList[0];
+			p1 = curPointsList[1];
+			p0 = pointsList[prevI][pointsList[prevI].length-1];
+			_chamferInto(newArr, p, p0, p1, radius);
+		} else {
+			newArr.push(curPointsList[0]);
+		}
+
+		newArr = newArr.concat(curPointsList.slice(1, curPointsList.length - 1));
 		
+		
+
+		if (nextI >= 0) {
+			p = curPointsList[curPointsList.length - 1];
+			p0 = curPointsList[curPointsList.length - 2];
+			p1 = pointsList[nextI][0];
+			_chamferInto(newArr, p, p0, p1, radius);
+		} else {
+			newArr.push(curPointsList[curPointsList.length - 1]);
+		}
+
+		console.log(newArr, p0, p1, p);
+		pointsList[i] = newArr;
 	}
+}
+
+function _chamferInto(newArr, p, p0, p1, radius) {
+	let d;
+	let dx = p[0] - p0[0];
+	let dy = p[1] - p0[1];
+
+	d = Math.sqrt(dx*dx + dy*dy);
+	dx /=d;
+	dy /=d;
+	let ex = p1[0] - p[0];
+	let ey = p1[1] - p[1];
+	d = Math.sqrt(ex*ex + ey*ey);
+	ex /=d;
+	ey /=d;
+	let x = (ex + dx) * 0.5;
+	let y = (ey + dy) * 0.5;
+	d = Math.sqrt(x*x + y*y);
+	x /=d;
+	y /=d;
+	newArr.push([p[0]- x*radius, p[1] - y*radius]);
+	newArr.push([p[0] + x*radius, p[1] + y*radius]);
 }
 
 function chamferCornersOfPoints(arr, radius) {
@@ -103,23 +159,7 @@ function chamferCornersOfPoints(arr, radius) {
 		let p = arr[i];
 		let p0 = arr[i-1];
 		let p1 = arr[i+1]
-		let dx = p[0] - p0[0];
-		let dy = p[1] - p0[1];
-		d = Math.sqrt(dx*dx + dy*dy);
-		dx /=d;
-		dy /=d;
-		let ex = p1[0] - p[0];
-		let ey = p1[1] - p[1];
-		d = Math.sqrt(ex*ex + ey*ey);
-		ex /=d;
-		ey /=d;
-		let x = (ex + dx) * 0.5;
-		let y = (ey + dy) * 0.5;
-		d = Math.sqrt(x*x + y*y);
-		x /=d;
-		y /=d;
-		newArr.push([p[0]- x*radius, p[1] - y*radius]);
-		newArr.push([p[0] + x*radius, p[1] + y*radius]);
+		_chamferInto(newArr, p, p0, p1, radius);
 	}
 
 	newArr.push(arr[arr.length-1]);
@@ -478,6 +518,8 @@ class SVGCityReader {
 
 		this.selectorRoads = "g[fill=none]"  // polyline
 
+	
+
 		// stroke-width="1.9" 
 		this.selectorCityWallPath = "g > path[fill='none'][stroke='#1A1917'][stroke-linejoin='round'][stroke-linecap='round']";
 		this.findCityWallByCitadel = false;
@@ -489,6 +531,7 @@ class SVGCityReader {
 		this.sqWeldDistThreshold = 0.01;
 
 		
+		this.subSelectorEntranceLines = "g > line";
 
 		// City wall settings
 		this.cityWallPillarByAABBCenter = true;
@@ -776,6 +819,8 @@ class SVGCityReader {
 		let pathRadius = jSelPath.attr("stroke-width") ? parseFloat(jSelPath.attr("stroke-width"))* 0.5 : 1;
 		
 		this.cityWallPillars = [];
+		this.cityWallPillarPoints = [];
+
 		this.cityWallEntrancePoints = [];
 		this.cityWallEntranceTowers = []; // TODO:
 		let filteredAtCitadel = [];
@@ -791,7 +836,6 @@ class SVGCityReader {
 			// not sure why need to add another +1
 			this.cityWallSegments =filteredAtCitadel.refArray.slice(f2 + 1).concat(filteredAtCitadel.refArray.slice(f1+1+1, f2  ));
 			//	console.log(this.cityWallSegments);
-			
 	
 			//this.cityWallSegments = this.cityWallSegments.slice(f2-1).concat(this.cityWallSegments.slice(1, f2-1));
 			//console.log(this.cityWallSegments.length);
@@ -806,6 +850,7 @@ class SVGCityReader {
 		if (this.chamferForEntranceWall) {
 			chamferEndsOfPointsList(this.cityWallSegments, this.entranceWallPillarRadius ? this.entranceWallPillarRadius : this.wallPillarRadius*this.entCitadelPillarRadiusScale);
 		}
+	
 		
 		this.cityWallSegmentsUpper = [explode2DArray(this.cityWallSegments)]; // todo: break and rearrange from start/end citadel
 	//	let ref = this.cityWallSegmentsUpper[0].concat();
@@ -817,12 +862,19 @@ class SVGCityReader {
 		
 		this.cityWallCDTBoundary = null;
 		this.citadelWallPillars = [];
+		this.citadelWallPillarPoints = [];
 		this.citadelWallSegments = [];
+
+		this.citadelWallEntrancePoint = null; 
+		this.citadelWallEntrancePillarPoints = []; 
+
 		
 
 		jPillars.each((index, item)=>{
 			let poly;
 			this.cityWallPillars.push(poly=svgPolyStrToPoints($(item).attr("points")));	
+			let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
+			this.cityWallPillarPoints.push(pt);
 		});
 
 		jEntrances.each((index, item)=>{
@@ -832,36 +884,39 @@ class SVGCityReader {
 
 
 		//this.extrudePathOfPoints(pts, pathRadius, true, true)
-		/*
+		///*
 		g.append(
 			this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
-				d: this.cityWallSegmentsUpper.map((pts)=>{
+				d: this.cityWallSegments.map((pts)=>{
 					return this.extrudePathOfPoints(pts, pathRadius, true, true).map((p, index)=>{
 						return (index >= 1 ? `L ${p[0]},${p[1]}` : `M ${p[0]},${p[1]}`)
 					}).join("");
 				}).join(" Z ") + " Z"} 
 		));
-		*/
+		//*/
+
+		
 		if (jSelCitadelWall) {
 			//let collectedPoints = [];
 			jSelCitadelWall.children("polygon").each((index, item)=>{
 				let poly;
 				this.citadelWallPillars.push(poly=svgPolyStrToPoints($(item).attr("points")));	
-				//let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
+				let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
+				this.citadelWallPillarPoints.push(pt);
 				//collectedPoints.push(pt);
 			});
 
 			this.citadelWallSegments = getSegmentPointsFromSVGLinePath(jSelCitadelWall.children("path").attr("d"));
-			/*
-			g.append(
-					this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
-						d: this.citadelWallSegments.map((pts)=>{
-							return this.extrudePathOfPoints(pts, pathRadius, true, true).map((p, index)=>{
-								return (index >= 1 ? `L ${p[0]},${p[1]}` : `M ${p[0]},${p[1]}`)
-							}).join("");
-						}).join(" Z ") + " Z" } 
-				));
-			*/
+
+			let citadelEntranceLines = jSelCitadelWall.find(this.subSelectorEntranceLines);
+			if (citadelEntranceLines.length >=3) {
+				this.citadelWallEntrancePoint = getBBoxCenter(citadelEntranceLines[0].getBBox());
+				this.citadelWallEntrancePillarPoints.push(
+					getBBoxCenter(citadelEntranceLines[1].getBBox()), // right first
+					getBBoxCenter(citadelEntranceLines[2].getBBox())	// left
+				);
+			}
+			
 
 			if (this.chamferForWallPillars) {
 				this.citadelWallSegments.forEach((value, index, arr)=>{
@@ -874,9 +929,28 @@ class SVGCityReader {
 			}
 			
 
+
 			this.citadelWallSegmentsUpper = [explode2DArray(this.citadelWallSegments)]; // todo: break and rearrange from start/end citadel
+
+			///*
+			g.append(
+					this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
+						d: this.citadelWallSegments.map((pts)=>{
+							return this.extrudePathOfPoints(pts, pathRadius, true, true).map((p, index)=>{
+								return (index >= 1 ? `L ${p[0]},${p[1]}` : `M ${p[0]},${p[1]}`)
+							}).join("");
+						}).join(" Z ") + " Z" } 
+				));
+			//*/
+
+
 		}
 
+		this.cityWallPillarPoints.forEach((p)=>{g.append(this.makeSVG("circle", {r:0.5, fill:"yellow", cx:p.x, cy:p.z}))});
+		this.cityWallEntrancePoints.forEach((p)=>{g.append(this.makeSVG("circle", {r:0.5, fill:"white", cx:p.x, cy:p.z}))});
+		this.citadelWallPillarPoints.forEach((p)=>{g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}))});
+		this.citadelWallEntrancePillarPoints.forEach((p)=>{g.append(this.makeSVG("circle", {r:0.5, fill:"white", cx:p.x, cy:p.z}))});
+		//if (this.citadelWallEntrancePoint) g.append(this.makeSVG("circle", {r:0.5, fill:"white", cx:this.citadelWallEntrancePoint.x, cy:this.citadelWallEntrancePoint.z}))
 
 		// Calculate boundary reference to see if within city walls
 		let pathSpl = pathString.replace(/M /g, "").replace(/L /g, "").split(" ").map((s)=>{
@@ -885,6 +959,8 @@ class SVGCityReader {
 			g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
 			return p;
 		});
+
+		
 		
 		let edgesBoundary = [];
 		pathSpl.forEach((val, index)=>{
@@ -944,7 +1020,7 @@ class SVGCityReader {
 		//navmesh.attemptBuildGraph = false;
 		//navmesh.fromPolygons(combinedRegions);
 
-		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,1)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 		
 		/*
 		g.append(
