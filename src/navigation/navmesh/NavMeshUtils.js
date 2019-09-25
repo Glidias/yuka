@@ -25,15 +25,15 @@ function searchEdge(map, builtContour, edge, startingEdge, bi) {
     let i;
     let len = edgeList.length;
     builtContour[bi++] = edge;
-    
+
     for (i=0; i<len; i++) {
-        if (edgeList[i] === startingEdge) { 
+        if (edgeList[i] === startingEdge) {
             return bi;
         }
         else {
            let result =  searchEdge(map, builtContour, edgeList[i], startingEdge, bi);
            if (result >= 3) return result;
-        } 
+        }
     }
     return 0;
 }
@@ -43,6 +43,24 @@ class NavMeshUtils {
     // TODO: extrude boundary edges/ retrieve holes to fill up by boundary edges
     // boundary edge: add polygon extrude..
     // boundary edge: inset
+
+    /*
+    static cacheRegionIndexLookup(navMesh) {
+		if (!navMesh.regionIndexMap) {
+			navMesh.regionIndexMap = new Map();
+			var len = navMesh.regions.length;
+			for (var i=0; i<len; i++) {
+				navMesh.regionIndexMap.set(navMesh.regions[i], i);
+			}
+			navMesh.getNodeIndex = NavMeshUtils.getCachedNodeIndexForRegionProto;
+		}
+	}
+
+	static getCachedNodeIndexForRegionProto(region) {
+		return this.regionIndexMap.has(region) ? this.regionIndexMap.get(region) : -1;
+    }
+    */
+
 
      static checkAllValidPolygons(polygons) {
          let regions = polygons.regions || polygons;
@@ -86,7 +104,7 @@ class NavMeshUtils {
             } while (edge !== r.edge)
         }
     }
-    
+
     static patchHoles(navmesh, holesAdded) {
         if (!holesAdded) holesAdded = [];
 
@@ -120,7 +138,7 @@ class NavMeshUtils {
             r = regions[i];
             edge = r.edge;
             do {
-                if (edge.twin === null) { 
+                if (edge.twin === null) {
                     bi =  searchEdgeList(map, builtContour, edge);
 
                     //e === edge &&
@@ -133,7 +151,7 @@ class NavMeshUtils {
                         }
                     }
                 }
-                
+
                 edge = edge.next;
             } while (edge !== r.edge)
         }
