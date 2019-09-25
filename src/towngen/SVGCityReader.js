@@ -1332,6 +1332,16 @@ class SVGCityReader {
 			}
 			r.wardIndex = i;
 		}
+
+		let regions = navmesh.regions;
+		len = regions.length;
+		for (let i=0; i<len; i++) {
+			let r = regions[i];
+			if (r.wardIndex === undefined) {
+				r.insideCityWall = this.checkWithinCityWall(r.centroid.x, r.centroid.y);
+			}
+		}
+
 	}
 
 	getWardIndex(polygon) {
@@ -1361,21 +1371,73 @@ class SVGCityReader {
 			for (let i=0; i<len; i++) {
 				let e = edges[i];
 				let indexTo = this.getWardIndex(regions[e.to]);
+
+	
 				let indexFrom = this.getWardIndex(regions[e.from]);
-				if (indexTo >= 0 && indexFrom >=0 && indexTo === indexFrom) {  // same ward index always free  (dead space)
+				//if (indexTo >= 0) console.log(this.wards[indexTo].insideCityWall);
+				
+
+				if (indexTo >= 0 && indexFrom >=0 ) {  // same ward index always free  (dead space)
+					if (indexTo === indexFrom) {
+						e.cost = 0;
+					} else if (withinCityFree && this.wards[indexFrom].insideCityWall && this.wards[indexTo].insideCityWall) {
+						e.cost = 0;
+					} else {
+						e.cost = 1;
+						console.log("A");
+					}
+
+					e.cost = 1;
+				}
+				else if (indexTo < 0 && indexFrom < 0) {
 					e.cost = 0;
+					// this case shoudnt happen for top left visual case
 				}
 				else if (indexFrom < 0) { // costs from non-wards are always free (dead space)
 					e.cost = 0;
-				} else if (!this.wards[indexFrom].insideCityWall) { // costs from wards outside wall is always costed as 1
-					e.cost = 1;
-				} else { // this.wards[indexFrom].insideCityWall  // from inside city wall...
+					//console.log("non ward empty:"+e.cost);
+					console.log(indexTo);
 					if (!this.wards[indexTo].insideCityWall) { // leaving boundaries of city walls always costs as 1
 						e.cost = 1;
+						console.log("leaving city wall:"+e.cost);
+					} else {
+						e.cost = withinCityFree && regions[e.from].insideCityWall ? 0 : 1;
+						console.log("within city:"+e.cost);
+					}
+				
+
+				} else { // indexTo < 0
+					e.cost = 0;
+
+					
+					if (!this.wards[indexFrom].insideCityWall) { // leaving boundaries of city walls always costs as 1
+						e.cost = 0;
+						//console.log("leaving city wall:"+e.cost);
+					} else {
+						e.cost = withinCityFree  && regions[e.to].insideCityWall ? 0 : 1;
+						console.log("within city:"+e.cost);
+					}
+				
+
+				}
+				/*
+				else if (!this.wards[indexFrom].insideCityWall) { // costs from wards outside wall is always costed as 1
+					console.log("indexFrom not inside wall");
+					e.cost = 1;
+					//console.log("outside city wall:"+e.cost);
+					
+				} else { // this.wards[indexFrom].insideCityWall  // from inside city wall...
+					console.log("didnt happen)");
+					if (!this.wards[indexTo].insideCityWall) { // leaving boundaries of city walls always costs as 1
+						e.cost = 0;
+						//console.log("leaving city wall:"+e.cost);
 					} else {
 						e.cost = withinCityFree ? 0 : 1;
+						//console.log("within city:"+e.cost);
 					}
 				}
+				*/
+
 			}
 		});
 	}
@@ -1402,8 +1464,22 @@ class SVGCityReader {
 				if (!w.withinCityWall) { // get costs leading up to this ward outside
 					dijk.clear();
 					dijk.source = i;
-
+					let gt;
+					g.append(gt = this.makeSVG("text", { style:"text-align:left; font-size:2px", x:w.center[0], y:w.center[1] }));
+						$(gt).text('here');
 					dijk.search();
+
+					dijk._cost.forEach((value, key)=> {
+						r = regions[key];
+						index = this.getWardIndex(r);
+						if (index >= 0) {
+							let w  = this.wards[index];
+							let gt;
+							g.append(gt = this.makeSVG("text", { style:"text-align:left; font-size:2px", x:w.center[0], y:w.center[1] }));
+							$(gt).text(value);
+						}
+					});
+					break;
 
 				} else {
 
@@ -1412,15 +1488,7 @@ class SVGCityReader {
 		}
 
 		/*
-		dijk._cost.forEach((value, key)=> {
-		r = regions[key];
-		console.log("getting for key:"+key + ", "+r);
-		index = this.getWardIndex(r);
-		if (index >= 0) {
-			let gt;
-			g.append(gt = this.makeSVG("text", { style:"text-align:left; font-size:2px", x:r.centroid.x, y:r.centroid.z }));
-			$(gt).text(value);
-		}
+		
 		//r.centroid
 	});
 	*/
