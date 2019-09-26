@@ -11,9 +11,13 @@ import {NavMesh} from "../navigation/navmesh/NavMesh.js";
 import {NavMeshUtils} from "../navigation/navmesh/NavMeshUtils.js";
 
 import {Dijkstra} from "../graph/search/Dijkstra.js";
+import { NavEdge } from "../navigation/core/NavEdge.js";
 
 const lineSegment = new LineSegment();
 const pointOnLineSegment = new Vector3();
+
+const CITADEL_WARD_INDEX = -1;
+const PLAZA_WARD_INDEX = -2;
 
 function svgLineFromTo(from, to) {
 	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
@@ -1252,7 +1256,7 @@ class SVGCityReader {
 		//*/
 
 		// Streetmap navmesh
-		/*
+		///*
 		cdt = cdt2d(hullVerticesSoup, hullEdgesSoup, {exterior:false});
 		cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
 
@@ -1263,10 +1267,7 @@ class SVGCityReader {
 			return new Polygon().fromContour([ hullVerticesSoup3D[tri[2]], hullVerticesSoup3D[tri[1]], hullVerticesSoup3D[tri[0]] ]);
 		}));
 		this.setupHighwaysVsRoads(navmesh);
-		*/
-
-
-
+		//*/
 
 
 		//*/
@@ -1317,6 +1318,7 @@ class SVGCityReader {
 		//var g = $(this.makeSVG("g", {}));
 		//this.map.append(g, {});
 
+		// Register nodes with related wards
 		let wards = this.wards;
 		let len = wards.length;
 		let pt = new Vector3();
@@ -1333,19 +1335,50 @@ class SVGCityReader {
 			r.wardIndex = i;
 		}
 
+		// bypass non-ward nodes
 		let regions = navmesh.regions;
+		let graph = navmesh.graph;
+		let edges = graph._edges;
+		let nodes = graph._nodes;
+
+		let explodeMap = new Map();
 		len = regions.length;
 		for (let i=0; i<len; i++) {
 			let r = regions[i];
 			if (r.wardIndex === undefined) {
-				r.insideCityWall = this.checkWithinCityWall(r.centroid.x, r.centroid.y);
+				// r.withinCityWall = this.checkWithinCityWall(r.centroid.x, r.centroid.y); // no longer needed with explodeMap
+				let listOfEdges = edges.get(i);
+				explodeMap.set(i, listOfEdges.filter((e)=>{return regions[e.to].wardIndex !== undefined}).map((e)=>{return e.to}) );
 			}
 		}
+
+		edges.forEach((value, key) => {
+			let r = regions[key];
+			if (r.wardIndex !== undefined) {
+				let listOfEdges = edges.get(key);
+				let newEdges = [];
+				listOfEdges.forEach((value, index)=> {
+					if (explodeMap.has(value.to)) {
+						explodeMap.get(value.to).filter((v)=> {
+							return v !== key && listOfEdges.indexOf(v) < 0
+						}).forEach((v)=> {
+							newEdges.push(new NavEdge(key, v, 1))
+						});
+					}
+				});
+				listOfEdges = listOfEdges.filter((value)=> {
+					return !explodeMap.has(value.to);
+				}).concat(newEdges);
+				edges.set(key, listOfEdges);
+			} else {
+				edges.set(key, []);
+			}
+		});
 
 	}
 
 	getWardIndex(polygon) {
-		if (polygon.wardIndex !== undefined) return polygon.wardIndex;  // a saved reference is found
+		if (polygon.wardIndex !== undefined) return polygon.wardIndex;  // a saved cached reference is found
 
 		// identify by vertex id (doesnt work if mesh was decimated/altered from original ward hulls)
 		let edge = polygon.edge;
@@ -1353,90 +1386,42 @@ class SVGCityReader {
 		// all vertices of polygon must have the same vertex id that links to the correct ward
 		do {
 			if (edge.vertex.id === undefined || (lastId !== undefined ? edge.vertex.id !== lastId : false) ) {
-				return (polygon.wardIndex = -1);
+				return -1; // non-found values are not cached!
 			}
 			lastId = edge.vertex.id;
 			edge = edge.next;
 		} while (edge !== polygon.edge);
 
-		return (polygon.wardIndex = edge.vertex.id); // !== undefined ? edge.vertex.id : -1 // handed in precedigin do if case
+		return (polygon.wardIndex = edge.vertex.id); // cached found
 	}
 
 	adjustCostGraphByWards(navmesh, withinCityFree=false) {
 		let graph = navmesh.graph;
-		let edges = graph._edges;
 		let regions = navmesh.regions;
-		edges.forEach((edges/*, nodeIndex*/) => {
+		graph._edges.forEach((edges, nodeIndex) => {
 			let len = edges.length;
+
 			for (let i=0; i<len; i++) {
 				let e = edges[i];
 				let indexTo = this.getWardIndex(regions[e.to]);
-
-	
 				let indexFrom = this.getWardIndex(regions[e.from]);
-				//if (indexTo >= 0) console.log(this.wards[indexTo].insideCityWall);
-				
 
+				//if (indexTo >= 0) console.log(this.wards[indexTo].withinCityWall);
 				if (indexTo >= 0 && indexFrom >=0 ) {  // same ward index always free  (dead space)
 					if (indexTo === indexFrom) {
+						//console.log("Smae ward free");
 						e.cost = 0;
-					} else if (withinCityFree && this.wards[indexFrom].insideCityWall && this.wards[indexTo].insideCityWall) {
+					} else if (withinCityFree && this.wards[indexFrom].withinCityWall && this.wards[indexTo].withinCityWall) {
+						//console.log("Within city free");
 						e.cost = 0;
 					} else {
 						e.cost = 1;
-						console.log("A");
+					//	console.log("A");
 					}
-
-					e.cost = 1;
+				} else {
+					console.error("should not happen!!:"+indexTo + " :<"+indexFrom);
 				}
-				else if (indexTo < 0 && indexFrom < 0) {
-					e.cost = 0;
-					// this case shoudnt happen for top left visual case
-				}
-				else if (indexFrom < 0) { // costs from non-wards are always free (dead space)
-					e.cost = 0;
-					//console.log("non ward empty:"+e.cost);
-					console.log(indexTo);
-					if (!this.wards[indexTo].insideCityWall) { // leaving boundaries of city walls always costs as 1
-						e.cost = 1;
-						console.log("leaving city wall:"+e.cost);
-					} else {
-						e.cost = withinCityFree && regions[e.from].insideCityWall ? 0 : 1;
-						console.log("within city:"+e.cost);
-					}
-				
 
-				} else { // indexTo < 0
-					e.cost = 0;
-
-					
-					if (!this.wards[indexFrom].insideCityWall) { // leaving boundaries of city walls always costs as 1
-						e.cost = 0;
-						//console.log("leaving city wall:"+e.cost);
-					} else {
-						e.cost = withinCityFree  && regions[e.to].insideCityWall ? 0 : 1;
-						console.log("within city:"+e.cost);
-					}
-				
-
-				}
-				/*
-				else if (!this.wards[indexFrom].insideCityWall) { // costs from wards outside wall is always costed as 1
-					console.log("indexFrom not inside wall");
-					e.cost = 1;
-					//console.log("outside city wall:"+e.cost);
-					
-				} else { // this.wards[indexFrom].insideCityWall  // from inside city wall...
-					console.log("didnt happen)");
-					if (!this.wards[indexTo].insideCityWall) { // leaving boundaries of city walls always costs as 1
-						e.cost = 0;
-						//console.log("leaving city wall:"+e.cost);
-					} else {
-						e.cost = withinCityFree ? 0 : 1;
-						//console.log("within city:"+e.cost);
-					}
-				}
-				*/
 
 			}
 		});
@@ -1461,12 +1446,14 @@ class SVGCityReader {
 			index = this.getWardIndex(r);
 			if (index >=0) {
 				let w = this.wards[index];
-				if (!w.withinCityWall) { // get costs leading up to this ward outside
+				if (w.withinCityWall) { // get costs leading up to this ward outside
 					dijk.clear();
 					dijk.source = i;
+					/*
 					let gt;
 					g.append(gt = this.makeSVG("text", { style:"text-align:left; font-size:2px", x:w.center[0], y:w.center[1] }));
 						$(gt).text('here');
+					*/
 					dijk.search();
 
 					dijk._cost.forEach((value, key)=> {
@@ -1474,39 +1461,57 @@ class SVGCityReader {
 						index = this.getWardIndex(r);
 						if (index >= 0) {
 							let w  = this.wards[index];
+
+							w.distanceOutsideToWalls = value;
+
+							///*
 							let gt;
 							g.append(gt = this.makeSVG("text", { style:"text-align:left; font-size:2px", x:w.center[0], y:w.center[1] }));
 							$(gt).text(value);
+							//*/
 						}
 					});
 					break;
-
-				} else {
-
 				}
 			}
 		}
 
-		/*
-		
-		//r.centroid
-	});
-	*/
 
-
-
-		/* // todo: identify citadel ward by selector center position with navmesh, useful for heights
-		this.adjustCostGraphByWards(navmesh);
+		/* // todo: identify citadel ward by selector center position with navmesh, useful for heights and other info
+		*/
+		this.adjustCostGraphByWards(navmesh, false);
 		for (let i=0; i<len; i++) {
 			r = regions[i];
-			index = this.getWardIndex(r);
-			if (index >=0) {
-				let w = this.wards[index];
+			index = r.wardIndex;
+			if (index === CITADEL_WARD_INDEX) {
+				dijk.clear();
+				dijk.source = i;
+				///*
+				let gt;
+				g.append(gt = this.makeSVG("text", { style:"text-align:left; font-size:2px", x:w.center[0], y:w.center[1] }));
+				$(gt).text('here');
+				//*/
 
-				// cost to reach citadel ward
+				dijk.search();
+
+				dijk._cost.forEach((value, key)=> {
+					r = regions[key];
+					index = this.getWardIndex(r);
+					if (index >= 0) {
+						let w  = this.wards[index];
+						w.distanceToCitadel = value;
+						///*
+						let gt;
+						g.append(gt = this.makeSVG("text", { style:"text-align:left; font-size:2px", x:w.center[0], y:w.center[1] }));
+						$(gt).text(value);
+						//*/
+					}
+				});
+				break;
 			}
 		}
-		*/
+
+
 	}
 
 	setupHighwaysVsRoads(navmesh) {
@@ -1537,6 +1542,7 @@ class SVGCityReader {
 			let numOfShortEdges = 0;
 			let numOfEdgesWithinCityWalls = 0;
 			let extremeLongPerpCount = 0;
+			let numOfEdgesJustOutsideCityWalls = 0;
 
 			do {
 				if (edge.twin !== null &&
@@ -1561,6 +1567,8 @@ class SVGCityReader {
 					//g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.25, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
 
 					numOfEdgesWithinCityWalls += this.wards[edge.prev.vertex.id].withinCityWall && this.wards[edge.vertex.id].withinCityWall ? 1 : 0;
+
+					numOfEdgesJustOutsideCityWalls += this.wards[edge.prev.vertex.id].distanceOutsideToWalls===1 && this.wards[edge.vertex.id].distanceOutsideToWalls === 1 ? 1 : 0;
 
 					let dist =  pointOnLineSegment.squaredDistanceTo( edge.vertex );
 
@@ -1592,7 +1600,7 @@ class SVGCityReader {
 
 			// or numOfEdgesWithinCityWalls >=2
 			// && numOfEdgesWithinCityWalls === totalEdges && extremeLongPerpCount ===0
-			if (totalEdges >= 2  && numOfEdgesWithinCityWalls >=2  ) {
+			if (totalEdges >= 2  && (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)) {
 				// || !this.checkWithinCityWall(r.centroid.x, r.centroid.z , true)
 				g.append(this.makeSVG("path", {stroke:"blue", fill:numOfLongEdges === 0 ? "rgba(255,0,255,0.5)" : "rgba(255,0,0,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
 			}

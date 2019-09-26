@@ -61,8 +61,7 @@ class NavMeshUtils {
     }
     */
 
-
-     static checkAllValidPolygons(polygons) {
+    static checkAllValidPolygons(polygons) {
          let regions = polygons.regions || polygons;
          let len = regions.length;
         for (let i=0; i< len; i++) {
