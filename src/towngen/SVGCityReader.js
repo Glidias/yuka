@@ -565,6 +565,7 @@ class SVGCityReader {
 		this.highwayMinWidth = 1.8;
 		this.highwayMaxWidth = 6.2;
 		this.optimalHighwayThickness = 2.0;
+		this.streetIdPrecision = 0;
 		//this.optimalStreetThickness = 2.0;
 
 		// Upper ward settings
@@ -1220,7 +1221,7 @@ class SVGCityReader {
 
 		// Key stuffs
 		// this.setupRoads
-		//this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
+		this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
 
 
 		// test preview
@@ -1544,12 +1545,17 @@ class SVGCityReader {
 			let extremeLongPerpCount = 0;
 			let numOfEdgesJustOutsideCityWalls = 0;
 
+			let streetwards = new Set();
+
 			do {
 				if (edge.twin !== null &&
 					edge.prev.vertex.id >= 0 && edge.vertex.id >= 0 &&
 					edge.vertex.id !== edge.prev.vertex.id
 				) {
+					//streetnames.add(edge.vertex.id < edge.prev.vertex.id ? edge.vertex.id + "_" + edge.prev.vertex.id : edge.prev.vertex.id + "_" + edge.vertex.id);
 
+					streetwards.add(edge.vertex.id);
+					streetwards.add(edge.prev.vertex.id);
 
 					let oppEdge = edge.next;
 					while (oppEdge.vertex !== edge.prev.vertex) {
@@ -1594,22 +1600,42 @@ class SVGCityReader {
 				edge = edge.next;
 			} while(edge !== r.edge);
 
+			
+			// various conditions for specific highlights
 			let totalEdges = numOfShortEdges + numOfLongEdges;
 
-			// various conditions for specific highlights
 
+			// street id naming
+			r.streetId = Array.from(streetwards).sort()
+			if (this.streetIdPrecision > 0) {
+				r.streetId.slice(0, this.streetIdPrecision + 1);
+			}
+			r.streetId = r.streetId.join("_");
+			//console.log(r.streetId);
+			
+			
 			// or numOfEdgesWithinCityWalls >=2
 			// && numOfEdgesWithinCityWalls === totalEdges && extremeLongPerpCount ===0
-			if (totalEdges >= 2  && (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)) {
+			if (totalEdges >= 2 ) {
 				// || !this.checkWithinCityWall(r.centroid.x, r.centroid.z , true)
-				g.append(this.makeSVG("path", {stroke:"blue", fill:numOfLongEdges === 0 ? "rgba(255,0,255,0.5)" : "rgba(255,0,0,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
+				if ( numOfLongEdges !== 0) {
+					if ( (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)) {
+						g.append(this.makeSVG("path", {stroke:"blue", fill:(numOfEdgesWithinCityWalls < 2 ? "rgba(255,40,100,0.5)" : "rgba(255,0,0,0.5)"), "stroke-width":0.015, d: polygonSVGString(r) }));
+						
+					} else {
+						g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,0,255,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
+						
+					}
+				}
+				else {
+					g.append(this.makeSVG("path", {stroke:"blue", fill:numOfLongEdges === 0 ? "rgba(255,0,255,0.5)" : "rgba(255,0,0,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
+				}
 			}
 
 
 		}
 
-
-
+		
 		// highway exits to ward roads
 	}
 
@@ -1648,7 +1674,7 @@ class SVGCityReader {
 			///*
 			let g = $(this.makeSVG("g", {}));
 			this.map.append(g, {});
-			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 			//*/
 
 			/*
@@ -1729,7 +1755,7 @@ class SVGCityReader {
 		navmesh.attemptMergePolies = false;
 
 		navmesh.fromPolygons(navmeshPolygons);
-		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.1)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.1)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 
 		// connect 'em!
 		len = navmesh.regions.length;
