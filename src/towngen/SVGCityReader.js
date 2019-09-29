@@ -335,6 +335,10 @@ function overlapsFaces2D(myFace, face) {
 
 function mergeCellsNewHull(cellA, cellB) {
 	let del =  Delaunay.from(cellB ? cellA.concat(cellB) : cellA);
+	return pointsFromDelHull(del);
+}
+
+function pointsFromDelHull(del) {
 	let points = del.points;
 	let hull = del.hull;
 	let arr = [];
@@ -1062,9 +1066,6 @@ class SVGCityReader {
 	parseWards(jSel) {
 		var wardCentroids = [];
 
-		let aabbWards = new AABB();
-		this.aabbWards = aabbWards;
-
 		let verticesSoup = [];
 		let hullVerticesSoup = [];
 		let hullEdgesSoup = [[0,1], [1,2], [2,3], [3,0]];
@@ -1085,26 +1086,19 @@ class SVGCityReader {
 
 		jSel.each((index, item)=>{
 			item = $(item);
-			let wardObj = {vertices:[], neighborhoods:[]};
+			let wardObj = {neighborhoodPts: [], neighborhoodHulls: []};
+			let wardObjVertices = [];
 			item.children("path").each((i, hood)=> {
 				hood = $(hood);
-				var newStr = this.setupNeighborhoodFromPath(hood.attr("d"), wardObj, i);
+				var newStr = this.setupNeighborhoodFromPath(hood.attr("d"), wardObj, i, wardObjVertices);
 				hood.attr("d", newStr);
-				this.debugPoints.forEach((val, index)=> {
-					item.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:val[0], cy:val[1]}));//  `<circle r="3" cx="${val[0]}" fill="red" stroke-width="1" cy="${val[1]}"></circle>`);
-				});
 			});
 
 			let len;
 			let i;
 
-			len = wardObj.vertices.length;
-			for (i=0; i<len; i++) {
-				aabbWards.expand(new Vector3(wardObj.vertices[i][0], 0, wardObj.vertices[i][1]));
-			}
-
-			wardObj.delaunay =  Delaunay.from(wardObj.vertices);
-			let hull = wardObj.delaunay.hull;
+			let wardObjDelaunay =  Delaunay.from(wardObjVertices);
+			let hull = wardObjDelaunay.hull;
 			let count = 0;
 
 			let x = 0;
@@ -1114,7 +1108,7 @@ class SVGCityReader {
 			let hullAABB = new AABB();
 			let hullPoints = [];
 			let pt;
-			let points = wardObj.delaunay.points;
+			let points = wardObjDelaunay.points;
 
 			let cx = 0;
 			let cy = 0;
@@ -1196,18 +1190,9 @@ class SVGCityReader {
 			wardObj.polygon = new Polygon().fromContour(hullPoints);
 			wardObj.withinCityWall = this.checkWithinCityWall(cx, cy);
 			wardObj.center = [cx,cy];
-
-			wardCentroids.push(wardObj.center);
 			//item.append(this.makeSVG("path", {fill:"gray", "stroke-width":0.5, "stroke":"none", d:wardObj.delaunay.renderHull()}));
 			item.append(this.makeSVG("circle", {r:0.5, fill:(wardObj.withinCityWall ? "red" : "blue"), cx:cx, cy:cy}));
 
-			verticesSoup = verticesSoup.concat(wardObj.vertices);
-			collectWardBuildings(buildingEdges, wardObj.neighborhoods);
-			let buildingEdgesForWard = baseHullEdges.concat();
-			tempWardBuildingEdgesList.push(buildingEdgesForWard);
-			collectWardBuildings(buildingEdgesForWard, wardObj.neighborhoods);
-
-			//collectWardBuildings(building)
 
 			this.wards.push(wardObj);
 		});
@@ -1218,11 +1203,13 @@ class SVGCityReader {
 		//let del;
 		//del = Delaunay.from(hullVerticesSoup);
 
+		this.setupWardNeighborhoodRoads();
+
 
 		// Key stuffs
 		// this.setupRoads
-		this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
-
+		//this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
+		this.setupUpperWards(baseVerticesSoup);
 
 		// test preview
 		var g = $(this.makeSVG("g", {}));
@@ -1268,8 +1255,8 @@ class SVGCityReader {
 			return new Polygon().fromContour([ hullVerticesSoup3D[tri[2]], hullVerticesSoup3D[tri[1]], hullVerticesSoup3D[tri[0]] ]);
 		}));
 		this.setupHighwaysVsRoads(navmesh);
+		
 		//*/
-
 
 		//*/
 
@@ -1307,6 +1294,23 @@ class SVGCityReader {
 			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 		}
 		//del.triangles = theTris;
+	}
+
+	testSubdivideBuilding() {
+
+	}
+
+	carveRamps(edgeAlong, alignEnd, maxFlights) {
+
+	}
+
+
+	setupWardNeighborhoodRoads() {
+		let len = this.wards.length;
+		let w;
+		for (let i=0; i<len; i++) {
+			w = this.wards[i];
+		}
 	}
 
 
@@ -1634,9 +1638,6 @@ class SVGCityReader {
 
 
 		}
-
-		
-		// highway exits to ward roads
 	}
 
 	checkWithinCityWall(x, y, defaultVal=false) {
@@ -1653,29 +1654,32 @@ class SVGCityReader {
 		return false;
 	}
 
-	setupUpperWards(tempWardBuildingEdgesList, baseVerticesSoup) {
-		let len = tempWardBuildingEdgesList.length;
+
+	setupUpperWards(baseVerticesSoup) {
+		let wards = this.wards;
+		baseVerticesSoup = [baseVerticesSoup];
+		let len = wards.length;
 		let g;
 		let sites = [];
 		const maxBridgeSqDist = this.maxBridgeDistance*this.maxBridgeDistance;
 		const maxBridgeSqDist2 = (this.maxBridgeDistance*this.maxBridgeCheckpointRatio)*(this.maxBridgeDistance*this.maxBridgeCheckpointRatio);
 
-		for (let i=0; i<len; i++) {
-			let verticesSoup = baseVerticesSoup.concat(this.wards[i].vertices);
-			let buildingEdges = tempWardBuildingEdgesList[i];
-			cleanPSLG(verticesSoup, buildingEdges);
 
-			let cdt = cdt2d(verticesSoup, buildingEdges, {exterior:false});
+
+		for (let i=0; i< len; i++) {
+			
+			let cdtObj = this.getCDTObjFromPointsList(baseVerticesSoup.concat(explode2DArray(wards[i].neighborhoodPts)), true, {exterior:false});
+			let cdt = cdtObj.cdt;
 			cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
 			let navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
-			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(verticesSoup, tri)}));
+			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)}));
 
-			///*
+			/*
 			let g = $(this.makeSVG("g", {}));
 			this.map.append(g, {});
-			//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
-			//*/
+			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.015, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			*/
 
 			/*
 			var g = $(this.makeSVG("g", {}));
@@ -2117,7 +2121,7 @@ class SVGCityReader {
 	}
 
 	// array of buildings
-	setupNeighborhoodFromPath(pathStr, wardObj, indexTrace) {
+	setupNeighborhoodFromPath(pathStr, wardObj, indexTrace, wardObjVertices) {
 		let buildings = pathStr.split("M ");
 		if (buildings[0] === "") buildings.shift();
 
@@ -2127,12 +2131,14 @@ class SVGCityReader {
 		var newPathStr = "";
 
 
-		let buildingsArr = [];
 		let building;
 		let closePath;
+		let buildingsList = [];
+
+		let pointsForNeighborhood = [];
+		
 		// polygons per building
 
-		this.debugPoints = [];
 		for (i=0; i<len; i++) {
 			building = buildings[i];
 			building = building.trim();
@@ -2154,6 +2160,7 @@ class SVGCityReader {
 			let count = 0;
 			let vLen = arr.length;
 			let pointsForBuilding = [];
+			let buildingPts = [];
 			let addedStr;
 
 			let pArr;
@@ -2217,11 +2224,18 @@ class SVGCityReader {
 			if (vLen <= 4) {
 				// todo: redone building string
 				newPathStr += (addedStr = "M "+building + " Z");
-				buildingsArr.push(vLen);
 				for (v=0; v<vLen; v++) {
 
-					wardObj.vertices.push(vArr[v]);
-					if (vLen !== initArr.length && vLen>=5) this.debugPoints.push(vArr[v]);
+					wardObjVertices.push(vArr[v]);
+					buildingPts.push(vArr[v]);
+					pointsForNeighborhood.push(vArr[v]);
+					/*
+					if (vLen !== initArr.length && vLen>=5) {
+						// exception
+					}
+					*/
+
+					
 					count++;
 
 				}
@@ -2241,14 +2255,19 @@ class SVGCityReader {
 				//console.log(arr.length + " VS " + vLen  + " :: "+indexTrace+","+i);
 				vLen = arr.length;
 
-				buildingsArr.push(vLen);
-
 				for (v=0; v<vLen; v++) {
 					let pArr = arr[v].split(",");
 					pArr = pArr.map((p=>{return parseFloat(p.trim())}))
 
-					//if (vLen !== initArr.length && vLen>=5) this.debugPoints.push(pArr);
-					wardObj.vertices.push(pArr);
+					/*
+					if (vLen !== initArr.length && vLen>=5)  {
+						// exception
+					}
+					*/
+
+					wardObjVertices.push(pArr);
+					buildingPts.push(pArr);
+					pointsForNeighborhood.push(pArr);
 					count++;
 
 				}
@@ -2270,12 +2289,21 @@ class SVGCityReader {
 				console.warn("Degenerate path found!");
 			}
 
-
+			buildingsList.push(buildingPts);
 
 		}
 
-		wardObj.neighborhoods.push(buildingsArr);
+		var del = Delaunay.from(pointsForNeighborhood);
+		let hullPoints = pointsFromDelHull(del);
+		
+		var g = $(this.makeSVG("g", {}));
+		this.map.append(g, {});
+		g.append(this.makeSVG("path", {fill:"none", "stroke-width":0.3, "stroke":"turquoise", d:del.renderHull()}));
+		
 
+
+		wardObj.neighborhoodHulls.push(hullPoints);
+		wardObj.neighborhoodPts.push(buildingsList);
 		return newPathStr;
 
 	}
