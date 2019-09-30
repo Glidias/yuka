@@ -19,6 +19,8 @@ const pointOnLineSegment = new Vector3();
 const CITADEL_WARD_INDEX = -1;
 const PLAZA_WARD_INDEX = -2;
 
+
+
 function svgLineFromTo(from, to) {
 	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
 }
@@ -436,6 +438,12 @@ function polygonSVGString(polygon) {
 	return str;
 }
 
+function lineSegmentSVGStr(v1, v2) {
+	let str = "M"+v1.x+","+v1.z + " ";
+	str += "L"+v2.x+","+v2.z + " ";
+	return str;
+}
+
 function edgeSVGString(edge) {
 	let str = "M"+edge.prev.vertex.x+","+edge.prev.vertex.z + " ";
 	str += "L"+edge.vertex.x+","+edge.vertex.z + " ";
@@ -577,6 +585,11 @@ class SVGCityReader {
 		this.optimalHighwayThickness = 2.0;
 		this.streetIdPrecision = 0;
 		//this.optimalStreetThickness = 2.0;
+
+		// Staircase/ramp settings
+		this.rampLength = 2;
+		this.rampLanding = 0.5;
+		this.rampWidth = 0.75;
 
 		// Upper ward settings
 		this.minPillarRadius = 1.7;
@@ -840,13 +853,25 @@ class SVGCityReader {
 		svg.append(this.makeSVG("path", {stroke:"yellow", fill:"none", "stroke-width":0.55, d: edgeSVGString(edgeAlong)}));
 		var polygon = edgeAlong.polygon;
 
+		const T = this.rampLanding * 2 + this.rampLength;
+
 		let dx = edgeAlong.vertex.x - edgeAlong.prev.vertex.x;
 		let dz = edgeAlong.vertex.z - edgeAlong.prev.vertex.z;
+
+		svg.append(this.makeSVG("path", {stroke:"green", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.prev.vertex,  new Vector3().copy(edgeAlong.prev.vertex).add(new Vector3().subVectors(edgeAlong.vertex, edgeAlong.prev.vertex).normalize().multiplyScalar(T))) }));
+
+		let pter;
+		svg.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.prev.vertex,  pter = new Vector3().copy(edgeAlong.prev.vertex).add(new Vector3().subVectors(edgeAlong.vertex, edgeAlong.prev.vertex).normalize().multiplyScalar(this.rampLanding))) }));
+		//svg.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(pter,  new Vector3().copy(pter).add(new Vector3().subVectors(edgeAlong.prev.vertex, edgeAlong.vertex).normalize().multiplyScalar(this.rampLanding))) }));
+
+		let D = Math.sqrt(dx * dx + dz * dz)
 		let nx = dz;
 		let nz = -dx;
 		let d = Math.sqrt(nx*nx + nz*nz);
 		nx /=d;
 		nz /=d;
+
+		console.log("D:"+D);
 
 		let orderedEdges = [];
 		let edge = edgeAlong.next;
@@ -856,20 +881,17 @@ class SVGCityReader {
 		//console.log(edgeAlong.offset + " === " + edgeAlong.prev.offset + " :: "+ (edgeAlong.offset === edgeAlong.prev.offset));
 		let i;
 		do {
-			dx = edge.vertex.x - edge.prev.vertex.x;
-			dz = edge.vertex.z - edge.prev.vertex.z;
 			edge.offset = edge.vertex.x * nx + edge.vertex.z * nz;
 			orderedEdges.push(edge);
 			edge = edge.next;
 		} while(edge !== edgeAlong.prev);
-
 
 		// default sort
 		orderedEdges.sort((a,b)=>{return a.offset - b.offset});
 		//console.log(edgeAlong.offset);
 		//console.log(orderedEdges);
 
-		// Scan across polygon to determine amount of space available to place ramps along edgeAlong direction
+		// Scan across polygon to determine amount and bounds of space available to place ramps along edgeAlong direction
 		let len = orderedEdges.length;
 		edge = edgeAlong.next;
 		let g1 = new Vector3(); // headside gradient
@@ -891,7 +913,6 @@ class SVGCityReader {
 				g2.subVectors(orderedEdges[i].vertex, orderedEdges[i].next.vertex);
 				d2 = orderedEdges[i].offset -orderedEdges[i].next.offset;
 				fromHeadside = false;
-
 			} else { // orderedEdges[i]=== edge, ie. is found on head side
 				g1.subVectors(edge.vertex, edge.prev.vertex);
 				d1 = edge.offset - edge.prev.offset;
@@ -905,6 +926,7 @@ class SVGCityReader {
 					// console.log(vertex on opposite tail side case)
 					g2.subVectors(orderedEdges[g].prev.vertex, orderedEdges[g].vertex);
 					d2 = orderedEdges[g].prev.offset -orderedEdges[g].offset;
+					lineSegment.set(orderedEdges[g].vertex, orderedEdges[g].prev.vertex);
 				} else {
 					// console.log("end vertex case");
 					g = len - 1;
@@ -922,16 +944,40 @@ class SVGCityReader {
 			if (d2 < 0) console.error("d2 should be positive magnitude!");
 			let g1grad = g1.dot(hUnit) / d1;
 			let g2grad = g2.dot(tUnit) / d2;
-			console.log(">d:"+d + ", "+fromHeadside + "," + d1 + ", " +  d2 + " :: "  +g1grad + " + " + g2grad + " = " + (g1grad+g2grad));
+
 
 			g = g1grad + g2grad;
+
+
+			// minMaxD >= (T - D)/g
 			// minima maxima d, where T is minimum required target distance for placing a single flight of ramp, g is overall gradient on both ends,
 			// and D is current slice length at current i junctio point
+			let mmd;
+			if (T <= D) { // already met clearance
+				if (g >= 0) {
+					console.log("for maxima: gradient>=0 will always meet space requirements for entire d. Can step add full d.");
+				} else {
+					console.log("for maxima: gradient < 0 may not meet space requirements for entire d")
+				}
+			} else {  // have not met clearance
+				if (g >= 0) {
+					console.log("for minima: gradient>=0 may yet to meet space requirements for startD");
+				} else {
+					console.log("for minima: gradient < 0 will never meet space requirements for remaining entire d. Can early exit out full loop!!")
+				}
+			}
 
-			// d >= (T - D)/g
+			mmd = (T-D)/g;
+			console.log("mmd:"+mmd);
 
-			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: orderedEdges[i].vertex.x, cy: orderedEdges[i].vertex.z}));
-			break;
+			// lower than zero mmd typically indiccates
+
+			// update D to match new interval
+			D += g * d;
+
+			console.log(">d:"+d + ", "+fromHeadside + "," + d1 + ", " +  d2 + " :: "  +g1grad + " + " + g2grad + " = " + (g1grad+g2grad) + " D:"+D);
+
+			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: orderedEdges[i].vertex.x, cy: orderedEdges[i].vertex.z}));
 		}
 
 
