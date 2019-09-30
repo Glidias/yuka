@@ -90,7 +90,7 @@ function getSegmentPointsFromSVGLinePath(pathString, filteredIndices) {
 	})
 	let lastArr;
 	if (filteredIndices) {
-		filteredIndices.refArray = arr.concat();
+		filteredIndices.refArray = arr.slice(0);
 	}
 	arr = arr.filter((pts, index)=>{
 		if (filteredIndices && pts.length <= 1) {
@@ -166,7 +166,7 @@ function _chamferInto(newArr, p, p0, p1, radius) {
 }
 
 function chamferCornersOfPoints(arr, radius) {
-	arr = arr.concat();
+	arr = arr.slice(0);
 	let len = arr.length - 1;
 	let i;
 	let newArr = [arr[0]];
@@ -416,7 +416,7 @@ function polygonToCell(polygon) {
 }
 
 
-function cellToPolygon(cell, addAABB) {
+function cellToPolygon(cell) {
 	let poly = new Polygon();
 	poly.fromContour(cell.map((p)=>{return new Vector3(p[0], 0, p[1])}));
 	return poly;
@@ -433,6 +433,12 @@ function polygonSVGString(polygon) {
 	} while (edge !== polygon.edge);
 	str += "Z";
 
+	return str;
+}
+
+function edgeSVGString(edge) {
+	let str = "M"+edge.prev.vertex.x+","+edge.prev.vertex.z + " ";
+	str += "L"+edge.vertex.x+","+edge.vertex.z + " ";
 	return str;
 }
 
@@ -596,7 +602,7 @@ class SVGCityReader {
 	extrudePathOfPoints(points, radius, loop, cap, newPoints, _isLooping) {
 		if (!newPoints) newPoints = [];
 		if (_isLooping === true) {
-			points = points.concat();
+			points = points.slice(0);
 			points.reverse();
 		}
 		let len = points.length;
@@ -774,6 +780,8 @@ class SVGCityReader {
 			//if (this.selectorFarmhouses) this.selectorWards = this.selectorWards.not(this.selectorFarmhouses);
 
 			this.parseWards(this.selectorWards);
+
+			this.testSubdivideBuilding(this.wards[4].neighborhoodPts[0][0]);
 		}
 
 
@@ -795,6 +803,141 @@ class SVGCityReader {
 
 	}
 
+	testSubdivideBuilding(building) {
+		building = building.slice(0).reverse(); // non-cleamature (svg outlines appears to be not clockwise for buildings?)
+		let poly = cellToPolygon(building);
+		/* //
+		if (!poly.convex(true)) {
+			console.error("NOT CCW");
+		}
+		*/
+		let edgeCount = 0;
+		let edge = poly.edge;
+		let edges = [];
+		do {
+			edges.push(edge);
+			edgeCount++;
+			edge = edge.next;
+			// if (edgeCount === 4) g.append(this.makeSVG("circle", {r:0.5, fill:"white", cx:edge.vertex.x, cy:edge.vertex.z}));
+		} while (edge !== poly.edge);
+
+		//edges[Math.floor(Math.random() * edgeCount)]
+
+
+		this.carveRamps(edges[2], false, Infinity);
+	}
+
+	/**
+	 * Carve out flights of zig-zagging ramps along a Polygon's Edge on available space provided by polygon.
+	 * For simplicity, Polygon is assumed to be a flat top surface on x,z plane that defines the available floor space.
+	 * @param {} edgeAlong
+	 * @param {*} alignFromTailEnd
+	 * @param {*} maxFlights
+	 */
+	carveRamps(edgeAlong, alignFromTailEnd, maxFlights) {
+		var svg = $(this.makeSVG("g", {}));
+		this.map.append(svg, {});
+		svg.append(this.makeSVG("path", {stroke:"yellow", fill:"none", "stroke-width":0.55, d: edgeSVGString(edgeAlong)}));
+		var polygon = edgeAlong.polygon;
+
+		let dx = edgeAlong.vertex.x - edgeAlong.prev.vertex.x;
+		let dz = edgeAlong.vertex.z - edgeAlong.prev.vertex.z;
+		let nx = dz;
+		let nz = -dx;
+		let d = Math.sqrt(nx*nx + nz*nz);
+		nx /=d;
+		nz /=d;
+
+		let orderedEdges = [];
+		let edge = edgeAlong.next;
+		edgeAlong.offset = edgeAlong.vertex.x * nx + edgeAlong.vertex.z * nz;
+		edgeAlong.prev.offset = edgeAlong.offset;
+		//edgeAlong.prev.offset = edgeAlong.prev.vertex.x * nx + edgeAlong.prev.vertex.z * nz;
+		//console.log(edgeAlong.offset + " === " + edgeAlong.prev.offset + " :: "+ (edgeAlong.offset === edgeAlong.prev.offset));
+		let i;
+		do {
+			dx = edge.vertex.x - edge.prev.vertex.x;
+			dz = edge.vertex.z - edge.prev.vertex.z;
+			edge.offset = edge.vertex.x * nx + edge.vertex.z * nz;
+			orderedEdges.push(edge);
+			edge = edge.next;
+		} while(edge !== edgeAlong.prev);
+
+
+		// default sort
+		orderedEdges.sort((a,b)=>{return a.offset - b.offset});
+		//console.log(edgeAlong.offset);
+		//console.log(orderedEdges);
+
+		// Scan across polygon to determine amount of space available to place ramps along edgeAlong direction
+		let len = orderedEdges.length;
+		edge = edgeAlong.next;
+		let g1 = new Vector3(); // headside gradient
+		let g2 = new Vector3(); // tailside gradient
+		let hUnit = new Vector3().subVectors(edgeAlong.vertex, edgeAlong.prev.vertex);
+		hUnit.normalize();
+		let tUnit = new Vector3(-hUnit.x,  -hUnit.y,  -hUnit.z);
+
+		let fromHeadside;
+		let d1;
+		let d2;
+		let g;
+		//g =  gradient along tailside +  gradient along headside
+		//headGrad or tailGrad respectively = v.dot(headTailUnitVector) / (v.offset - prevV.offset)
+		for (i=0; i<len; i++) {
+			if (orderedEdges[i] !== edge) {  // orderedEdges[i] is found on tail side
+				g1.subVectors(edge.vertex, edge.prev.vertex);
+				d1 = edge.offset - edge.prev.offset;
+				g2.subVectors(orderedEdges[i].vertex, orderedEdges[i].next.vertex);
+				d2 = orderedEdges[i].offset -orderedEdges[i].next.offset;
+				fromHeadside = false;
+
+			} else { // orderedEdges[i]=== edge, ie. is found on head side
+				g1.subVectors(edge.vertex, edge.prev.vertex);
+				d1 = edge.offset - edge.prev.offset;
+				edge = edge.next;
+				// find next g2 on tail side
+
+				for (g = i+1; g< len ; g++) {
+					if (orderedEdges[g] !== edge) break;
+				}
+				if ( g < len) {
+					// console.log(vertex on opposite tail side case)
+					g2.subVectors(orderedEdges[g].prev.vertex, orderedEdges[g].vertex);
+					d2 = orderedEdges[g].prev.offset -orderedEdges[g].offset;
+				} else {
+					// console.log("end vertex case");
+					g = len - 1;
+					g2.subVectors(orderedEdges[g].vertex, orderedEdges[g].next.vertex);
+					d2 = orderedEdges[g].offset -orderedEdges[g].next.offset;
+				}
+				fromHeadside = true;
+			}
+
+			d = orderedEdges[i].offset - (i >= 1 ? orderedEdges[i-1].offset : edgeAlong.offset);
+			if (d < 0) console.log("d should be positive magnitude!");
+			if (d === 0) continue; // no gradient found along zero offset distance
+
+			if (d1 < 0) console.error("d1 should be positive magnitude!");
+			if (d2 < 0) console.error("d2 should be positive magnitude!");
+			let g1grad = g1.dot(hUnit) / d1;
+			let g2grad = g2.dot(tUnit) / d2;
+			console.log(">d:"+d + ", "+fromHeadside + "," + d1 + ", " +  d2 + " :: "  +g1grad + " + " + g2grad + " = " + (g1grad+g2grad));
+
+			g = g1grad + g2grad;
+			// minima maxima d, where T is minimum required target distance for placing a single flight of ramp, g is overall gradient on both ends,
+			// and D is current slice length at current i junctio point
+
+			// d >= (T - D)/g
+
+			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: orderedEdges[i].vertex.x, cy: orderedEdges[i].vertex.z}));
+			break;
+		}
+
+
+	}
+
+
 	makeSVG(tag, attrs) {
 		var el= document.createElementNS('http://www.w3.org/2000/svg', tag);
 		for (var k in attrs)
@@ -803,8 +946,8 @@ class SVGCityReader {
 	}
 
 	getCDTObjFromPointsList(pointsList, cleanup, params, processPointsMethod) {
-		let vertices = params.vertices ? params.vertices.concat() : [];
-		let edges = params.edges ? params.edges.concat() : [];
+		let vertices = params.vertices ? params.vertices.slice(0) : [];
+		let edges = params.edges ? params.edges.slice(0) : [];
 		pointsList.forEach((points, index)=> {
 			let baseCount = vertices.length;
 
@@ -880,7 +1023,7 @@ class SVGCityReader {
 
 
 		this.cityWallSegmentsUpper = [explode2DArray(this.cityWallSegments)]; // todo: break and rearrange from start/end citadel
-	//	let ref = this.cityWallSegmentsUpper[0].concat();
+	//	let ref = this.cityWallSegmentsUpper[0].slice(0);
 	//	this.cityWallSegmentsUpper[0] = ref.slice(8).concat(ref.slice(1, 8));
 
 
@@ -1026,7 +1169,7 @@ class SVGCityReader {
 		let cdtObj = this.getCDTObjFromPointsList(lineSegments,
 			true, {exterior:false},
 			(points, index)=>{
-				//points = points.concat().reverse();
+				//points = points.slice(0).reverse();
 				return  index < lineSegments.length ? this.extrudePathOfPoints(points, wallRadius, true, true) : points;
 			});
 
@@ -1077,10 +1220,10 @@ class SVGCityReader {
 		hullVerticesSoup.push([this.svgWidth*.5, this.svgHeight*.5]);
 		hullVerticesSoup.push([-this.svgWidth*.5, this.svgHeight*.5]);
 
-		verticesSoup = hullVerticesSoup.concat();
-		let baseVerticesSoup = hullVerticesSoup.concat();
-		let baseHullEdges = hullEdgesSoup.concat();
-		let buildingEdges = hullEdgesSoup.concat();
+		verticesSoup = hullVerticesSoup.slice(0);
+		let baseVerticesSoup = hullVerticesSoup.slice(0);
+		let baseHullEdges = hullEdgesSoup.slice(0);
+		let buildingEdges = hullEdgesSoup.slice(0);
 
 		let tempWardBuildingEdgesList = [];
 
@@ -1207,9 +1350,7 @@ class SVGCityReader {
 
 
 		// Key stuffs
-		// this.setupRoads
-		//this.setupUpperWards(tempWardBuildingEdgesList,  baseVerticesSoup);
-		this.setupUpperWards(baseVerticesSoup);
+		//this.setupUpperWards(baseVerticesSoup);
 
 		// test preview
 		var g = $(this.makeSVG("g", {}));
@@ -1255,7 +1396,7 @@ class SVGCityReader {
 			return new Polygon().fromContour([ hullVerticesSoup3D[tri[2]], hullVerticesSoup3D[tri[1]], hullVerticesSoup3D[tri[0]] ]);
 		}));
 		this.setupHighwaysVsRoads(navmesh);
-		
+
 		//*/
 
 		//*/
@@ -1294,15 +1435,10 @@ class SVGCityReader {
 			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.5)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 		}
 		//del.triangles = theTris;
-	}
 
-	testSubdivideBuilding() {
 
 	}
 
-	carveRamps(edgeAlong, alignEnd, maxFlights) {
-
-	}
 
 
 	setupWardNeighborhoodRoads() {
@@ -1604,7 +1740,7 @@ class SVGCityReader {
 				edge = edge.next;
 			} while(edge !== r.edge);
 
-			
+
 			// various conditions for specific highlights
 			let totalEdges = numOfShortEdges + numOfLongEdges;
 
@@ -1616,8 +1752,8 @@ class SVGCityReader {
 			}
 			r.streetId = r.streetId.join("_");
 			//console.log(r.streetId);
-			
-			
+
+
 			// or numOfEdgesWithinCityWalls >=2
 			// && numOfEdgesWithinCityWalls === totalEdges && extremeLongPerpCount ===0
 			if (totalEdges >= 2 ) {
@@ -1625,10 +1761,10 @@ class SVGCityReader {
 				if ( numOfLongEdges !== 0) {
 					if ( (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)) {
 						g.append(this.makeSVG("path", {stroke:"blue", fill:(numOfEdgesWithinCityWalls < 2 ? "rgba(255,40,100,0.5)" : "rgba(255,0,0,0.5)"), "stroke-width":0.015, d: polygonSVGString(r) }));
-						
+
 					} else {
 						g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,0,255,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
-						
+
 					}
 				}
 				else {
@@ -1667,7 +1803,7 @@ class SVGCityReader {
 
 
 		for (let i=0; i< len; i++) {
-			
+
 			let cdtObj = this.getCDTObjFromPointsList(baseVerticesSoup.concat(explode2DArray(wards[i].neighborhoodPts)), true, {exterior:false});
 			let cdt = cdtObj.cdt;
 			cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
@@ -2136,7 +2272,7 @@ class SVGCityReader {
 		let buildingsList = [];
 
 		let pointsForNeighborhood = [];
-		
+
 		// polygons per building
 
 		for (i=0; i<len; i++) {
@@ -2235,7 +2371,7 @@ class SVGCityReader {
 					}
 					*/
 
-					
+
 					count++;
 
 				}
@@ -2295,11 +2431,11 @@ class SVGCityReader {
 
 		var del = Delaunay.from(pointsForNeighborhood);
 		let hullPoints = pointsFromDelHull(del);
-		
+
 		var g = $(this.makeSVG("g", {}));
 		this.map.append(g, {});
 		g.append(this.makeSVG("path", {fill:"none", "stroke-width":0.3, "stroke":"turquoise", d:del.renderHull()}));
-		
+
 
 
 		wardObj.neighborhoodHulls.push(hullPoints);
