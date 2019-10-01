@@ -587,9 +587,10 @@ class SVGCityReader {
 		//this.optimalStreetThickness = 2.0;
 
 		// Staircase/ramp settings
-		this.rampLength = 2;
+		this.rampLength = 2.4;
 		this.rampLanding = 0.5;
 		this.rampWidth = 0.75;
+		this.rampMaxGradient = 0.83; // 40deg //0.9; // 42deg
 
 		// Upper ward settings
 		this.minPillarRadius = 1.7;
@@ -794,7 +795,7 @@ class SVGCityReader {
 
 			this.parseWards(this.selectorWards);
 
-			this.testSubdivideBuilding(this.wards[4].neighborhoodPts[0][0]);
+			this.testSubdivideBuilding(this.wards[14].neighborhoodPts[0][0]);
 		}
 
 
@@ -807,8 +808,6 @@ class SVGCityReader {
 			map.children(this.selectorCitadel);
 		}
 		*/
-
-
 
 		if (tempContainer !== null) {
 			tempContainer.remove();
@@ -844,35 +843,42 @@ class SVGCityReader {
 	 * Carve out flights of zig-zagging ramps along a Polygon's Edge on available space provided by polygon.
 	 * For simplicity, Polygon is assumed to be a flat top surface on x,z plane that defines the available floor space.
 	 * @param {} edgeAlong
-	 * @param {*} alignFromTailEnd
+	 * @param {} alignTailEnd
 	 * @param {*} maxFlights
 	 */
-	carveRamps(edgeAlong, alignFromTailEnd, maxFlights) {
+	carveRamps(edgeAlong, alignTailEnd, maxFlights) {
 		var svg = $(this.makeSVG("g", {}));
 		this.map.append(svg, {});
 		svg.append(this.makeSVG("path", {stroke:"yellow", fill:"none", "stroke-width":0.55, d: edgeSVGString(edgeAlong)}));
 		var polygon = edgeAlong.polygon;
 
 		const T = this.rampLanding * 2 + this.rampLength;
+		const addFlightDist = this.rampLanding + this.rampLength;
 
 		let dx = edgeAlong.vertex.x - edgeAlong.prev.vertex.x;
 		let dz = edgeAlong.vertex.z - edgeAlong.prev.vertex.z;
 
-		svg.append(this.makeSVG("path", {stroke:"green", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.prev.vertex,  new Vector3().copy(edgeAlong.prev.vertex).add(new Vector3().subVectors(edgeAlong.vertex, edgeAlong.prev.vertex).normalize().multiplyScalar(T))) }));
+		if (alignTailEnd) svg.append(this.makeSVG("path", {stroke:"green", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.prev.vertex,  new Vector3().copy(edgeAlong.prev.vertex).add(new Vector3().subVectors(edgeAlong.vertex, edgeAlong.prev.vertex).normalize().multiplyScalar(addFlightDist))) }));
+		else svg.append(this.makeSVG("path", {stroke:"green", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.vertex,  new Vector3().copy(edgeAlong.vertex).add(new Vector3().subVectors(edgeAlong.prev.vertex, edgeAlong.vertex).normalize().multiplyScalar(addFlightDist))) }));
 
 		let pter;
-		svg.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.prev.vertex,  pter = new Vector3().copy(edgeAlong.prev.vertex).add(new Vector3().subVectors(edgeAlong.vertex, edgeAlong.prev.vertex).normalize().multiplyScalar(this.rampLanding))) }));
-		//svg.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(pter,  new Vector3().copy(pter).add(new Vector3().subVectors(edgeAlong.prev.vertex, edgeAlong.vertex).normalize().multiplyScalar(this.rampLanding))) }));
+		if (alignTailEnd) svg.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.prev.vertex,  pter = new Vector3().copy(edgeAlong.prev.vertex).add(new Vector3().subVectors(edgeAlong.vertex, edgeAlong.prev.vertex).normalize().multiplyScalar(this.rampLanding))) }));
+		else svg.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":this.rampWidth, d: lineSegmentSVGStr(edgeAlong.vertex,  pter = new Vector3().copy(edgeAlong.vertex).add(new Vector3().subVectors(edgeAlong.prev.vertex, edgeAlong.vertex).normalize().multiplyScalar(this.rampLanding))) }));
 
-		let D = Math.sqrt(dx * dx + dz * dz)
+		let dAccum = 0;
+		let dStart = -1;
+
+		let D = Math.sqrt(dx * dx + dz * dz);
+		let dClearance = D;
 		let nx = dz;
 		let nz = -dx;
 		let d = Math.sqrt(nx*nx + nz*nz);
 		nx /=d;
 		nz /=d;
+		const NX = nx;
+		const NZ = nz;
 
-		console.log("D:"+D);
-
+		let gradients = [];
 		let orderedEdges = [];
 		let edge = edgeAlong.next;
 		edgeAlong.offset = edgeAlong.vertex.x * nx + edgeAlong.vertex.z * nz;
@@ -926,7 +932,6 @@ class SVGCityReader {
 					// console.log(vertex on opposite tail side case)
 					g2.subVectors(orderedEdges[g].prev.vertex, orderedEdges[g].vertex);
 					d2 = orderedEdges[g].prev.offset -orderedEdges[g].offset;
-					lineSegment.set(orderedEdges[g].vertex, orderedEdges[g].prev.vertex);
 				} else {
 					// console.log("end vertex case");
 					g = len - 1;
@@ -937,40 +942,57 @@ class SVGCityReader {
 			}
 
 			d = orderedEdges[i].offset - (i >= 1 ? orderedEdges[i-1].offset : edgeAlong.offset);
-			if (d < 0) console.log("d should be positive magnitude!");
-			if (d === 0) continue; // no gradient found along zero offset distance
+			if (d < 0) console.error("d should be positive magnitude!");
+			if (d === 0) {
+				gradients.push(null);
+				continue; // no gradient found along zero offset distance
+			}
 
 			if (d1 < 0) console.error("d1 should be positive magnitude!");
 			if (d2 < 0) console.error("d2 should be positive magnitude!");
 			let g1grad = g1.dot(hUnit) / d1;
 			let g2grad = g2.dot(tUnit) / d2;
-
-
+			gradients.push([g1grad, g2grad, fromHeadside]);
 			g = g1grad + g2grad;
-
 
 			// minMaxD >= (T - D)/g
 			// minima maxima d, where T is minimum required target distance for placing a single flight of ramp, g is overall gradient on both ends,
 			// and D is current slice length at current i junctio point
 			let mmd;
 			if (T <= D) { // already met clearance
+				if (dStart < 0) dStart = 0;
 				if (g >= 0) {
 					console.log("for maxima: gradient>=0 will always meet space requirements for entire d. Can step add full d.");
+					dAccum += d
 				} else {
-					console.log("for maxima: gradient < 0 may not meet space requirements for entire d")
+					console.log("for maxima: gradient < 0 may not meet space requirements for entire d, if it doesnt, can early exit out of full loop with remaining d");
+					mmd = (T-D)/g;
+					console.log("mmd:"+mmd + " :has More:"+(mmd>=d));
+					if (mmd <= 0) {
+						break;	// no more gradient
+					}
+					if (mmd >= d) { // there may be more
+						dAccum += d;
+					} else {
+						dAccum += mmd; // reached end of closed gradient
+						break;
+					}
+
 				}
 			} else {  // have not met clearance
 				if (g >= 0) {
 					console.log("for minima: gradient>=0 may yet to meet space requirements for startD");
+					mmd = (T-D)/g;
+					console.log("mmd:"+mmd + " :MET:"+(mmd<=d));
+					if (mmd <= d) {
+						if (dStart < 0) dStart = mmd;
+						dAccum += (d - mmd);
+					}
 				} else {
 					console.log("for minima: gradient < 0 will never meet space requirements for remaining entire d. Can early exit out full loop!!")
+					break;
 				}
 			}
-
-			mmd = (T-D)/g;
-			console.log("mmd:"+mmd);
-
-			// lower than zero mmd typically indiccates
 
 			// update D to match new interval
 			D += g * d;
@@ -980,7 +1002,151 @@ class SVGCityReader {
 			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: orderedEdges[i].vertex.x, cy: orderedEdges[i].vertex.z}));
 		}
 
+		svg.append(this.makeSVG("path", {stroke:"pink", fill:"none", "stroke-width":0.14, d: lineSegmentSVGStr(pter = new Vector3().copy(edgeAlong.prev.vertex).add(edgeAlong.vertex).multiplyScalar(0.5).add(new Vector3(NX*dStart,0,NZ*dStart)), new Vector3(pter.x+NX*dAccum, 0, pter.z+NZ*dAccum)  ) }));
 
+
+		if (dStart < 0 || dAccum < this.highwayMinWidth) return null;
+
+		// Calculate columns+flights, and remaining clipped polygon
+
+		// walk up along span of potential ramp columns for contour
+		let walkD = 0; // distance walked so far
+		let maxColumns = Math.floor(dAccum / this.rampWidth);
+		let totalFlights = 0;
+
+		let dLimit = dStart + maxColumns * this.rampWidth - this.rampWidth;
+		i = 0;
+		let rampLayDir = alignTailEnd ? hUnit : tUnit;
+
+		// this.rampLength;
+		// this.rampLanding;
+		// this.rampWidth;
+		// this.rampMaxGradient; // to consider later for custom height settings
+
+		let columns = [];
+
+		// onlu required for contours tracing
+		let headV = new Vector3().copy(edgeAlong.vertex);
+		let tailV = new Vector3().copy(edgeAlong.prev.vertex);
+		let colContoursHead = [];
+		let colContoursTail = [];
+
+		while (walkD < dLimit) {
+			d = orderedEdges[i].offset - (i >= 1 ? orderedEdges[i-1].offset : edgeAlong.offset);
+			if (orderedEdges[i].offset - edgeAlong.offset <= dStart || d === 0) {
+				walkD += d;
+				i++;
+				headV.x += gradients[i][0] * d * hUnit.x + d * NX;
+				headV.z += gradients[i][0] * d * hUnit.z + d * NZ;
+				tailV.x += gradients[i][1] * d * tUnit.x + d * NX;
+				tailV.z += gradients[i][1] * d * tUnit.z + d * NZ;
+				dClearance += (gradients[i][0] + gradients[i][1]) * d;
+				continue;
+			}
+
+
+
+			if (dStart > walkD) {
+				g = dStart - walkD;
+				//walkD += g;
+				walkD = dStart;
+				headV.x += gradients[i][0] * g * hUnit.x + g * NX;
+				headV.z += gradients[i][0] * g * hUnit.z + g * NZ;
+				tailV.x += gradients[i][1] * g * tUnit.x + g * NX;
+				tailV.z += gradients[i][1] * g * tUnit.z + g * NZ;
+				dClearance += (gradients[i][0] + gradients[i][1]) * g;
+				console.log("Jump starrting:"+dClearance);
+			}
+
+
+
+			let lenOffset = edgeAlong.offset + walkD + this.rampWidth;
+
+			let rampDistLeft = this.rampWidth;
+			let curClearance = dClearance;
+
+			let c = 0;
+			let c2 = 0;
+			// start vertices for column
+			colContoursHead[c++] = headV.clone();
+			colContoursTail[c2++] = tailV.clone();
+			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
+			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
+			while(orderedEdges[i].offset < lenOffset) { // if end bound of ramp exceeds current orderedEdges points
+				// pick up any inbetween contour for head/tail end respectively
+				g = orderedEdges[i].offset - edgeAlong.offset - walkD;
+				rampDistLeft -= g;
+				walkD += g;
+				headV.x += gradients[i][0] * g * hUnit.x + g * NX;
+				headV.z += gradients[i][0] * g * hUnit.z + g * NZ;
+				tailV.x += gradients[i][1] * g * tUnit.x + g * NX;
+				tailV.z += gradients[i][1] * g * tUnit.z + g * NZ;
+				dClearance += (gradients[i][0] + gradients[i][1]) * g;
+				fromHeadside = gradients[i][2];
+				if (fromHeadside) {
+					colContoursHead[c++] = headV.clone();
+					svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
+				} else {
+					colContoursTail[c2++] = tailV.clone();
+					svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
+				}
+				i++;
+				//console.log("IN BETWEEN");
+			}
+
+			// end intersection
+			if (dClearance < curClearance) curClearance = dClearance;
+
+			// carve out polygon for slice
+
+			//console.log(curClearance);
+			let numFlightsForCol = Math.floor((curClearance - this.rampLanding)/addFlightDist);
+			totalFlights += numFlightsForCol;
+			columns.push({flights:numFlightsForCol}); // column built;
+
+			walkD += rampDistLeft;
+			headV.x += gradients[i][0] * rampDistLeft * hUnit.x + rampDistLeft * NX;
+			headV.z += gradients[i][0] * rampDistLeft * hUnit.z + rampDistLeft * NZ;
+			tailV.x += gradients[i][1] * rampDistLeft * tUnit.x + rampDistLeft * NX;
+			tailV.z += gradients[i][1] * rampDistLeft * tUnit.z + rampDistLeft * NZ;
+			dClearance += (gradients[i][0] + gradients[i][1]) * rampDistLeft;
+			colContoursHead[c++] = headV.clone();
+			colContoursTail[c2++] = tailV.clone();
+			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
+			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
+
+			colContoursHead.length = c;
+			colContoursTail.length = c2;
+
+			//console.log(colContoursHead+ " :: "+colContoursTail)
+			pter = new Polygon().fromContour(colContoursHead.concat(colContoursTail.reverse()));
+			//console.log(pter.convex(true));
+			svg.append(this.makeSVG("path", {stroke:"orange", fill:"none", "stroke-width":0.14, d: polygonSVGString(pter)  }));
+			// last ending vertices for column
+
+			if (columns.length >= maxFlights) {
+				break;
+			}
+		}
+
+		// based on number of columsn, get remaining clip polygon from headV and tailV
+		// dStart, dStart + this.rampWidth * columns.length
+
+		// each column slice definition (number of flights, starting from/to column edges position from which to start laying flights of ramps)
+		// totalFlights, totalColumns
+
+		let result = {
+			dStart: dStart,
+			dAccum: dAccum,
+			maxColumns: maxColumns,
+			totalFlights: totalFlights,
+			rampLayDir: rampLayDir,
+			columnLayDir: new Vector3(NX, 0, NZ),
+			columns: columns,
+		};
+
+		console.log("FINAL RESULT:"+dStart + " :: "+dAccum, result);
+		return result;
 	}
 
 
