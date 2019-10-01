@@ -18,6 +18,7 @@ const pointOnLineSegment = new Vector3();
 
 const CITADEL_WARD_INDEX = -1;
 const PLAZA_WARD_INDEX = -2;
+const T_EPSILON =  1e-7;
 
 
 
@@ -588,7 +589,7 @@ class SVGCityReader {
 
 		// Staircase/ramp settings
 		this.rampLength = 2.4;
-		this.rampLanding = 0.5;
+		this.rampLanding = 0.72;
 		this.rampWidth = 0.75;
 		this.rampMaxGradient = 0.83; // 40deg //0.9; // 42deg
 
@@ -836,7 +837,7 @@ class SVGCityReader {
 		//edges[Math.floor(Math.random() * edgeCount)]
 
 
-		this.carveRamps(edges[2], false, Infinity);
+		this.carveRamps(edges[2], true, Infinity);
 	}
 
 	/**
@@ -852,7 +853,7 @@ class SVGCityReader {
 		svg.append(this.makeSVG("path", {stroke:"yellow", fill:"none", "stroke-width":0.55, d: edgeSVGString(edgeAlong)}));
 		var polygon = edgeAlong.polygon;
 
-		const T = this.rampLanding * 2 + this.rampLength;
+		const T = this.rampLanding * 2 + this.rampLength + T_EPSILON;
 		const addFlightDist = this.rampLanding + this.rampLength;
 
 		let dx = edgeAlong.vertex.x - edgeAlong.prev.vertex.x;
@@ -1031,6 +1032,11 @@ class SVGCityReader {
 		let colContoursHead = [];
 		let colContoursTail = [];
 
+		const columnLayDir = new Vector3(NX, 0, NZ);
+		const columnLayOffsetVec = new Vector3(NX, 0, NZ).multiplyScalar(this.rampWidth);
+		const landingOffsetVec = new Vector3(rampLayDir.x, 0, rampLayDir.z).multiplyScalar(this.rampLanding);
+		const dummyVector = new Vector3();
+
 		while (walkD < dLimit) {
 			d = orderedEdges[i].offset - (i >= 1 ? orderedEdges[i-1].offset : edgeAlong.offset);
 			if (orderedEdges[i].offset - edgeAlong.offset <= dStart || d === 0) {
@@ -1059,7 +1065,6 @@ class SVGCityReader {
 			}
 
 
-
 			let lenOffset = edgeAlong.offset + walkD + this.rampWidth;
 
 			let rampDistLeft = this.rampWidth;
@@ -1070,8 +1075,9 @@ class SVGCityReader {
 			// start vertices for column
 			colContoursHead[c++] = headV.clone();
 			colContoursTail[c2++] = tailV.clone();
-			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
-			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
+
+			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
+			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
 			while(orderedEdges[i].offset < lenOffset) { // if end bound of ramp exceeds current orderedEdges points
 				// pick up any inbetween contour for head/tail end respectively
 				g = orderedEdges[i].offset - edgeAlong.offset - walkD;
@@ -1085,35 +1091,85 @@ class SVGCityReader {
 				fromHeadside = gradients[i][2];
 				if (fromHeadside) {
 					colContoursHead[c++] = headV.clone();
-					svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
+					//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
 				} else {
 					colContoursTail[c2++] = tailV.clone();
-					svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
+					//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
 				}
 				i++;
-				//console.log("IN BETWEEN");
+					console.log("IN BETWEEN");
 			}
 
+
+
+			walkD += rampDistLeft;
+			dClearance += (gradients[i][0] + gradients[i][1]) * rampDistLeft;
+			headV.x += gradients[i][0] * rampDistLeft * hUnit.x + rampDistLeft * NX;
+			headV.z += gradients[i][0] * rampDistLeft * hUnit.z + rampDistLeft * NZ;
+			tailV.x += gradients[i][1] * rampDistLeft * tUnit.x + rampDistLeft * NX;
+			tailV.z += gradients[i][1] * rampDistLeft * tUnit.z + rampDistLeft * NZ;
+
+			let useLatterEdge = false;
 			// end intersection
-			if (dClearance < curClearance) curClearance = dClearance;
+			if (dClearance < curClearance) {
+				curClearance = dClearance;
+				useLatterEdge = true;
+				//svg.append(this.makeSVG("circle", {stroke:"red", fill:"red", r:0.15, cx: (alignTailEnd ? tailV : headV).x, cy: (alignTailEnd ? tailV : headV).z}));
+			}
+			// else {
+				//svg.append(this.makeSVG("circle", {stroke:"green", fill:"green", r:0.15, cx: (alignTailEnd ? tailV : headV).x, cy: (alignTailEnd ? tailV : headV).z}));
+			//}
 
 			// carve out polygon for slice
 
 			//console.log(curClearance);
 			let numFlightsForCol = Math.floor((curClearance - this.rampLanding)/addFlightDist);
 			totalFlights += numFlightsForCol;
+
+
 			columns.push({flights:numFlightsForCol}); // column built;
 
-			walkD += rampDistLeft;
-			headV.x += gradients[i][0] * rampDistLeft * hUnit.x + rampDistLeft * NX;
-			headV.z += gradients[i][0] * rampDistLeft * hUnit.z + rampDistLeft * NZ;
-			tailV.x += gradients[i][1] * rampDistLeft * tUnit.x + rampDistLeft * NX;
-			tailV.z += gradients[i][1] * rampDistLeft * tUnit.z + rampDistLeft * NZ;
-			dClearance += (gradients[i][0] + gradients[i][1]) * rampDistLeft;
-			colContoursHead[c++] = headV.clone();
-			colContoursTail[c2++] = tailV.clone();
-			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
-			svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
+			///*
+			if (useLatterEdge) {
+				colContoursHead[c-1].copy(headV).sub(columnLayOffsetVec);
+				colContoursTail[c2-1].copy(tailV).sub(columnLayOffsetVec);
+				colContoursHead[c++] = headV.clone();
+				colContoursTail[c2++] = tailV.clone();
+			} else {
+				colContoursHead[c] = colContoursHead[c-1].clone().add(columnLayOffsetVec);
+				colContoursTail[c2] = colContoursTail[c2-1].clone().add(columnLayOffsetVec);
+				c++;
+				c2++;
+			}
+
+			dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
+
+			if (alignTailEnd) {
+				colContoursTail[c2-1].add(landingOffsetVec);
+				colContoursTail[c2-2].add(landingOffsetVec);
+
+				colContoursHead[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
+				colContoursHead[c-2].copy(colContoursTail[c2-2]).add(dummyVector);
+
+			} else {
+				colContoursHead[c-1].add(landingOffsetVec);
+				colContoursHead[c-2].add(landingOffsetVec);
+
+				colContoursTail[c2-1].copy(colContoursHead[c-1]).add(dummyVector);
+				colContoursTail[c2-2].copy(colContoursHead[c-2]).add(dummyVector);
+				//dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
+				//colContoursTail[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
+				//colContoursHead[c-2].copy(colContoursTail[c2-2]).add(dummyVector);
+			}
+
+			//*/
+
+			//colContoursHead[c++] = headV.clone();
+			//colContoursTail[c2++] = tailV.clone();
+
+
+			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
+			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
 
 			colContoursHead.length = c;
 			colContoursTail.length = c2;
@@ -1124,6 +1180,8 @@ class SVGCityReader {
 			svg.append(this.makeSVG("path", {stroke:"orange", fill:"none", "stroke-width":0.14, d: polygonSVGString(pter)  }));
 			// last ending vertices for column
 
+
+
 			if (columns.length >= maxFlights) {
 				break;
 			}
@@ -1132,8 +1190,14 @@ class SVGCityReader {
 		// based on number of columsn, get remaining clip polygon from headV and tailV
 		// dStart, dStart + this.rampWidth * columns.length
 
+		/*
+		For each column
+		Landing polygon top
+		Ramp polygon (if numOfFlights > 1, add in preceding landing before each non-first ramp,)
+		Landing polygon bottom
+		*/
 		// each column slice definition (number of flights, starting from/to column edges position from which to start laying flights of ramps)
-		// totalFlights, totalColumns
+		// totalFlights, columns
 
 		let result = {
 			dStart: dStart,
@@ -1141,7 +1205,7 @@ class SVGCityReader {
 			maxColumns: maxColumns,
 			totalFlights: totalFlights,
 			rampLayDir: rampLayDir,
-			columnLayDir: new Vector3(NX, 0, NZ),
+			columnLayDir: columnLayDir,
 			columns: columns,
 		};
 
