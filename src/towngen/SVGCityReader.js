@@ -589,7 +589,7 @@ class SVGCityReader {
 
 		// Staircase/ramp settings
 		this.rampLength = 2.4;
-		this.rampLanding = 0.72;
+		this.rampLanding = 0.75;
 		this.rampWidth = 0.75;
 		this.rampMaxGradient = 0.83; // 40deg //0.9; // 42deg
 
@@ -837,7 +837,7 @@ class SVGCityReader {
 		//edges[Math.floor(Math.random() * edgeCount)]
 
 
-		this.carveRamps(edges[2], true, Infinity);
+		this.carveRamps(edges[1], false, Infinity);
 	}
 
 	/**
@@ -1073,8 +1073,10 @@ class SVGCityReader {
 			let c = 0;
 			let c2 = 0;
 			// start vertices for column
-			colContoursHead[c++] = headV.clone();
-			colContoursTail[c2++] = tailV.clone();
+			let alphaHead;
+			let alphaTail;
+			colContoursHead[c++] = alphaHead = headV.clone();
+			colContoursTail[c2++] = alphaTail = tailV.clone();
 
 			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
 			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
@@ -1097,7 +1099,7 @@ class SVGCityReader {
 					//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
 				}
 				i++;
-					console.log("IN BETWEEN");
+				console.log("IN BETWEEN");
 			}
 
 
@@ -1116,9 +1118,9 @@ class SVGCityReader {
 				useLatterEdge = true;
 				//svg.append(this.makeSVG("circle", {stroke:"red", fill:"red", r:0.15, cx: (alignTailEnd ? tailV : headV).x, cy: (alignTailEnd ? tailV : headV).z}));
 			}
-			// else {
+			 else {
 				//svg.append(this.makeSVG("circle", {stroke:"green", fill:"green", r:0.15, cx: (alignTailEnd ? tailV : headV).x, cy: (alignTailEnd ? tailV : headV).z}));
-			//}
+			 }
 
 			// carve out polygon for slice
 
@@ -1131,42 +1133,40 @@ class SVGCityReader {
 
 			///*
 			if (useLatterEdge) {
-				colContoursHead[c-1].copy(headV).sub(columnLayOffsetVec);
-				colContoursTail[c2-1].copy(tailV).sub(columnLayOffsetVec);
+				alphaHead.copy(headV).sub(columnLayOffsetVec);
+				alphaTail.copy(tailV).sub(columnLayOffsetVec);
 				colContoursHead[c++] = headV.clone();
 				colContoursTail[c2++] = tailV.clone();
 			} else {
-				colContoursHead[c] = colContoursHead[c-1].clone().add(columnLayOffsetVec);
-				colContoursTail[c2] = colContoursTail[c2-1].clone().add(columnLayOffsetVec);
+				colContoursHead[c] = alphaHead.clone().add(columnLayOffsetVec);
+				colContoursTail[c2] = alphaTail.clone().add(columnLayOffsetVec);
 				c++;
 				c2++;
 			}
-
-			dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
-
-			if (alignTailEnd) {
-				colContoursTail[c2-1].add(landingOffsetVec);
-				colContoursTail[c2-2].add(landingOffsetVec);
-
-				colContoursHead[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
-				colContoursHead[c-2].copy(colContoursTail[c2-2]).add(dummyVector);
-
-			} else {
-				colContoursHead[c-1].add(landingOffsetVec);
-				colContoursHead[c-2].add(landingOffsetVec);
-
-				colContoursTail[c2-1].copy(colContoursHead[c-1]).add(dummyVector);
-				colContoursTail[c2-2].copy(colContoursHead[c-2]).add(dummyVector);
-				//dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
-				//colContoursTail[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
-				//colContoursHead[c-2].copy(colContoursTail[c2-2]).add(dummyVector);
-			}
-
 			//*/
 
 			//colContoursHead[c++] = headV.clone();
 			//colContoursTail[c2++] = tailV.clone();
 
+			dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
+
+			if (alignTailEnd) {
+				colContoursTail[c2-1].add(landingOffsetVec);
+				alphaTail.add(landingOffsetVec);
+
+				colContoursHead[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
+				alphaHead.copy(alphaTail).add(dummyVector);
+
+			} else {
+				colContoursHead[c-1].add(landingOffsetVec);
+				alphaHead.add(landingOffsetVec);
+
+				colContoursTail[c2-1].copy(colContoursHead[c-1]).add(dummyVector);
+				alphaTail.copy(alphaHead).add(dummyVector);
+				//dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
+				//colContoursTail[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
+				//colContoursHead[c-2].copy(colContoursTail[c2-2]).add(dummyVector);
+			}
 
 			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
 			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
@@ -1175,7 +1175,8 @@ class SVGCityReader {
 			colContoursTail.length = c2;
 
 			//console.log(colContoursHead+ " :: "+colContoursTail)
-			pter = new Polygon().fromContour(colContoursHead.concat(colContoursTail.reverse()));
+			//pter = new Polygon().fromContour(colContoursHead.concat(colContoursTail.reverse()));
+			pter = new Polygon().fromContour([alphaHead, colContoursHead[c-1], colContoursTail[c2-1], alphaTail]);
 			//console.log(pter.convex(true));
 			svg.append(this.makeSVG("path", {stroke:"orange", fill:"none", "stroke-width":0.14, d: polygonSVGString(pter)  }));
 			// last ending vertices for column
