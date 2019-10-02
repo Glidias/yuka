@@ -4,6 +4,7 @@ import { NavEdge } from '../core/NavEdge.js';
 import { Vector3 } from '../../math/Vector3.js';
 import { Polygon } from '../../math/Polygon.js';
 import { Plane } from '../../math/Plane.js';
+import {HalfEdge} from '../../math/HalfEdge';
 
 var MAX_HOLE_LEN = 16;
 
@@ -43,9 +44,9 @@ function searchEdge(map, builtContour, edge, startingEdge, bi) {
 
 class NavMeshUtils {
 
-    // TODO: extrude boundary edges/ retrieve holes to fill up by boundary edges
+    // TODO: extrude boundary edges to fill up by boundary edges
     // boundary edge: add polygon extrude..
-    // boundary edge: inset
+    // todo: boundary edge: inset
 
     /*
     static cacheRegionIndexLookup(navMesh) {
@@ -80,8 +81,12 @@ class NavMeshUtils {
         let regions = polygons.regions || polygons;
         let len = regions.length;
         for (let i=0; i< len; i++) {
-            // consider..create new one ?
-            regions[i].twin = null;
+            let r = regions[i];
+            let edge = r.edge;
+            do {
+                edge.twin = null;
+                edge = edge.next;
+            } while( edge !== r.edge)
         }
         return regions;
     }
@@ -106,6 +111,26 @@ class NavMeshUtils {
             } while (edge !== r.edge)
         }
     }
+
+    static divideEdgeByVertex(splitVertex, edge) {
+        let halfEdge = new HalfEdge(splitVertex);
+        halfEdge.polygon = edge.polygon;
+        
+        halfEdge.prev = edge.prev;
+        edge.prev.next = halfEdge;
+
+        halfEdge.next = edge;
+        edge.prev = halfEdge;
+    }
+
+    static adjustAltitudeOfPolygon(polygon, altitude) {
+        let edge = polygon.edge;
+        do {
+            edge.vertex.y += altitude;
+            edge = edge.next;
+        } while (edge !== polygon.edge);
+    }
+
 
    /**
     * Note: This function is 2D and assumed to work only on x and z coordinates of polygons
