@@ -3,8 +3,11 @@ import { NavNode } from '../core/NavNode.js';
 import { NavEdge } from '../core/NavEdge.js';
 import { Vector3 } from '../../math/Vector3.js';
 import { Polygon } from '../../math/Polygon.js';
+import { Plane } from '../../math/Plane.js';
 
 var MAX_HOLE_LEN = 16;
+
+const PLANE = new Plane();
 
 // dfs search through edges by related mapped edge.prev vertices
 function searchEdgeList(map, builtContour, startingEdge) {
@@ -103,6 +106,73 @@ class NavMeshUtils {
             } while (edge !== r.edge)
         }
     }
+
+   /**
+    * Note: This function is 2D and assumed to work only on x and z coordinates of polygons
+    * @param {Vertex} vertex Vertex is assumed to already lie directly on given edge split
+    * @param {Vertex} fromEdge The edge containing the vertex belonging to polygon to be splitted, and whose vertex is where to split the polygon from
+    * @return [Polygon] Array of 2 polygons
+    */
+    static dividePolygonByVertices2D(splitVertex, fromEdge, rightHanded=false) {
+        let fromVertex = fromEdge.vertex;
+        let dx = splitVertex.x - fromVertex.x;
+        let dz = splitVertex.z - fromVertex.z;
+        let handedness = rightHanded ? 1 : -1;
+        let nx = -dz * handedness;
+        let nz = dx * handedness;
+        let offset = nx * fromVertex.x + nz * fromVertex.z;
+        let polyContours = [fromVertex, splitVertex];
+        let polyContours2 = [splitVertex, fromVertex];
+        let edge = fromEdge.next;
+        do {
+            let v = edge.vertex;
+            if (nx * v.x + nz * v.z >= offset) {
+                polyContours.push(v);
+            } else {
+                polyContours2.push(v);
+            }
+            edge = edge.next;
+        } while (edge !== fromEdge);
+
+        if (polyContours.length < 3 || polyContours2.length < 3) {
+            console.warn("dividePolygonByVertices2D ERROR:", polyContours, polyContours2);
+            return null;
+        }
+
+
+
+        let result =  [new Polygon().fromContour(polyContours), new Polygon().fromContour(polyContours2)];
+        console.log(result[0].convex(true), result[1].convex(true))
+        return result;
+    }
+
+
+    static dividePolygonByVertices(splitVertex, fromEdge) {
+        let fromVertex = fromEdge.vertex;
+        PLANE.normal.crossVectors(fromEdge.polygon.plane.normal, new Vector3().subVectors(splitVertex, fromVertex));
+        PLANE.fromNormalAndCoplanarPoint(PLANE.normal, fromVertex);
+
+        let polyContours = [fromVertex, splitVertex];
+        let polyContours2 = [splitVertex, fromVertex];
+        let edge = fromVertex.next;
+        do {
+            let v = edge.vertex;
+            if (PLANE.normal.dot(v)>=PLANE.constant) {
+                polyContours.push(v);
+            } else {
+                polyContours2.push(v);
+            }
+            edge = edge.next;
+        } while (edge !== fromVertex);
+
+        if (polyContours.length < 3 || polyContours2.length < 3) {
+            console.warn("dividePolygonByVertices ERROR:", polyContours, polyContours2);
+            return null;
+        }
+
+        return [new Polygon().fromContour(polyContours), new Polygon().fromContour(polyContours2)];
+    }
+
 
     static patchHoles(navmesh, holesAdded) {
         if (!holesAdded) holesAdded = [];

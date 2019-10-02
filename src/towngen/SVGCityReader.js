@@ -836,8 +836,71 @@ class SVGCityReader {
 
 		//edges[Math.floor(Math.random() * edgeCount)]
 
+		const alignTailEnd = false;
+		let result = this.carveRamps(edges[2], alignTailEnd, Infinity);
 
-		this.carveRamps(edges[1], false, Infinity);
+		var svg = $(this.makeSVG("g", {}));
+		this.map.append(svg, {});
+
+		let polySoup = [];
+		let geometries = [];
+		result.columns.forEach((column, index)=> {
+			let geom = this.getGeometryFromColumn(column, alignTailEnd, result);
+			//svg.append(this.makeSVG("path", {stroke:"green", fill:"none", "stroke-width":0.1, d: polygonSVGString(geom.head)  }));
+			//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.1, d: polygonSVGString(geom.tail)  }));
+
+			geom.ramp.forEach((r)=> {
+				polySoup.push(r);
+				//svg.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.14, d: polygonSVGString(geom.ramp)  }));
+			});
+
+			geometries.push(geom);
+		});
+
+		const testZigzag = true;
+		// zig zag navmesh connections
+		geometries.forEach((geom, index, arr)=> {
+			let splits = null;
+
+			if (testZigzag&&!!(index & 1) !== alignTailEnd) {
+				if ( index < arr.length - 1 && (splits=this.connectColumns(geom, arr[index+1], alignTailEnd, false, result))!==null) {
+					console.log( " : "+index + " head");
+					polySoup.push(splits[0]);
+					polySoup.push(splits[1]);
+				} else {
+					polySoup.push(geom.head);
+				}
+				//if (!(index & 1)) flipForOther = !flipForOther;
+			} else {
+				polySoup.push(geom.head);
+			}
+
+			if (testZigzag&&!!(index & 1) === alignTailEnd) {
+				if ( index < arr.length - 1 && (splits=this.connectColumns(geom, arr[index+1], alignTailEnd, true, result))!==null) {
+					console.log( " : "+index + " tail");
+					polySoup.push(splits[0]);
+					polySoup.push(splits[1]);
+				} else {
+					polySoup.push(geom.tail);
+				}
+				//if (!(index & 1)) flipForOther = !flipForOther;
+			} else {
+				polySoup.push(geom.tail);
+			}
+		});
+
+
+		let navmesh = new NavMesh();
+
+		//let cdtObj = this.getCDTObjFromPointsList(polySoup.map(polygonToCell), true, {exterior:true});
+		//polySoup = cdtObj.cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)});
+
+		navmesh.attemptMergePolies = false;
+		navmesh.fromPolygons(polySoup);
+
+
+		svg.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 	}
 
 	/**
@@ -847,7 +910,10 @@ class SVGCityReader {
 	 * @param {} alignTailEnd
 	 * @param {*} maxFlights
 	 */
-	carveRamps(edgeAlong, alignTailEnd, maxFlights) {
+	carveRamps(edgeAlong, alignTailEnd, maxFlights, maxFlightsPerColumn) {
+		if (maxFlights === undefined) maxFlights = Infinity;
+		if (maxFlightsPerColumn === undefined) maxFlightsPerColumn = Infinity;
+
 		var svg = $(this.makeSVG("g", {}));
 		this.map.append(svg, {});
 		svg.append(this.makeSVG("path", {stroke:"yellow", fill:"none", "stroke-width":0.55, d: edgeSVGString(edgeAlong)}));
@@ -1035,7 +1101,7 @@ class SVGCityReader {
 		const columnLayDir = new Vector3(NX, 0, NZ);
 		const columnLayOffsetVec = new Vector3(NX, 0, NZ).multiplyScalar(this.rampWidth);
 		const landingOffsetVec = new Vector3(rampLayDir.x, 0, rampLayDir.z).multiplyScalar(this.rampLanding);
-		const dummyVector = new Vector3();
+		//const dummyVector = new Vector3();
 
 		while (walkD < dLimit) {
 			d = orderedEdges[i].offset - (i >= 1 ? orderedEdges[i-1].offset : edgeAlong.offset);
@@ -1061,7 +1127,7 @@ class SVGCityReader {
 				tailV.x += gradients[i][1] * g * tUnit.x + g * NX;
 				tailV.z += gradients[i][1] * g * tUnit.z + g * NZ;
 				dClearance += (gradients[i][0] + gradients[i][1]) * g;
-				console.log("Jump starrting:"+dClearance);
+				// console.log("Jump starrting:"+dClearance);
 			}
 
 
@@ -1073,10 +1139,8 @@ class SVGCityReader {
 			let c = 0;
 			let c2 = 0;
 			// start vertices for column
-			let alphaHead;
-			let alphaTail;
-			colContoursHead[c++] = alphaHead = headV.clone();
-			colContoursTail[c2++] = alphaTail = tailV.clone();
+			colContoursHead[c++] =  headV.clone();
+			colContoursTail[c2++] = tailV.clone();
 
 			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
 			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
@@ -1099,7 +1163,7 @@ class SVGCityReader {
 					//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
 				}
 				i++;
-				console.log("IN BETWEEN");
+				// console.log("IN BETWEEN");
 			}
 
 
@@ -1118,72 +1182,28 @@ class SVGCityReader {
 				useLatterEdge = true;
 				//svg.append(this.makeSVG("circle", {stroke:"red", fill:"red", r:0.15, cx: (alignTailEnd ? tailV : headV).x, cy: (alignTailEnd ? tailV : headV).z}));
 			}
-			 else {
+			//else {
 				//svg.append(this.makeSVG("circle", {stroke:"green", fill:"green", r:0.15, cx: (alignTailEnd ? tailV : headV).x, cy: (alignTailEnd ? tailV : headV).z}));
-			 }
+			// }
 
 			// carve out polygon for slice
 
 			//console.log(curClearance);
 			let numFlightsForCol = Math.floor((curClearance - this.rampLanding)/addFlightDist);
+			if (numFlightsForCol > maxFlightsPerColumn) {
+				numFlightsForCol = maxFlightsPerColumn;
+			}
 			totalFlights += numFlightsForCol;
 
-
-			columns.push({flights:numFlightsForCol}); // column built;
-
-			///*
-			if (useLatterEdge) {
-				alphaHead.copy(headV).sub(columnLayOffsetVec);
-				alphaTail.copy(tailV).sub(columnLayOffsetVec);
-				colContoursHead[c++] = headV.clone();
-				colContoursTail[c2++] = tailV.clone();
-			} else {
-				colContoursHead[c] = alphaHead.clone().add(columnLayOffsetVec);
-				colContoursTail[c2] = alphaTail.clone().add(columnLayOffsetVec);
-				c++;
-				c2++;
-			}
-			//*/
-
-			//colContoursHead[c++] = headV.clone();
-			//colContoursTail[c2++] = tailV.clone();
-
-			dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
-
-			if (alignTailEnd) {
-				colContoursTail[c2-1].add(landingOffsetVec);
-				alphaTail.add(landingOffsetVec);
-
-				colContoursHead[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
-				alphaHead.copy(alphaTail).add(dummyVector);
-
-			} else {
-				colContoursHead[c-1].add(landingOffsetVec);
-				alphaHead.add(landingOffsetVec);
-
-				colContoursTail[c2-1].copy(colContoursHead[c-1]).add(dummyVector);
-				alphaTail.copy(alphaHead).add(dummyVector);
-				//dummyVector.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
-				//colContoursTail[c-1].copy(colContoursTail[c2-1]).add(dummyVector);
-				//colContoursHead[c-2].copy(colContoursTail[c2-2]).add(dummyVector);
-			}
-
-			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: headV.x, cy: headV.z}));
-			//svg.append(this.makeSVG("circle", {stroke:"green", fill:"red", r:0.15, cx: tailV.x, cy: tailV.z}));
+			colContoursHead[c++] = headV.clone();
+			colContoursTail[c2++] = tailV.clone();
 
 			colContoursHead.length = c;
 			colContoursTail.length = c2;
 
-			//console.log(colContoursHead+ " :: "+colContoursTail)
-			//pter = new Polygon().fromContour(colContoursHead.concat(colContoursTail.reverse()));
-			pter = new Polygon().fromContour([alphaHead, colContoursHead[c-1], colContoursTail[c2-1], alphaTail]);
-			//console.log(pter.convex(true));
-			svg.append(this.makeSVG("path", {stroke:"orange", fill:"none", "stroke-width":0.14, d: polygonSVGString(pter)  }));
-			// last ending vertices for column
+			columns.push({flights:numFlightsForCol, useLatterEdge:useLatterEdge, colContoursHead:colContoursHead.slice(0), colContoursTail:colContoursTail.slice(0)}); // column built;
 
-
-
-			if (columns.length >= maxFlights) {
+			if (totalFlights >= maxFlights) {
 				break;
 			}
 		}
@@ -1212,6 +1232,173 @@ class SVGCityReader {
 
 		console.log("FINAL RESULT:"+dStart + " :: "+dAccum, result);
 		return result;
+	}
+
+	getGeometryFromColumn(column, alignTailEnd, result, scale, precision) {
+		const columnLayDir = result.columnLayDir;
+		const rampLayDir = result.rampLayDir;
+		const columnLayOffsetVec = new Vector3(columnLayDir.x, 0, columnLayDir.z).multiplyScalar(this.rampWidth);
+		const landingOffsetVec = new Vector3(rampLayDir.x, 0, rampLayDir.z).multiplyScalar(this.rampLanding);
+		const lengthOffsetVec = new Vector3();
+
+		const numFlightsForCol = column.flights;
+		const useLatterEdge = column.useLatterEdge;
+		let colContoursHead = column.colContoursHead;
+		let colContoursTail = column.colContoursTail;
+		if (scale !== undefined && scale !== 1 && scale !== 0) {
+			colContoursHead = colContoursHead.map((v)=>{
+				v = v.clone();
+				v.x *= scale;
+				v.z *= scale;
+				return v;
+			});
+			colContoursTail = colContoursTail.map((v)=>{
+				v = v.clone();
+				v.x *= scale;
+				v.z *= scale;
+				return v;
+			});
+		}
+
+		let alphaHead = colContoursHead[0].clone();
+		let alphaTail=  colContoursTail[0].clone();
+		let omegaHead;
+		let omegaTail;
+
+		const addFlightDist = this.rampLanding + this.rampLength;
+
+		if (useLatterEdge) {
+			omegaHead = colContoursHead[colContoursHead.length-1].clone();
+			omegaTail = colContoursTail[colContoursTail.length-1].clone();
+			alphaHead.copy(omegaHead).sub(columnLayOffsetVec);
+			alphaTail.copy(omegaTail).sub(columnLayOffsetVec);
+
+		} else {
+			omegaHead = alphaHead.clone().add(columnLayOffsetVec);
+			omegaTail = alphaTail.clone().add(columnLayOffsetVec);
+		}
+
+		if (precision !== undefined) {  // kinda unreliable this method
+			alphaHead.offsetC = alphaHead.x * columnLayDir.x + alphaHead.z * columnLayDir.z;
+			alphaHead.offset = alphaHead.x * rampLayDir.x + alphaHead.z * rampLayDir.z;
+			alphaTail.offsetC = alphaTail.x * columnLayDir.x + alphaTail.z * columnLayDir.z;
+			alphaTail.offset = alphaTail.x * rampLayDir.x + alphaTail.z * rampLayDir.z;
+			omegaHead.offsetC = omegaHead.x * columnLayDir.x + omegaHead.z * columnLayDir.z;
+			omegaHead.offset = omegaHead.x * rampLayDir.x + omegaHead.z * rampLayDir.z;
+			omegaTail.offsetC = omegaTail.x * columnLayDir.x + omegaTail.z * columnLayDir.z;
+			omegaTail.offset = omegaTail.x * rampLayDir.x + omegaTail.z * rampLayDir.z;
+
+			alphaHead.offset = Math.round(alphaHead.offset/precision) * precision;
+			alphaTail.offset = Math.round(alphaTail.offset/precision) * precision;
+			omegaHead.offset = Math.round(omegaHead.offset/precision) * precision;
+			omegaTail.offset = Math.round(omegaTail.offset/precision) * precision;
+
+			alphaHead.x = alphaHead.offset * rampLayDir.x + alphaHead.offsetC * columnLayDir.x;
+			alphaHead.z = alphaHead.offset * rampLayDir.z + alphaHead.offsetC * columnLayDir.z;
+
+			alphaTail.x = alphaTail.offset * rampLayDir.x + alphaTail.offsetC * columnLayDir.x;
+			alphaTail.z = alphaTail.offset * rampLayDir.z + alphaTail.offsetC * columnLayDir.z;
+
+			omegaHead.x = omegaHead.offset * rampLayDir.x + omegaHead.offsetC * columnLayDir.x;
+			omegaHead.z = omegaHead.offset * rampLayDir.z + omegaHead.offsetC * columnLayDir.z;
+
+			omegaTail.x = omegaTail.offset * rampLayDir.x + omegaTail.offsetC * columnLayDir.x;
+			omegaTail.z = omegaTail.offset * rampLayDir.z + omegaTail.offsetC * columnLayDir.z;
+		}
+
+		lengthOffsetVec.copy(rampLayDir).multiplyScalar((addFlightDist * numFlightsForCol - this.rampLanding));
+
+		if (alignTailEnd) {
+			omegaTail.add(landingOffsetVec);
+			alphaTail.add(landingOffsetVec);
+
+			omegaHead.copy(omegaTail).add(lengthOffsetVec);
+			alphaHead.copy(alphaTail).add(lengthOffsetVec);
+
+		} else {
+			omegaHead.add(landingOffsetVec);
+			alphaHead.add(landingOffsetVec);
+
+			omegaTail.copy(omegaHead).add(lengthOffsetVec);
+			alphaTail.copy(alphaHead).add(lengthOffsetVec);
+		}
+
+		//var svg = $(this.makeSVG("g", {}));
+		//this.map.append(svg, {});
+
+		let rampPolygons = [];
+
+		if (numFlightsForCol > 1) {
+			lengthOffsetVec.copy(rampLayDir).multiplyScalar(this.rampLength);
+			let len = numFlightsForCol - 1;
+			let aEnd = alignTailEnd ? alphaTail : alphaHead;
+			let bEnd = alignTailEnd ? omegaTail : omegaHead;
+			for (let i=0; i< len; i++) {
+				// slope
+				let a = aEnd.clone().add(lengthOffsetVec);
+				let b = bEnd.clone().add(lengthOffsetVec);
+				rampPolygons.push(new Polygon().fromContour(alignTailEnd ? [a, b, bEnd, aEnd] : [aEnd, bEnd, b, a]));
+
+				// landing
+				bEnd=b.clone().add(landingOffsetVec);
+				aEnd=a.clone().add(landingOffsetVec);
+				rampPolygons.push(new Polygon().fromContour(alignTailEnd ? [aEnd, bEnd, b, a] : [a, b, bEnd, aEnd] ));
+			}
+			//svg.append(this.makeSVG("circle", {stroke:"red", fill:"red", r:0.15, cx: aEnd.x, cy: aEnd.z}));
+			// final slope
+			rampPolygons.push(new Polygon().fromContour(alignTailEnd ? [alphaHead, omegaHead, bEnd, aEnd] : [aEnd, bEnd, omegaTail, alphaTail]));
+		} else {
+			rampPolygons.push(new Polygon().fromContour([alphaHead, omegaHead, omegaTail, alphaTail]));
+		}
+
+		rampPolygons.forEach((p)=>{
+			console.log(p.convex(true));
+		});
+
+		let test = new Polygon().fromContour(colContoursHead.concat([omegaHead, alphaHead]));
+		let geomResult = {
+			ramp: rampPolygons,
+			head: new Polygon().fromContour(colContoursHead.concat([omegaHead, alphaHead])),
+			tail: new Polygon().fromContour(colContoursTail.slice(0).reverse().concat([alphaTail, omegaTail]))
+		};
+		return geomResult;
+	}
+
+	connectColumns(columnGeom, columnGeom2, alignTailEnd, joinAtTailSide, result) {
+		let poly = joinAtTailSide ? columnGeom.tail : columnGeom.head;
+		let poly2 = joinAtTailSide ? columnGeom2.tail : columnGeom2.head;
+
+		let layDirSwitch = alignTailEnd !== joinAtTailSide ? -1 : 1;
+
+		const rampLayDir = result.rampLayDir;
+		let offset = rampLayDir.x*layDirSwitch * poly.edge.prev.vertex.x + rampLayDir.z*layDirSwitch * poly.edge.prev.vertex.z;
+		let offset2 = rampLayDir.x*layDirSwitch * poly2.edge.prev.vertex.x + rampLayDir.z *layDirSwitch* poly2.edge.prev.vertex.z;
+		if (offset === offset2) {
+			return null;
+		}
+
+		let splitVertex;
+		let fromEdge;
+		if (offset >= offset2) {
+			//console.log("offset higher")
+			//join column into column2
+			// into column's alphaVertex
+			splitVertex = joinAtTailSide ? poly2.edge.prev.prev.vertex : poly2.edge.prev.vertex;
+			fromEdge = joinAtTailSide ?  poly.edge.prev.prev : poly.edge.prev;
+		} else {
+			//console.log("offset2 higher")
+			//join column2 into column1
+			// into column's omegaVertex
+			splitVertex = joinAtTailSide ? poly.edge.prev.vertex : poly.edge.prev.prev.vertex;
+			fromEdge = joinAtTailSide ?  poly2.edge.prev : poly2.edge.prev.prev;
+
+		}
+		//var svg = $(this.makeSVG("g", {}));
+		//this.map.append(svg, {});
+		//svg.append(this.makeSVG("circle", {stroke:"red", "stroke-width": 1, fill:"red", r:0.05, cx:splitVertex.x , cy:splitVertex.z}));
+		//svg.append(this.makeSVG("circle", {stroke:"blue", "stroke-width": 1, fill:"red", r:0.025, cx:fromEdge.vertex.x , cy:fromEdge.vertex.z}));
+		// return null;
+		return NavMeshUtils.dividePolygonByVertices2D(splitVertex, fromEdge);
 	}
 
 
