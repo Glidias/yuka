@@ -105,7 +105,7 @@ class NavMeshUtils {
         return connector3;
     }
 
-    /*
+
     static scalePolygons(polygons, xzScale) {
         transformId++;
         let len = polygons.length;
@@ -122,7 +122,7 @@ class NavMeshUtils {
             } while (edge !== polygon.edge);
         }
     }
-    */
+
 
    /**
     * somewhat like divideEdgeByVertex...
@@ -154,9 +154,9 @@ class NavMeshUtils {
      *
      * @param {Array} polygons
      * @param {Number} mask Bitmask
-     * @param {Boolean} clonePolygons Whether to clone entirely new seperate polygons
+     * @param {Boolean|Null} clonePolygons Whether to clone entirely new seperate polygons. If set to Null, will not duplciate vertices as well.
      */
-    static filterOutPolygonsByMask(polygons, mask, clonePolygons=false) {
+    static filterOutPolygonsByMask(polygons, mask, clonePolygons=false, exactEquals=false) {
         let filteredPolygons = [];
         let len = polygons.length;
         let vertexMap = new Map();
@@ -164,7 +164,7 @@ class NavMeshUtils {
         let c = 0;
         for (let i=0; i<len; i++) {
             let polygon = polygons[i];
-            if (!(polygon.mask & mask)) {
+            if (polygon.mask === undefined || (exactEquals ? polygon.mask !== mask : !(polygon.mask & mask)) ) {
                 continue;
             }
             c = 0;
@@ -177,7 +177,9 @@ class NavMeshUtils {
                     vertexMap.set(edge.vertex, v);
                     if (clonePolygons) {
                         contours[c++] = v;
-                    } else edge.vertex = v;
+                    } else {
+                        if (clonePolygons !== null) edge.vertex = v;
+                    }
                 }
                 edge = edge.next;
             } while (edge !== polygon.edge);
@@ -214,7 +216,7 @@ class NavMeshUtils {
         } while (edge !== polygon.edge);
     }
 
-    static setAbsAltitudeOfAllPolygons(polygons) {
+    static setAbsAltitudeOfAllPolygons(polygons, altitude) {
        let len = polygons.length;
        for (let i=0; i<len; i++) {
         let polygon = polygons[i];
@@ -401,7 +403,9 @@ class NavMeshUtils {
                     if ( bi>=3) {
                         builtContour.length = bi;
                         //console.log("Adding hole");
-                        holesAdded.push( new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) )
+                        let p;
+                        holesAdded.push( p = new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) );
+                        p.holed = true;
                         if (isUsingFullNavmesh) {
                             // link respective polygon holes to full navmesh to connect it. add arc to graph.
                         }
