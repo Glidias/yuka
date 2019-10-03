@@ -44,6 +44,8 @@ SVGCityReader identify:
 
 for NavMeshUtils's: for
 - linkPolygons(entrance+highways ... tower+roads)
+
+* What's left:*
 - getNewExtrudeEdgePolygon(tower/entrance pillar)
 
 ( // kiv later)
@@ -87,6 +89,7 @@ function navmeshTagRegionByPt(navmesh, pt, mask, errors, lenient=false) {
 	let gotErrors = false;
 	if (r) {
 		r.mask = mask;
+		pt.region = r;
 	} else {
 		if (lenient) {
 			if (lenient !== true) {
@@ -95,6 +98,7 @@ function navmeshTagRegionByPt(navmesh, pt, mask, errors, lenient=false) {
 			else r = navmesh.getClosestRegion(pt);
 			if (r) {
 				r.mask = mask;
+				pt.region = r;
 				return r;
 			}
 		}
@@ -106,17 +110,17 @@ function navmeshTagRegionByPt(navmesh, pt, mask, errors, lenient=false) {
 	return r;
 }
 
-function getBorderEdgeOfHighwayRamp(ramp) {
-
-}
-
+/*
 function getClosestBorderEdgeToPoint(polygons, pt) {
 
 }
+*/
 
+/*
 function getClosestPointToEdge(points, edge) {
 
 }
+*/
 
 function pointInTriangle(px, py, c, b, a ) {
 	return ( ( px - a[0] ) * ( b[1] - a[1] ) ) - ( ( b[0] - a[0] ) * ( py - a[1] ) ) >= 0 &&
@@ -679,6 +683,10 @@ class SVGCityReader {
 		this.highwayMaxWidth = 6.2;
 		this.optimalHighwayThickness = 2.0;
 		this.streetIdPrecision = 0;
+
+		this.detectRampConnectMaxDist = 8;
+		this.detectHighwayConnectMaxDist = 5;
+		this.detectRoadConnectMaxDist = 8;
 		//this.optimalStreetThickness = 2.0;
 
 		// Staircase/ramp settings
@@ -706,7 +714,7 @@ class SVGCityReader {
 
 		this.supportPillarBlockLevel = 2;
 
-		// Altitude base settings
+		// Altitude settings
 		this.cityWallTowerTopAltitude = 19.5;
 		this.cityWallAltitude = 16;
 		this.cityWallTowerBaseAltitude = 14;
@@ -1893,19 +1901,13 @@ class SVGCityReader {
 		);
 		*/
 
-		// navmesh regions mask tagged to CItadel
-		// navmesh regions mask tagged to Citadel PIllr Tops/City Wall Toppers
-
 		let errors = [];
 
-		// this is problematic
+		// slightly problematic..need lenient for now
 		this.cityWallPillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_TOWER, errors, true)) });
 
 		this.cityWallEntrancePoints.forEach((p)=>{
-			let region = (navmeshTagRegionByPt(navmesh,p, BIT_ENTRANCE, errors));
-			if (region && !Array.isArray(region)) {
-				p.region = region;
-			}
+			(navmeshTagRegionByPt(navmesh,p, BIT_ENTRANCE, errors));
 		});
 		this.citadelWallPillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors))});
 		this.citadelWallEntrancePillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors))});
@@ -2108,7 +2110,6 @@ class SVGCityReader {
 		navmesh.fromPolygons(cdt.map((tri)=>{
 			return new Polygon().fromContour([ hullVerticesSoup3D[tri[2]], hullVerticesSoup3D[tri[1]], hullVerticesSoup3D[tri[0]] ]);
 		}));
-		// TODO: filter/tag navmesh polygons for highways vs roads,
 		this.navmeshRoad = this.setupHighwaysVsRoads(navmesh);
 
 		//*/
@@ -2390,6 +2391,8 @@ class SVGCityReader {
 		const highways = [];
 		const roadsInner = [];
 		const roadsOuter = [];
+		const potentialHighwayRoadJunctions = [];
+		const potentialHighwayRoadCrossroads = [];
 
 		for (let i=0; i<len; i++) {
 			r = regions[i];
@@ -2441,12 +2444,12 @@ class SVGCityReader {
 						extremeLongPerpCount++;
 					}
 
-					// TODO: Navmesh regions of Roads that go under Highway mst also be masked to Roads
 					if (dist <= highwayMaxWidthSq) {
 						if (dist < highwayMinWidthSq ) { // normal street
 							//g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.25, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
 							g.append(this.makeSVG("line", {stroke:"rgb(0,122,110)", "stroke-width":0.25, x1:edge.prev.vertex.x, y1: edge.prev.vertex.z, x2:edge.vertex.x, y2:edge.vertex.z}));
 							numOfShortEdges++;
+							edge.short = true;
 						} else { // highway
 							//g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.5, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
 							g.append(this.makeSVG("line", {stroke:"rgb(255,0,0)", "stroke-width":0.25, x1:edge.prev.vertex.x, y1: edge.prev.vertex.z, x2:edge.vertex.x, y2:edge.vertex.z}));
@@ -2460,7 +2463,6 @@ class SVGCityReader {
 
 			// various conditions for specific highlights
 			let totalEdges = numOfShortEdges + numOfLongEdges;
-
 
 			// street id naming
 			r.streetId = Array.from(streetwards).sort()
@@ -2480,12 +2482,22 @@ class SVGCityReader {
 						let isRampDown = numOfEdgesWithinCityWalls < 2;
 						r.mask = isRampDown ? BIT_HIGHWAY_RAMP : BIT_HIGHWAY;
 						if (isRampDown) {
-							r.yExtrudeParams = {yVal:this.highwayExtrudeThickness, yBottom:false, yBottomMin:rampDownLevel };
+							r.yExtrudeParams = {yVal:this.highwayExtrudeThickness, yBottom:false, yBottomMin:this.innerWardAltitude };
 							rampDowns.push(r);
 						} else {
 							highways.push(r);
 						}
 						g.append(this.makeSVG("path", {stroke:"blue", fill:(isRampDown ? "rgba(255,40,100,0.5)" : "rgba(255,0,0,0.5)"), "stroke-width":0.015, d: polygonSVGString(r) }));
+						if (numOfShortEdges >=1) {
+							potentialHighwayRoadJunctions.push(r);
+							//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(1,0,255,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
+							if (numOfShortEdges >=2) {
+								potentialHighwayRoadCrossroads.push(r);
+								//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(1,0,255,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
+							}
+							
+						}
+						
 					} else {
 						if (!this.onlyElevateRoadsWithinWalls || numOfEdgesWithinCityWalls>=2) {
 							r.mask = BIT_WARD_ROAD; // could be thick also
@@ -2504,29 +2516,97 @@ class SVGCityReader {
 			}
 		}
 
-		// kiv TODO: Citadel wall region identify and filter out in order to further extrude down to ward road level,
-		// kiv TODO: Plaza region identify and filter out, extrude down to ward Road level, extrude down to ground level as additional layer or other methods
-		// kiv above: maybe have some custom mound terrain below those regions to support highway platform, or mounted terrrain with elevated wards near citadel
+		potentialHighwayRoadCrossroads.forEach((r)=> {
+			if (this.validateShortRoadEdges(2, r)) {
+				r.mask = BIT_WARD_ROAD; 
+				roadsInner.push(r);
+				g.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.1, d: polygonSVGString(r) }));
+			}
+		});
 
-		// TODO: at entrance points, add conneting polygons to link ramp-downs to highwayss
+		// kiv todo: Citadel wall region identify and filter out in order to further extrude down to ward road level,
+		// kiv todo: Plaza region identify and filter out, extrude down to ward Road level, extrude down to ground level as additional layer or other methods
+		// kiv above: maybe have some custom mound terrain below those regions to support highway platform, or mounted terrrain with elevated wards near citadel
 
 		// fow now, citadel wall exttudes down to rampDown level, until ground portio polygons below ctiy wall can be easily isolated
 
-		//getBorderEdgeOfHighwayRamp(ramp from rampDowns)
-		// getClosestPointToEdge(this.entrancePts, ...borderEdge ),
-		// map.set(pt, borderEdge)
-		// getClosestBorderEdgeToPoint(highways, ...pt), to link highway to each respective point
 
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(highways, this.highwayAltitude);
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsInner, this.wardRoadAltitude);
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsOuter, this.wardRoadAltitude);
 
-		// set rampdown heights of tail end vertices leading down,
-		// set highway heights (including of connecting polygons) this.highwayAltitude
-		// set roadsInner heights this.wardRoadAltitude
-		// set roadsOuter heights this.wardRoadAltitude ( kiv, could be lower altitude in the future)
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(rampDowns, rampDownLevel);
 
+		// Connect highways to ramp-downs at city wall entrances
+		this.cityWallEntrancePoints.forEach((p)=>{
+			if (!p.region) return;
+			let e = NavMeshUtils.getClosestBorderEdgeCenterToPoint(highways, p, this.detectHighwayConnectMaxDist, true);
+			let e2 = NavMeshUtils.getClosestBorderEdgeCenterToPoint(rampDowns, p, this.detectRampConnectMaxDist, true);
+			
+			if (e) {
+				//console.log("HIT!");
+				e.twin = null;
+				e.prev.vertex = e.prev.vertex.clone();
+				e.vertex = e.vertex.clone();
+
+				let entryWay = NavMeshUtils.clonePolygon(p.region);
+				NavMeshUtils.setAbsAltitudeOfPolygon(entryWay, this.highwayAltitude);
+
+				g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.015, d: polygonSVGString(entryWay) }));
+				g.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":1, d: edgeSVGString(e) }));
+
+				if (e2) {
+					console.log("detected rampdown...")
+					e2.twin = null;
+					e2.prev.vertex = e2.prev.vertex.clone();
+					e2.vertex = e2.vertex.clone();
+					g.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":1, d: edgeSVGString(e2) }));
+				} else {
+					console.log("detected no rampdn at entrance..");
+				}
+
+				let polies  = NavMeshUtils.linkPolygons(e, e2, entryWay);
+				polies.forEach((r, index)=> {
+					r.connectRamp = true;
+					g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: polygonSVGString(r) }));
+					navmesh.regions.push(r);
+				});
+			} else {
+				console.warn("Missed Entrance connect highway entirely!")
+			}
+		});
+		rampDowns.forEach((r)=>{
+			let edge = r.edge;
+			do {
+				if (edge.twin && edge.twin.polygon.connectRamp) {
+					console.log("detected rampdown edge");
+					edge.prev.vertex.y = this.highwayAltitude;
+					edge.vertex.y = this.highwayAltitude;
+				}
+				edge = edge.next;
+			} while(edge !== r.edge)
+		});
+
+		// kiv todo: connect ward roads at tower connections and mark as secondary-entrance for tower
+
+		//  ( kiv, could be lower altitude in the future for roadsOuter)
 
 		return navmesh;
 	}
 
+	validateShortRoadEdges(amount, region) {
+		let edge = region.edge;
+		let count = 0;
+		do {
+			if (edge.short && edge.twin && edge.twin.polygon.mask && !!(edge.twin.polygon.mask & BIT_WARD_ROAD) ) {
+				count++;
+				if (count >= amount) return true;
+			}
+			edge = edge.next;
+		} while (edge !== region.edge);
+
+		return false;
+	}
 
 
 	checkWithinCityWall(x, y, defaultVal=false) {

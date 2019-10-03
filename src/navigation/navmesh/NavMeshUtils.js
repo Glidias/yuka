@@ -9,6 +9,7 @@ import {HalfEdge} from '../../math/HalfEdge.js';
 var MAX_HOLE_LEN = 16;
 
 const PLANE = new Plane();
+const POINT = new Vector3();
 
 // dfs search through edges by related mapped edge.prev vertices
 function searchEdgeList(map, builtContour, startingEdge) {
@@ -92,19 +93,112 @@ class NavMeshUtils {
 
     }
 
-
     /**
-     *
-     * @param {Polygon|HalfEdge} connector A HalfEdge of a Polygon #1 or POlygon #1 itself  (if connector3 supplied)
-     * @param {Polygon|HalfEdge} connector2 A HalfEdge of a Polygon #2 or Polygon #2 itself (if connector3 supplied)
-     * @param {Polygon} connector3 if first 2 parameters are polygons, this will be the connecting polygon shared between the given 2 Half Edges
-     * @return The resulting connecting polygon between connector and connector2
+     * Clones a polygon entirely with an entir enew set of HalfEdges and vertex references
+     * @param {Polygon} polygon 
      */
-    static linkPolygons(connector, connector2=null, connector3=null) {
+    static clonePolygon(polygon) {
+        let contours = [];
+        let edge = polygon.edge;
+        do {
+            contours.push(edge.vertex.clone());
+            edge = edge.next;
+        } while (edge !== polygon.edge);
 
-        return connector3;
+        return new Polygon().fromContour(contours);
     }
 
+
+    /**
+     * LInk polygons by connecting quad polygons
+     * @param {HalfEdge} connector A HalfEdge of a Polygon #1 
+     * @param {HalfEdge} connector2 A HalfEdge of a Polygon #2
+     * @param {Polygon} connector3 This will be the connecting polygon to link the polgons if any, given 2 border edges
+     * @return The resulting connecting polygons 
+     */
+    static linkPolygons(connector, connector2=null, connector3=null) {
+        let polies = [];
+        // kiv todo: connector, connector2 (without connector3) case when needed
+        let edge;
+        let dx;
+        let dz;
+        let ex;
+        let ez;
+
+        let contours = [];
+        let c = 0;
+        // naive connection by edge midpoint distance checks
+        if (connector3 !== null) {
+            let connector3Arr = [connector3];
+            c = 0;
+            POINT.x = (connector.prev.vertex.x + connector.vertex.x) * 0.5;
+            POINT.z = (connector.prev.vertex.z + connector.vertex.z) * 0.5;
+            edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
+            // edge to connector
+            
+            contours[c++] = edge.vertex;
+            contours[c++] = connector.prev.vertex;
+            contours[c++] = connector.vertex;
+            contours[c++] = edge.prev.vertex;
+
+            
+            let p;
+            polies.push(p = new Polygon().fromContour(contours));
+
+            p.edge.twin = connector.prev;
+            connector.prev.twin = p.edge;
+
+            if (connector2 !== null) {
+                let p2;
+                c =0;
+                POINT.x = (connector2.prev.vertex.x + connector2.vertex.x) * 0.5;
+                POINT.z = (connector2.prev.vertex.z + connector2.vertex.z) * 0.5;
+                edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
+
+                contours[c++] = edge.vertex;
+                contours[c++] = connector2.prev.vertex;
+                contours[c++] = connector2.vertex;
+                contours[c++] = edge.prev.vertex;
+                
+                polies.push(p2 =  new Polygon().fromContour(contours));
+                p2.edge.twin = connector2.prev;
+                connector2.prev.twin = p2.edge;
+            }
+        }
+        return polies;
+    }
+
+    static getClosestBorderEdgeCenterToPoint(polygons, pt, distLimit=0, ignoreBorder=false) {
+        let len = polygons.length;
+        let dist = Infinity;
+        let result = null;
+        if (!distLimit) distLimit = Infinity;
+        else distLimit*=distLimit;
+
+        for (let i =0;i<len; i++) {
+            let r = polygons[i];
+            let edge = r.edge;
+            let ex;
+            let ez;
+            let dx;
+            let dz;
+            do {
+                if (!edge.twin || ignoreBorder) {
+                    ex = (edge.prev.vertex.x + edge.vertex.x) * 0.5;
+                    ez = (edge.prev.vertex.z + edge.vertex.z) * 0.5;
+                    dx = pt.x - ex;
+                    dz = pt.z - ez;
+                    let cDist = dx * dx + dz * dz;
+                    if (cDist < dist && cDist <= distLimit) {
+                        dist = cDist;
+                        result = edge;
+                    }
+                }
+                edge = edge.next;
+            } while (edge !== r.edge);
+        }
+        return result;
+    } 
 
     static scalePolygons(polygons, xzScale) {
         transformId++;
