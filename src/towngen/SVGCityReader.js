@@ -45,7 +45,8 @@ SVGCityReader identify:
 for NavMeshUtils's: for
 - linkPolygons(entrance+highways ... tower+roads)
 
-* What's left:*
+*DONE as of above*
+
 - getNewExtrudeEdgePolygon(tower/entrance pillar)
 
 ( // kiv later)
@@ -178,15 +179,31 @@ function insertIntoPathOfPoints(pt, points) {
 
 function getSegmentPointsFromSVGLinePath(pathString, filteredIndices) {
 	let filteredBaseCount = 0;
-	let arr = (" " + pathString).split(" M ").map((s)=>{
-		return s.split(" L ").map((s)=>{
+	let arr = (" " + pathString).split(" M ").slice(0).map((s)=>{
+		return s.split(" L ").filter((s)=>{return true}).map((s)=>{
+			// todo: critical error NaN and other related
 			s = s.trim();
 			s = s.split(",");
 			let p = [parseFloat(s[0]), parseFloat(s[1])];
-			//g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p[0], cy:p[1]}));
 			return p;
 		});
 	})
+
+	//arr = arr.filter((a)=>{return a.length!==0});
+
+	//let firstPoint = arr[0][0];
+	//let lastPoint = arr[arr.length-1];
+	//lastPoint = lastPoint[lastPoint.length-1];
+
+	//if (segPointEquals(firstPoint, lastPoint)) {
+	//	console.log("SEG POINT EQUALS");
+		/*
+		arr[arr.length-1].pop();
+		if (arr[arr.length-1].length === 0) {
+			arr.pop();
+		}
+		*/
+	//}
 	let lastArr;
 	if (filteredIndices) {
 		filteredIndices.refArray = arr.slice(0);
@@ -200,6 +217,10 @@ function getSegmentPointsFromSVGLinePath(pathString, filteredIndices) {
 		return pts.length >= 2;
 	});
 	return arr;
+}
+
+function segPointEquals(a, b) {
+	return a[0] === b[0] && a[1] === b[1];
 }
 
 function chamferEndsOfPointsList(pointsList, radius, wrapAround) {
@@ -1679,6 +1700,25 @@ class SVGCityReader {
 		let filteredAtCitadel = [];
 		this.cityWallSegments = getSegmentPointsFromSVGLinePath(pathString, filteredAtCitadel, this.weldWallPathThreshold);
 
+		// check for duplicate start/end points
+		let testSegments = this.cityWallSegments[0];
+		//console.log(this.cityWallSegments.length);
+		//console.log(testSegments);
+		//g.append($(this.makeSVG("circle", {cx:testSegments[testSegments.length-2][0], cy:testSegments[testSegments.length-2][1], r:20, fill:"black"  })));
+		let testSegments2 = this.cityWallSegments[this.cityWallSegments.length-1];
+		//g.append($(this.makeSVG("circle", {cx:testSegments2[testSegments2.length-1][0], cy:testSegments2[testSegments2.length-1][1], r:20, fill:"red"  })));
+		if (segPointEquals(testSegments[0], testSegments2[testSegments2.length-1])) {
+			testSegments2.pop();
+			if (testSegments2.length === 0) {
+				this.cityWallSegments.pop();
+			}
+			else if (testSegments2.length ===1) {
+				console.warn("Exception test segments 2 reduced to length ===1");
+				// todo; better handle this exception
+				this.cityWallSegments.pop();
+			}
+		}
+		
 		if (filteredAtCitadel.length !== 0) {
 			//console.log(filteredAtCitadel);
 			let f1 = filteredAtCitadel[0];
@@ -1687,12 +1727,27 @@ class SVGCityReader {
 			//s	this.cityWallSegments = filteredAtCitadel.refArray.slice(f1+1, f2  ).concat(filteredAtCitadel.refArray.slice(f2+1));
 
 			// not sure why need to add another +1
-			this.cityWallSegments =filteredAtCitadel.refArray.slice(f2 + 1).concat(filteredAtCitadel.refArray.slice(f1+1+1, f2  ));
-			//	console.log(this.cityWallSegments);
+			// cityWallSegments
+			
+			this.cityWallSegments =filteredAtCitadel.refArray.slice(f2 + 1).concat(filteredAtCitadel.refArray.slice(f1+1, f2  ));
+				
+			
+			// HACK JOB atm, need to fix function for svg path
+			//let hackjob = filteredAtCitadel.refArray[f1+1];
+			//filteredAtCitadel.refArray[f2+1].push( hackjob[hackjob.length-1]);
+			//this.cityWallSegments[6].push(testSegments[testSegments.length-2]);
+			
+			//this.cityWallSegments[6].push(testSegments[testSegments.length-1]);
+			
+			//console.log(filteredAtCitadel.refArray[f1+1][]);
 
+			//this.cityWallSegments.splice(5,0, filteredAtCitadel.refArray[f1+1]);
+			
 			//this.cityWallSegments = this.cityWallSegments.slice(f2-1).concat(this.cityWallSegments.slice(1, f2-1));
 			//console.log(this.cityWallSegments.length);
 		}
+
+		
 
 		if (this.chamferForWallPillars) {
 			this.cityWallSegments.forEach((value, index, arr)=>{
@@ -1701,6 +1756,7 @@ class SVGCityReader {
 		}
 
 		if (this.chamferForEntranceWall) {
+		
 			chamferEndsOfPointsList(this.cityWallSegments, this.entranceWallPillarRadius ? this.entranceWallPillarRadius : this.wallPillarRadius*this.entCitadelPillarRadiusScale);
 		}
 
