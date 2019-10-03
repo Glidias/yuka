@@ -21,6 +21,42 @@ const PLAZA_WARD_INDEX = -2;
 const T_EPSILON =  1e-7;
 
 
+/*
+For Kralchester3D
+
+SVGCityReader identify:
+- City Wall tower/entrance key polygons, tower/entrance pillar border edges (inward/outward 2e ach)
+- entrance+highways, tower+roads connecting edges through above
+
+for NavMeshUtils's:
+- linkPolygons(entrance+highways ... tower+roads)
+- getNewExtrudeEdgePolygon(tower/entrance pillar)
+
+( // kiv later)
+- addConnectingPortal(subjectEdge, connectingEdge, setTwinLinks?=false)
+
+All Navmeshes:
+UPPER WARDS* (kiv: 3D buildings on upper ward built from SVGCityReader)
+CITY WALL
+HIGHWAYS*
+UPPER ROADS*
+GROUND* (3D buildings on ground built from SVGCityReader)
+RAMPS (3D built from SVGCityReader)
+
+* Will be Linked by RAMPS to combine into 1 interconnected Navmesh
+
+3D remaining:
+- collectExtrudeGeometry(tower/entrance rooftops , extruded tower/pillar wall, HIGHWAYS (ramp down tagged), UPPER ROADS, CITY WALL(entry downs(CITY WALL tagged))  )
+
+Base collection groups:
+- Buildings (lower/upper)
+- City Wall
+- Highways
+- Upper Roads
+- Ramps
+(not built/kiv, until altitude/heightmap considerations included in: Ground)
+*/
+
 
 function svgLineFromTo(from, to) {
 	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
@@ -615,7 +651,7 @@ class SVGCityReader {
 		this.supportPillarBlockLevel = 2;
 
 		// Altitude base settings
-		this.cityWallTowerTopAltitude = 19.5; 
+		this.cityWallTowerTopAltitude = 19.5;
 		this.cityWallAltitude = 16;
 		this.cityWallTowerBaseAltitude = 14;
 		this.highwayAltitude = 12;
@@ -628,7 +664,7 @@ class SVGCityReader {
 		this.cityWallEntranceExtrudeThickness = 1;
 		this.highwayExtrudeThickness = 3;
 		this.wardRoadExtrudeThickness = 0.7;
-		
+
 	}
 
 	extrudePathOfPoints(points, radius, loop, cap, newPoints, _isLooping) {
@@ -834,10 +870,17 @@ class SVGCityReader {
 
 	}
 
-	getWardBuildingsGeometry(baseBuildingHeight, renderPerWard=false) {
+	/**
+	 *
+	 * @param {Number} scaleXZ
+	 * @param {Number} buildingInset
+	 * @param {Boolean} renderPerWard
+	 * @return {*} vertices/indices Object, or array of it with renderPerWard
+	 */
+	getWardBuildingsGeometry(scaleXZ = 1, buildingInset=0, renderPerWard=false) {
 		// TODO: vertices and indices, for now, just get all per ward neighborhood for collision detection DBVH/BVH
 		// for rendering buffer, consider renderPerWard, else render all
-	
+
 		// later, consider varying base heights at different wards even from outside city wall, at number 2 districts from city wall should be lower altitude
 		//  depending on distance to city wall, let highways still extend outside city wall after ramp down
 	}
@@ -862,7 +905,7 @@ class SVGCityReader {
 		} while (edge !== poly.edge);
 
 		//edges[Math.floor(Math.random() * edgeCount)
-		
+
 
 		let result = this.carveRamps(edges[2], true, 9, Infinity);
 		this.buildRamps(result, this.highwayAltitude, this.innerWardRoadAltitude);
@@ -883,7 +926,7 @@ class SVGCityReader {
 			NavMeshUtils.adjustAltitudeOfPolygon(ramp[i], -slopeYDist - accumSlopeY);
 			accumSlopeY += slopeYDist;
 		}
-	
+
 		// last landing from below
 		landing = toTailSide ? geom.tail : geom.head;
 		NavMeshUtils.adjustAltitudeOfPolygon(landing, -slopeYDist - accumSlopeY);
@@ -921,7 +964,7 @@ class SVGCityReader {
 			if (!!(index & 1) !== alignTailEnd) {
 				console.log( " : "+index + " head");
 				if ( index < arr.length - 1 && (splits=this.connectColumnsEdges(geom, arr[index+1], alignTailEnd, false, result))!==null) {
-					
+
 					polySoup.push(splits[0]);
 					polySoup.push(splits[1]);
 				} else {
@@ -935,7 +978,7 @@ class SVGCityReader {
 			if (!!(index & 1) === alignTailEnd) {
 				console.log( " : "+index + " tail");
 				if ( index < arr.length - 1 && (splits=this.connectColumnsEdges(geom, arr[index+1], alignTailEnd, true, result))!==null) {
-					
+
 					polySoup.push(splits[0]);
 					polySoup.push(splits[1]);
 				} else {
@@ -955,12 +998,12 @@ class SVGCityReader {
 
 		//let cdtObj = this.getCDTObjFromPointsList(polySoup.map(polygonToCell), true, {exterior:true});
 		//polySoup = cdtObj.cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)});
-	
+
 		var svg = $(this.makeSVG("g", {}));
 		this.map.append(svg, {});
 		svg.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 		svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
-		
+
 		return navmesh;
 	}
 
@@ -1441,6 +1484,7 @@ class SVGCityReader {
 		let offset = rampLayDir.x*layDirSwitch * poly.edge.prev.vertex.x + rampLayDir.z*layDirSwitch * poly.edge.prev.vertex.z;
 		let offset2 = rampLayDir.x*layDirSwitch * poly2.edge.prev.vertex.x + rampLayDir.z *layDirSwitch* poly2.edge.prev.vertex.z;
 		if (offset === offset2) {
+			// todo: match vertices to have them shared
 			return null;
 		}
 
@@ -1475,6 +1519,7 @@ class SVGCityReader {
 		let offset = rampLayDir.x*layDirSwitch * poly.edge.prev.vertex.x + rampLayDir.z*layDirSwitch * poly.edge.prev.vertex.z;
 		let offset2 = rampLayDir.x*layDirSwitch * poly2.edge.prev.vertex.x + rampLayDir.z *layDirSwitch* poly2.edge.prev.vertex.z;
 		if (offset === offset2) {
+			// todo: match vertices to have them shared
 			return null;
 		}
 
@@ -1763,7 +1808,7 @@ class SVGCityReader {
 
 		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 
-		
+
 		/*
 		g.append(
 			this.makeSVG("path", {"fill":"rgba(255,255,0,1)", "stroke-width":0.1, "stroke":"red",
@@ -2298,6 +2343,7 @@ class SVGCityReader {
 						extremeLongPerpCount++;
 					}
 
+					// TODO: Navmesh regions of Roads that go under Highway mst also be masked to Roads
 					if (dist <= highwayMaxWidthSq) {
 						if (dist < highwayMinWidthSq ) { // normal street
 							//g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.25, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
