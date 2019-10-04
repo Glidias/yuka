@@ -45,12 +45,13 @@ SVGCityReader identify:
 for NavMeshUtils's: for
 - linkPolygons(entrance+highways ... tower+roads)
 
-*DONE as of above*
-
 - getNewExtrudeEdgePolygon(tower/entrance pillar)
 
 ( // kiv later)
 - addConnectingPortal(subjectEdge, connectingEdge, setTwinLinks?=false)
+
+
+*DONE as of above*
 
 All Navmeshes:
 UPPER WARDS* (kiv: 3D buildings on upper ward built from SVGCityReader)
@@ -61,6 +62,9 @@ GROUND* (3D buildings on ground built from SVGCityReader)
 RAMPS (3D built from SVGCityReader)
 
 * Will be Linked by RAMPS to combine into 1 interconnected Navmesh
+
+getNavmeshBundleGeometry()
+getWardBuildingsGeometry
 
 3D remaining:
 - collectExtrudeGeometry(tower/entrance rooftops , extruded tower/pillar wall, HIGHWAYS (ramp down tagged), UPPER ROADS, CITY WALL(entry downs(CITY WALL tagged))  )
@@ -85,11 +89,11 @@ function svgLineFromTo(from, to) {
  * @param {Vector3} pt
  * @param {Number} mask
  */
-function navmeshTagRegionByPt(navmesh, pt, mask, errors, lenient=false) {
+function navmeshTagRegionByPt(navmesh, pt, mask=null, errors, lenient=false) {
 	let r = navmesh.getRegionForPoint(pt);
 	let gotErrors = false;
 	if (r) {
-		r.mask = mask;
+		if (mask !== null) r.mask = mask;
 		pt.region = r;
 	} else {
 		if (lenient) {
@@ -98,14 +102,14 @@ function navmeshTagRegionByPt(navmesh, pt, mask, errors, lenient=false) {
 			}
 			else r = navmesh.getClosestRegion(pt);
 			if (r) {
-				r.mask = mask;
+				if (mask !== null) r.mask = mask;
 				pt.region = r;
 				return r;
 			}
 		}
 		if (!errors) errors = [];
 		console.warn("navmeshTagRegionByPt couldn't find region:", pt, mask);
-		errors.push(pt.clone());
+		errors.push(pt);
 		return errors;
 	}
 	return r;
@@ -132,6 +136,20 @@ function pointInTriangle(px, py, c, b, a ) {
 	( ( p.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( p.z - b.z ) ) >= 0 &&
 	( ( p.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( p.z - c.z ) ) >= 0;
 	*/
+}
+
+function withinVincityOfPointSet(pt, points, dist) {
+	dist *= dist;
+	let len = points.length;
+	for (let i=0; i<len; i++) {
+		let p = points[i];
+		let dx = p.x - pt.x;
+		let dz = p.z - pt.z;
+		if (dx*dx + dz*dz <=dist) {
+			return true;
+		}
+	}
+	return false;
 }
 
 function setsIntersection(a,b) {
@@ -221,6 +239,10 @@ function getSegmentPointsFromSVGLinePath(pathString, filteredIndices) {
 
 function segPointEquals(a, b) {
 	return a[0] === b[0] && a[1] === b[1];
+}
+
+function segPointToVector3(a) {
+	return new Vector3(a[0], 0, a[1]);
 }
 
 function chamferEndsOfPointsList(pointsList, radius, wrapAround) {
@@ -695,8 +717,11 @@ class SVGCityReader {
 		this.chamferForWallPillars = true;
 		this.chamferForEntranceWall = true;
 		this.weldWallPathThreshold = 1;
+		this.extrudeCityWallTowerWall = 0.8;
 
 		this.onlyElevateRoadsWithinWalls = false;
+		
+		this.detectCityWallEntranceTowersDist = 3;
 
 		// Road detection settings
 		this.maxRoadEdgeLength = 8; //8;
@@ -735,7 +760,7 @@ class SVGCityReader {
 
 		this.supportPillarBlockLevel = 2;
 
-		// Altitude settings
+		// Altitude settings (in intended export 3D scale values)
 		this.cityWallTowerTopAltitude = 19.5;
 		this.cityWallAltitude = 16;
 		this.cityWallTowerBaseAltitude = 14;
@@ -744,12 +769,14 @@ class SVGCityReader {
 		// this.innerWardRoadAltitude = 0;
 		this.innerWardAltitude = 0;
 
-		this.cityWallCeilThickness = 0.5;
+		this.cityWallCeilThickness = 1;
 		// extude thickness, if negative value, will sink into ground exclude bottom base faces
 		this.cityWallEntranceExtrudeThickness = 1;
 		this.highwayExtrudeThickness = 3;
 		this.wardRoadExtrudeThickness = 0.7;
 
+		// Export 3d scale settings
+		this.exportScaleXZ = 4;
 	}
 
 	extrudePathOfPoints(points, radius, loop, cap, newPoints, _isLooping) {
@@ -919,6 +946,7 @@ class SVGCityReader {
 
 			if (this.selectorCityWall.length) {
 				this.navmeshCityWall = this.parseCityWalls(this.selectorCityWall, this.selectorCityWallPath, this.selectorCitadelWall);
+				this.prepareCityWallExtraPolygons();
 			} else {
 				console.warn("Could not find City/Citadel wall selector!");
 			}
@@ -968,7 +996,7 @@ class SVGCityReader {
 	 * @param {Boolean} renderPerWard
 	 * @return {*} vertices/indices Object, or array of it with renderPerWard
 	 */
-	getWardBuildingsGeometry(scaleXZ = 1, buildingInset=0, renderPerWard=false) {
+	getWardBuildingsGeometry(buildingInset=0, renderPerWard=false) {
 		// TODO: vertices and indices, for now, just get all per ward neighborhood for collision detection DBVH/BVH
 		// for rendering buffer, consider renderPerWard, else render all
 
@@ -1941,7 +1969,7 @@ class SVGCityReader {
 		*/
 		NavMeshUtils.weldVertices(navmesh);
 		let holesArr = NavMeshUtils.patchHoles(navmesh.regions);
-		let combinedRegions = NavMeshUtils.unlinkPolygons(navmesh.regions.concat(holesArr));
+		let combinedRegions = navmesh.regions.concat(holesArr); //NavMeshUtils.unlinkPolygons();
 		navmesh.regions = combinedRegions;
 
 		//navmesh = new NavMesh();
@@ -1967,8 +1995,27 @@ class SVGCityReader {
 		});
 		this.citadelWallPillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors))});
 		this.citadelWallEntrancePillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors))});
+		
+		this.cityWallEntrancePillarPoints = []; // TODO: need to find a way to detect this
+		edgeVertices.forEach((p)=>{
+			let pt = segPointToVector3(p);
+			if (!withinVincityOfPointSet(pt, this.cityWallEntrancePoints, this.detectCityWallEntranceTowersDist)) {
+				return;
+			}
+			navmeshTagRegionByPt(navmesh, pt, null, errors);
+			
+			if (pt.region && !pt.region.mask) {
+				// Check if point is closest enough to entrance
+				//if (pt.squaredDistanceTo())
+				pt.region.mask = BIT_CITADEL_TOWER;
+				this.cityWallEntrancePillarPoints.push(pt);
+			}
+		});
+
 		if (this.citadelWallEntrancePoint) navmeshTagRegionByPt(navmesh, this.citadelWallEntrancePoint, BIT_CITADEL_ENTRANCE, errors);
+		
 		errors.forEach((e)=>{
+			console.warn("city wall point region find error founds")
 			g.append(this.makeSVG("circle", {r:0.5, "stroke":"red", fill:"white", cx:e.x, cy:e.z}));
 		});
 
@@ -1976,6 +2023,48 @@ class SVGCityReader {
 
 		return navmesh;
 	}
+
+	prepareCityWallExtraPolygons() {
+
+		var g = $(this.makeSVG("g", {}));
+		this.map.append(g, {});
+		
+		// this.navmeshCityWall
+
+		let refPts = this.cityWallPillarPoints.concat(this.cityWallEntrancePillarPoints).concat(this.citadelWallPillarPoints).concat(this.citadelWallEntrancePillarPoints);
+
+		// TOWER PILLAR WALLING (at both enrances and on both citadel and cit wall)
+		this.cityWallTowerWallPolies = [];
+		refPts.forEach((pt)=>{
+			if (!pt.region) return;
+			g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.5, d: polygonSVGString(pt.region)  }));
+			
+			//console.log("Walling:"+NavMeshUtils.countBorderEdges(pt.region));
+
+			NavMeshUtils.getBorderEdges(pt.region).forEach((e)=>{
+				let poly = NavMeshUtils.getNewExtrudeEdgePolygon(e, this.extrudeCityWallTowerWall);
+				this.cityWallTowerWallPolies.push(poly);
+				g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.2, d: polygonSVGString(poly)  }));
+			});
+		});
+
+		// tower ceilings & roofings(kiv) (citadel/city wall corners and entrances)
+		this.cityWallTowerCeilingPolies = []
+		refPts.forEach((pt)=>{
+			if (!pt.region) return;
+			//this.cityWallTOwer
+			this.cityWallTowerCeilingPolies.push(NavMeshUtils.clonePolygon(pt.region));
+		});
+
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(this.cityWallTowerWallPolies, this.cityWallTowerTopAltitude);
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(this.cityWallTowerCeilingPolies, this.cityWallTowerTopAltitude);
+		// kiv extra possible Ceilubgs.ROOFINGS
+		// KIV entrance roofing? (city wall), above city wall level
+		// KIV entrance roofing (citaldel) ? above highway level
+		// KIV entrance roofing (city wall) (above highway level)
+	}
+
+
 
 	parseWards(jSel) {
 		var wardCentroids = [];
@@ -2607,6 +2696,8 @@ class SVGCityReader {
 
 				let entryWay = NavMeshUtils.clonePolygon(p.region);
 				NavMeshUtils.setAbsAltitudeOfPolygon(entryWay, this.highwayAltitude);
+				entryWay.mask = BIT_HIGHWAY;
+				navmesh.regions.push(entryWay);
 
 				g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.015, d: polygonSVGString(entryWay) }));
 				g.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":1, d: edgeSVGString(e) }));
@@ -2624,6 +2715,7 @@ class SVGCityReader {
 				let polies  = NavMeshUtils.linkPolygons(e, e2, entryWay);
 				polies.forEach((r, index)=> {
 					r.connectRamp = true;
+					r.mask = BIT_HIGHWAY;
 					g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: polygonSVGString(r) }));
 					navmesh.regions.push(r);
 				});

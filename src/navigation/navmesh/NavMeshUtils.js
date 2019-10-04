@@ -87,10 +87,24 @@ class NavMeshUtils {
      *
      * @param {HalfEdge} edge A HalfEdge to extrude from (using facing "normal", inwards for HalfEdge)
      * @param {Number} extrudeVal How much to extrude from in negative/positive direction
+     * kiv open border parameter
      * @return The sepearte newly-created polygon formed as a result of the extruded edge
      */
-    static getNewExtrudeEdgePolygon( edge, extrudeVal) {
-
+    static getNewExtrudeEdgePolygon(edge, extrudeVal) {
+        let dx = edge.vertex.x - edge.prev.vertex.x;
+        let dz = edge.vertex.z - edge.prev.vertex.z;
+        let nx = -dz;
+        let nz = dx;
+        let d = Math.sqrt(nx*nx + nz*nz);
+        nx /=d;
+        nz /=d;
+        let contours = [
+            edge.prev.vertex.clone(), 
+            new Vector3(edge.prev.vertex.x + extrudeVal * nx, edge.prev.vertex.y, edge.prev.vertex.z+  extrudeVal * nz),
+            new Vector3(edge.vertex.x + extrudeVal * nx, edge.vertex.y, edge.vertex.z + extrudeVal* nz),
+            edge.vertex.clone()
+        ];
+        return new Polygon().fromContour(contours);
     }
 
     /**
@@ -108,6 +122,25 @@ class NavMeshUtils {
         return new Polygon().fromContour(contours);
     }
 
+    static countBorderEdges(polygon) {
+        let count = 0;
+        let edge = polygon.edge;
+        do {
+            count += !edge.twin ? 1 : 0;
+            edge = edge.next;
+        } while (edge !== polygon.edge);
+        return count;
+    }
+
+    static getBorderEdges(polygon) {
+        let arr = [];
+        let edge = polygon.edge;
+        do {
+            if (!edge.twin) arr.push(edge);
+            edge = edge.next;
+        } while (edge !== polygon.edge);
+        return arr;
+    }
 
     /**
      * LInk polygons by connecting quad polygons
@@ -286,7 +319,7 @@ class NavMeshUtils {
         return filteredPolygons;
     }
 
-    static adjustAltitudeOfAllPolygons(polygons) {
+    static adjustAltitudeOfAllPolygons(polygons, altitude) {
         transformId++;
         let len = polygons.length;
         for (let i=0; i<len; i++) {
@@ -500,6 +533,9 @@ class NavMeshUtils {
                         let p;
                         holesAdded.push( p = new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) );
                         p.holed = true;
+
+                        // kiv todo: link twins  newly added polygon's edges
+
                         if (isUsingFullNavmesh) {
                             // link respective polygon holes to full navmesh to connect it. add arc to graph.
                         }
