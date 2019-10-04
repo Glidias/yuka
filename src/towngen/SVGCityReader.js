@@ -1718,7 +1718,7 @@ class SVGCityReader {
 				this.cityWallSegments.pop();
 			}
 		}
-		
+
 		if (filteredAtCitadel.length !== 0) {
 			//console.log(filteredAtCitadel);
 			let f1 = filteredAtCitadel[0];
@@ -1728,26 +1728,26 @@ class SVGCityReader {
 
 			// not sure why need to add another +1
 			// cityWallSegments
-			
+
 			this.cityWallSegments =filteredAtCitadel.refArray.slice(f2 + 1).concat(filteredAtCitadel.refArray.slice(f1+1, f2  ));
-				
-			
+
+
 			// HACK JOB atm, need to fix function for svg path
 			//let hackjob = filteredAtCitadel.refArray[f1+1];
 			//filteredAtCitadel.refArray[f2+1].push( hackjob[hackjob.length-1]);
 			//this.cityWallSegments[6].push(testSegments[testSegments.length-2]);
-			
+
 			//this.cityWallSegments[6].push(testSegments[testSegments.length-1]);
-			
+
 			//console.log(filteredAtCitadel.refArray[f1+1][]);
 
 			//this.cityWallSegments.splice(5,0, filteredAtCitadel.refArray[f1+1]);
-			
+
 			//this.cityWallSegments = this.cityWallSegments.slice(f2-1).concat(this.cityWallSegments.slice(1, f2-1));
 			//console.log(this.cityWallSegments.length);
 		}
 
-		
+
 
 		if (this.chamferForWallPillars) {
 			this.cityWallSegments.forEach((value, index, arr)=>{
@@ -1756,7 +1756,7 @@ class SVGCityReader {
 		}
 
 		if (this.chamferForEntranceWall) {
-		
+
 			chamferEndsOfPointsList(this.cityWallSegments, this.entranceWallPillarRadius ? this.entranceWallPillarRadius : this.wallPillarRadius*this.entCitadelPillarRadiusScale);
 		}
 
@@ -2551,9 +2551,9 @@ class SVGCityReader {
 								potentialHighwayRoadCrossroads.push(r);
 								//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(1,0,255,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
 							}
-							
+
 						}
-						
+
 					} else {
 						if (!this.onlyElevateRoadsWithinWalls || numOfEdgesWithinCityWalls>=2) {
 							r.mask = BIT_WARD_ROAD; // could be thick also
@@ -2574,7 +2574,7 @@ class SVGCityReader {
 
 		potentialHighwayRoadCrossroads.forEach((r)=> {
 			if (this.validateShortRoadEdges(2, r)) {
-				r.mask = BIT_WARD_ROAD; 
+				r.mask |= BIT_WARD_ROAD;
 				roadsInner.push(r);
 				g.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.1, d: polygonSVGString(r) }));
 			}
@@ -2598,7 +2598,7 @@ class SVGCityReader {
 			if (!p.region) return;
 			let e = NavMeshUtils.getClosestBorderEdgeCenterToPoint(highways, p, this.detectHighwayConnectMaxDist, true);
 			let e2 = NavMeshUtils.getClosestBorderEdgeCenterToPoint(rampDowns, p, this.detectRampConnectMaxDist, true);
-			
+
 			if (e) {
 				//console.log("HIT!");
 				e.twin = null;
