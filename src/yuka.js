@@ -2,11 +2,11 @@ export { EntityManager } from './core/EntityManager.js';
 export { EventDispatcher } from './core/EventDispatcher.js';
 export { GameEntity } from './core/GameEntity.js';
 
+export { MovingEntity } from './core/MovingEntity.js';
+
 //export { Logger } from './core/Logger.js';
 //export { MeshGeometry } from './core/MeshGeometry.js';
 //export { MessageDispatcher } from './core/MessageDispatcher.js';
-
-export { MovingEntity } from './core/MovingEntity.js';
 
 /*
 export { Regulator } from './core/Regulator.js';
