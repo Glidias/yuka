@@ -78,8 +78,87 @@ class NavMeshUtils {
      * @param {Number} yBottomMin If yBottom isn't specified as an absolute number, this additional optional parameter limits how far down a polygon can extrude downwards by an absolute y value
      */
     static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin) {
-        // yVal, yBottom, yBottomMin may be unique per polygon if polygon has it's own exclusive "yExtrudeParams" settings
-        //  that overwrites existing default params
+        transformId++;
+
+        const vertices = collector.vertices;
+        const indices = collector.indices;
+        let vi = vertices.length;
+        let vc = vi / 3;
+        let ii = indices.length;
+
+        let len = polygons.length;
+
+        let theYBottom;
+        let theYBottomMin;
+        let theYVal;
+
+        const faceIndices = [];
+        let fi = 0;
+        
+        for (let i=0; i<len; i++) {
+            let polygon = polygons[i];
+            let edge = polygon.edge;
+
+            fi = 0;
+
+            if (edge.prev.vertex.transformId !== transformId) {
+                edge.prev.vertex.id = vc++;
+                vertices[vi++] = edge.prev.vertex.x * xzScale;
+                vertices[vi++] = edge.prev.vertex.y;
+                vertices[vi++] = edge.prev.vertex.z * xzScale;
+                edge.prev.vertex.transformId = transformId;
+            }
+            faceIndices[fi++]  = edge.prev.vertex.id;
+
+            if (!polygon.yExtrudeParams) {
+                theYBottom = yBottom;
+                theYBottomMin = yBottomMin;
+                theYVal = yVal;
+                
+            } else {
+                theYBottom = polygon.yExtrudeParams.yBottom !== undefined ? polygon.yExtrudeParams.yBottom : yBottom;
+                theYBottomMin =polygon.yExtrudeParams.yBottomMin !== undefined ? polygon.yExtrudeParams.yBottomMin : yBottomMin;
+                theYVal =polygon.yExtrudeParams.yVal !== undefined ? polygon.yExtrudeParams.yVal : yVal;
+            }
+           
+            do {
+                if (edge.vertex.transformId !== transformId) {
+                    edge.vertex.id = vc++;
+                    vertices[vi++] = edge.vertex.x * xzScale;
+                    vertices[vi++] = edge.vertex.y;
+                    vertices[vi++] = edge.vertex.z * xzScale;
+                    edge.vertex.transformId = transformId;
+                }
+                faceIndices[fi++]  = edge.vertex.id;
+                
+                if (edge.twin === null) {
+                    console.log("Border edge detected to be extruded.");
+                    // set up extruded vertices y position this edge
+                    vc++;
+                    vertices[vi++] = edge.vertex.x * xzScale;
+                    vertices[vi++] = edge.vertex.y;
+                    vertices[vi++] = edge.vertex.z * xzScale;
+                }
+
+                edge = edge.next;
+            } while(edge !== polygon.edge.prev)
+
+            // set up upper face indices
+            for (let f=0; f< fi; f++) {
+                indices[ii++] = faceIndices[fi];
+            }
+
+            if (theYBottom !== true) {
+                // set up lower face indices that was extruded and assumed to face the other direction from upper
+                while(--fi >= 0) {
+                    //indices[ii++] = faceIndices[fi] + 1;
+                }
+            }
+        }
+
+
+
+
 
         return collector;
     }
@@ -316,7 +395,9 @@ class NavMeshUtils {
 
             if (clonePolygons) {
                 contours.length = c;
-                filteredPolygons.push(new Polygon().fromContour(contours));
+                let poly;
+                filteredPolygons.push(poly = new Polygon().fromContour(contours));
+                if (polygon.yExtrudeParams) poly.yExtrudeParams = polygon.yExtrudeParams;
             } else filteredPolygons.push(polygon);
         }
         return filteredPolygons;
