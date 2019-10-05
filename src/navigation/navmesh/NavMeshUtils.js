@@ -80,6 +80,8 @@ class NavMeshUtils {
     static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin) {
         // yVal, yBottom, yBottomMin may be unique per polygon if polygon has it's own exclusive "yExtrudeParams" settings
         //  that overwrites existing default params
+
+        return collector;
     }
 
 
@@ -297,16 +299,17 @@ class NavMeshUtils {
             c = 0;
             let edge = polygon.edge;
             do {
+                let v;
                 if (vertexMap.has(edge.vertex)) {
-                    edge.vertex = vertexMap.get(edge.vertex);
+                    v = vertexMap.get(edge.vertex);
                 } else {
-                    let v = edge.vertex.clone();
+                    v = edge.vertex.clone();
                     vertexMap.set(edge.vertex, v);
-                    if (clonePolygons) {
-                        contours[c++] = v;
-                    } else {
-                        if (clonePolygons !== null) edge.vertex = v;
-                    }
+                }
+                if (clonePolygons) {
+                    contours[c++] = v;
+                } else {
+                    if (clonePolygons !== null) edge.vertex = v;
                 }
                 edge = edge.next;
             } while (edge !== polygon.edge);

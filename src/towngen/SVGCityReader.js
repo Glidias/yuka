@@ -51,8 +51,6 @@ for NavMeshUtils's: for
 - addConnectingPortal(subjectEdge, connectingEdge, setTwinLinks?=false)
 
 
-*DONE as of above*
-
 All Navmeshes:
 UPPER WARDS* (kiv: 3D buildings on upper ward built from SVGCityReader)
 CITY WALL
@@ -61,9 +59,12 @@ UPPER ROADS*
 GROUND* (3D buildings on ground built from SVGCityReader)
 RAMPS (3D built from SVGCityReader)
 
-* Will be Linked by RAMPS to combine into 1 interconnected Navmesh
+* kiv Will be Linked by RAMPS to combine into 1 interconnected Navmesh
 
-getNavmeshBundleGeometry()
+getNavmeshExtrudedGeometry()
+
+// -- done as of above
+
 getWardBuildingsGeometry
 
 3D remaining:
@@ -81,6 +82,13 @@ Base collection groups:
 
 function svgLineFromTo(from, to) {
 	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
+}
+
+function getNewGeometryCollector() {
+	return {
+		vertices: [],
+		indices: []
+	}
 }
 
 /**
@@ -774,6 +782,7 @@ class SVGCityReader {
 		this.cityWallEntranceExtrudeThickness = 1;
 		this.highwayExtrudeThickness = 3;
 		this.wardRoadExtrudeThickness = 0.7;
+		this.rampedBuildingExtrudeThickness = -1;
 
 		// Export 3d scale settings
 		this.exportScaleXZ = 4;
@@ -962,8 +971,9 @@ class SVGCityReader {
 
 			this.parseWards(this.selectorWards);
 
-			this.testRampedBuilding = new Set();
-			this.testRampedBuilding.add(this.testSubdivideBuilding(this.wards[14].neighborhoodPts[0][0]));
+			this.rampedBuildings = new Map();
+			let testBuilding = this.wards[14].neighborhoodPts[0][0];
+			this.rampedBuildings.set(testBuilding, this.testSubdivideBuilding(testBuilding));
 		}
 
 
@@ -981,12 +991,68 @@ class SVGCityReader {
 			tempContainer.remove();
 		}
 
+
+		// test key public methods (comment away for production)
+		console.log( this.getNavmeshExtrudedGeometry() );
+
 	}
 
 	// Key public methods
 
-	getNavmeshBundleGeometry() {
+	getNavmeshExtrudedGeometry() {
+		/*
+		CITY WALL
+		HIGHWAYS*
+		UPPER ROADS*
+		RAMPS (3D built from SVGCityReader)
+		*/
 
+		let deployGeom = {};
+		let navmesh;
+		let gLevel  = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.wardRoadAltitude;
+		if (this.navmeshCityWall) {
+			// City Wall
+			deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.navmeshCityWall.regions, gLevel, this.exportScaleXZ, true, gLevel);
+			// City wall towers
+			if (this.cityWallTowerCeilingPolies) {
+				deployGeom.cityWallTowerCeiling = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.cityWallTowerCeilingPolies, this.cityWallCeilThickness, this.exportScaleXZ);
+			}
+			if (this.cityWallTowerWallPolies) {
+				let towerDownTo = this.cityWallTowerBaseAltitude >= 0 ? this.cityWallTowerBaseAltitude : gLevel;
+				let towerUpTo = this.cityWallTowerTopAltitude;
+				deployGeom.cityWallTowerWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.cityWallTowerWallPolies, towerUpTo, this.exportScaleXZ, towerDownTo);
+			}
+		}
+
+		if (this.navmeshRoad) {
+			// Highways
+			navmesh = new NavMesh();
+			navmesh.attemptBuildGraph = false;
+			navmesh.attemptMergePolies = false;
+			navmesh.fromPolygons(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY, true));
+			deployGeom.highways = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
+				this.highwayExtrudeThickness >= 0 ? this.highwayExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.highwayExtrudeThickness < 0, this.innerWardRoadAltitude);
+			// Upper Roads
+			navmesh = new NavMesh();
+			navmesh.attemptBuildGraph = false;
+			navmesh.attemptMergePolies = false;
+			navmesh.fromPolygons(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD, true));
+			deployGeom.wardRoads = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
+				this.wardRoadExtrudeThickness >= 0 ? this.wardRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.wardRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
+		}
+
+		if (this.rampedBuildings) {
+			let rampedBuildingNavmeshes = this.rampedBuildings.values();
+			deployGeom.rampedBuildings = [];
+
+			for (let mesh of rampedBuildingNavmeshes) {
+				deployGeom.rampedBuildings.push(
+					NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), mesh.regions,
+					this.rampedBuildingExtrudeThickness >= 0 ? this.rampedBuildingExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.rampedBuildingExtrudeThickness < 0, this.innerWardAltitude)
+				);
+			}
+		}
+		return deployGeom;
 	}
 
 	/**
@@ -1008,7 +1074,6 @@ class SVGCityReader {
 	// -----
 
 	testSubdivideBuilding(building) {
-		let srcBuilding = building;
 		building = building.slice(0).reverse(); // non-cleamature (svg outlines appears to be not clockwise for buildings?)
 		let poly = cellToPolygon(building);
 		/* //
@@ -1029,10 +1094,8 @@ class SVGCityReader {
 		//edges[Math.floor(Math.random() * edgeCount)
 
 
-		let result = this.carveRamps(edges[2], true, 9, Infinity);
-		this.buildRamps(result, this.highwayAltitude, this.innerWardRoadAltitude);
-
-		return srcBuilding;
+		let result = this.carveRamps(edges[2], true, 12, Infinity);
+		return this.buildRamps(result, this.highwayAltitude, this.innerWardRoadAltitude);
 	}
 
 	slopeDownRamp(geom, accumSlopeY, slopeYDist, toTailSide) {
@@ -2539,6 +2602,8 @@ class SVGCityReader {
 		const potentialHighwayRoadJunctions = [];
 		const potentialHighwayRoadCrossroads = [];
 
+		const rampDownParams = {yVal:this.highwayExtrudeThickness, yBottom:false, yBottomMin:this.innerWardAltitude };
+
 		for (let i=0; i<len; i++) {
 			r = regions[i];
 			edge = r.edge;
@@ -2617,7 +2682,6 @@ class SVGCityReader {
 			r.streetId = r.streetId.join("_");
 			//console.log(r.streetId);
 
-
 			// or numOfEdgesWithinCityWalls >=2
 			// && numOfEdgesWithinCityWalls === totalEdges && extremeLongPerpCount ===0
 			if (totalEdges >= 2 ) {
@@ -2627,7 +2691,7 @@ class SVGCityReader {
 						let isRampDown = numOfEdgesWithinCityWalls < 2;
 						r.mask = isRampDown ? BIT_HIGHWAY_RAMP : BIT_HIGHWAY;
 						if (isRampDown) {
-							r.yExtrudeParams = {yVal:this.highwayExtrudeThickness, yBottom:false, yBottomMin:this.innerWardAltitude };
+							r.yExtrudeParams = rampDownParams;
 							rampDowns.push(r);
 						} else {
 							highways.push(r);

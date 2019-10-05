@@ -46,11 +46,13 @@ export { GoalEvaluator } from './goal/GoalEvaluator.js';
 export { Think } from './goal/Think.js';
 */
 
-///*
+
 export { Edge } from './graph/core/Edge.js';
 export { Graph } from './graph/core/Graph.js';
 export { Node } from './graph/core/Node.js';
-export * from './graph/extra/HeuristicPolicy.js';
+
+///*
+//export * from './graph/extra/HeuristicPolicy.js';
 export { PriorityQueue } from './graph/extra/PriorityQueue.js';
 export { AStar } from './graph/search/AStar.js';
 export { BFS } from './graph/search/BFS.js';
