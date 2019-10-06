@@ -63,10 +63,6 @@ RAMPS (3D built from SVGCityReader)
 
 getNavmeshExtrudedGeometry()
 
-// -- done as of above
-
-getWardBuildingsGeometry
-
 3D remaining:
 - collectExtrudeGeometry(tower/entrance rooftops , extruded tower/pillar wall, HIGHWAYS (ramp down tagged), UPPER ROADS, CITY WALL(entry downs(CITY WALL tagged))  )
 
@@ -77,6 +73,10 @@ Base collection groups:
 - Upper Roads
 - Ramps
 (not built/kiv, until altitude/heightmap considerations included in: Ground)
+
+// -- done as of above
+
+getWardBuildingsGeometry
 */
 
 
@@ -991,10 +991,8 @@ class SVGCityReader {
 			tempContainer.remove();
 		}
 
-
 		// test key public methods (comment away for production)
-		console.log( this.getNavmeshExtrudedGeometry() );
-
+		// console.log( this.getNavmeshExtrudedGeometry() );
 	}
 
 	// Key public methods
@@ -1095,7 +1093,7 @@ class SVGCityReader {
 
 
 		let result = this.carveRamps(edges[2], true, 12, Infinity);
-		return this.buildRamps(result, this.highwayAltitude, this.innerWardRoadAltitude);
+		return this.buildRamps(result, this.highwayAltitude, this.innerWardAltitude);
 	}
 
 	slopeDownRamp(geom, accumSlopeY, slopeYDist, toTailSide) {
@@ -1155,6 +1153,7 @@ class SVGCityReader {
 				} else {
 					polySoup.push(geom.head);
 				}
+			
 				accumSlopeY = this.slopeDownRamp(geom, accumSlopeY, slopeYDist, false);
 			} else {
 				polySoup.push(geom.head);

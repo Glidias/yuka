@@ -87,78 +87,95 @@ class NavMeshUtils {
         let ii = indices.length;
 
         let len = polygons.length;
+        const defaultExtrudeParams = {
+            yBottom: yBottom,
+            yBottomMin: yBottomMin,
+            yVal: yVal
+        };
+        let extrudeParams;
 
-        let theYBottom;
-        let theYBottomMin;
-        let theYVal;
+        // to map extrudeParams to a map of vertex ids to extrusion vertex ids
+        let profile;
+        let profileMap = new Map();
 
         const faceIndices = [];
+        const borderEdges = [];
         let fi = 0;
+        let ei = 0;
+        let edge;
         
         for (let i=0; i<len; i++) {
             let polygon = polygons[i];
-            let edge = polygon.edge;
+            edge = polygon.edge;
 
+            ei = 0;
             fi = 0;
-
-            if (edge.prev.vertex.transformId !== transformId) {
-                edge.prev.vertex.id = vc++;
-                vertices[vi++] = edge.prev.vertex.x * xzScale;
-                vertices[vi++] = edge.prev.vertex.y;
-                vertices[vi++] = edge.prev.vertex.z * xzScale;
-                edge.prev.vertex.transformId = transformId;
-            }
-            faceIndices[fi++]  = edge.prev.vertex.id;
-
-            if (!polygon.yExtrudeParams) {
-                theYBottom = yBottom;
-                theYBottomMin = yBottomMin;
-                theYVal = yVal;
-                
+            extrudeParams = !polygon.yExtrudeParams ? defaultExtrudeParams : polygon.yExtrudeParams;
+            if (profileMap.has(extrudeParams)) {
+                profile = profileMap.get(extrudeParams);
             } else {
-                theYBottom = polygon.yExtrudeParams.yBottom !== undefined ? polygon.yExtrudeParams.yBottom : yBottom;
-                theYBottomMin =polygon.yExtrudeParams.yBottomMin !== undefined ? polygon.yExtrudeParams.yBottomMin : yBottomMin;
-                theYVal =polygon.yExtrudeParams.yVal !== undefined ? polygon.yExtrudeParams.yVal : yVal;
+                profileMap.set(extrudeParams, profile=new Map());
             }
-           
+
+            let absoluteYRange = typeof extrudeParams.yBottom === "number";
+
             do {
                 if (edge.vertex.transformId !== transformId) {
                     edge.vertex.id = vc++;
                     vertices[vi++] = edge.vertex.x * xzScale;
-                    vertices[vi++] = edge.vertex.y;
+                    vertices[vi++] = absoluteYRange ? extrudeParams.yVal : edge.vertex.y;
                     vertices[vi++] = edge.vertex.z * xzScale;
                     edge.vertex.transformId = transformId;
                 }
+
                 faceIndices[fi++]  = edge.vertex.id;
-                
-                if (edge.twin === null) {
-                    console.log("Border edge detected to be extruded.");
-                    // set up extruded vertices y position this edge
-                    vc++;
+
+                if (!profile.has(edge.vertex.id)) {
+                    profile.set(edge.vertex.id, vc++);
                     vertices[vi++] = edge.vertex.x * xzScale;
-                    vertices[vi++] = edge.vertex.y;
+                    let targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
+                    vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
                     vertices[vi++] = edge.vertex.z * xzScale;
                 }
-
+                
+                if (edge.twin === null) {
+                    borderEdges[ei++] = edge;
+                }
+               
                 edge = edge.next;
-            } while(edge !== polygon.edge.prev)
+            } while(edge !== polygon.edge)
 
-            // set up upper face indices
-            for (let f=0; f< fi; f++) {
-                indices[ii++] = faceIndices[fi];
+            // set up upper top face indices
+            let fLen = fi - 1;
+            let f;
+            for (let f=1; f< fLen; f++) {
+                indices[ii++] = faceIndices[0];
+                indices[ii++] = faceIndices[f];
+                indices[ii++] = faceIndices[f+1]
             }
 
-            if (theYBottom !== true) {
-                // set up lower face indices that was extruded and assumed to face the other direction from upper
-                while(--fi >= 0) {
-                    //indices[ii++] = faceIndices[fi] + 1;
-                }
+            // set up lower bottom face indices if needed
+            if (extrudeParams.yBottom !== true) {
+                for (let f=1; f< fLen; f++) {
+                    indices[ii++] = profile.get(faceIndices[f+1]);
+                    indices[ii++] = profile.get(faceIndices[f]);
+                    indices[ii++] = profile.get(faceIndices[0]);
+                }   
+            }
+
+            // set up border edge indices if needed
+            for (let e=0; e < ei; e++) {
+                edge = borderEdges[e];
+                indices[ii++] = profile.get(edge.prev.vertex.id);
+                indices[ii++] = profile.get(edge.vertex.id);
+                indices[ii++] = edge.vertex.id;
+
+                indices[ii++] = profile.get(edge.prev.vertex.id);
+                indices[ii++] = edge.vertex.id;
+                indices[ii++] = edge.prev.vertex.id;
+               
             }
         }
-
-
-
-
 
         return collector;
     }
