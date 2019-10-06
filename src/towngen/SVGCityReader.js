@@ -990,9 +990,6 @@ class SVGCityReader {
 		if (tempContainer !== null) {
 			tempContainer.remove();
 		}
-
-		// test key public methods (comment away for production)
-		// console.log( this.getNavmeshExtrudedGeometry() );
 	}
 
 	// Key public methods
@@ -1010,15 +1007,15 @@ class SVGCityReader {
 		let gLevel  = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.wardRoadAltitude;
 		if (this.navmeshCityWall) {
 			// City Wall
-			deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.navmeshCityWall.regions, gLevel, this.exportScaleXZ, true, gLevel);
+			deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(),NavMeshUtils.seperateMarkedPolygonsVertices(this.navmeshCityWall.regions), gLevel, this.exportScaleXZ, true, gLevel);
 			// City wall towers
 			if (this.cityWallTowerCeilingPolies) {
-				deployGeom.cityWallTowerCeiling = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.cityWallTowerCeilingPolies, this.cityWallCeilThickness, this.exportScaleXZ);
+				deployGeom.cityWallTowerCeiling = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerCeilingPolies), this.cityWallCeilThickness, this.exportScaleXZ);
 			}
 			if (this.cityWallTowerWallPolies) {
 				let towerDownTo = this.cityWallTowerBaseAltitude >= 0 ? this.cityWallTowerBaseAltitude : gLevel;
 				let towerUpTo = this.cityWallTowerTopAltitude;
-				deployGeom.cityWallTowerWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.cityWallTowerWallPolies, towerUpTo, this.exportScaleXZ, towerDownTo);
+				deployGeom.cityWallTowerWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerWallPolies), towerUpTo, this.exportScaleXZ, towerDownTo);
 			}
 		}
 
@@ -1027,14 +1024,14 @@ class SVGCityReader {
 			navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
 			navmesh.attemptMergePolies = false;
-			navmesh.fromPolygons(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY, true));
+			navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY, true)));
 			deployGeom.highways = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
 				this.highwayExtrudeThickness >= 0 ? this.highwayExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.highwayExtrudeThickness < 0, this.innerWardRoadAltitude);
 			// Upper Roads
 			navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
 			navmesh.attemptMergePolies = false;
-			navmesh.fromPolygons(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD, true));
+			navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD, true)));
 			deployGeom.wardRoads = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
 				this.wardRoadExtrudeThickness >= 0 ? this.wardRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.wardRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
 		}
@@ -1044,6 +1041,7 @@ class SVGCityReader {
 			deployGeom.rampedBuildings = [];
 
 			for (let mesh of rampedBuildingNavmeshes) {
+				NavMeshUtils.seperateMarkedPolygonsVertices(mesh.regions);
 				deployGeom.rampedBuildings.push(
 					NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), mesh.regions,
 					this.rampedBuildingExtrudeThickness >= 0 ? this.rampedBuildingExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.rampedBuildingExtrudeThickness < 0, this.innerWardAltitude)
@@ -1102,11 +1100,13 @@ class SVGCityReader {
 
 		// first landing from above
 		let landing = toTailSide ? geom.head : geom.tail;
-		NavMeshUtils.adjustAltitudeOfPolygon(landing, -accumSlopeY);;
+		NavMeshUtils.adjustAltitudeOfPolygon(landing, -accumSlopeY);
+		landing.sep = true;
 
 		// in-between ramp downs + landings if any
 		for (let i =1; i<len; i+=2) {
 			NavMeshUtils.adjustAltitudeOfPolygon(ramp[i], -slopeYDist - accumSlopeY);
+			ramp[i].sep = true;
 			accumSlopeY += slopeYDist;
 		}
 
@@ -1114,6 +1114,7 @@ class SVGCityReader {
 		landing = toTailSide ? geom.tail : geom.head;
 		NavMeshUtils.adjustAltitudeOfPolygon(landing, -slopeYDist - accumSlopeY);
 		accumSlopeY += slopeYDist;
+		landing.sep = true;
 		return accumSlopeY;
 	}
 
@@ -2593,11 +2594,11 @@ class SVGCityReader {
 		let maxRoadEdgeLengthSq =  this.maxRoadEdgeLength* this.maxRoadEdgeLength;
 
 
-		const rampDowns = [];
+		let rampDowns = [];
 		const rampDownLevel = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.wardRoadAltitude;
-		const highways = [];
-		const roadsInner = [];
-		const roadsOuter = [];
+		let highways = [];
+		let roadsInner = [];
+		let roadsOuter = [];
 		const potentialHighwayRoadJunctions = [];
 		const potentialHighwayRoadCrossroads = [];
 
@@ -2738,12 +2739,17 @@ class SVGCityReader {
 
 		// fow now, citadel wall exttudes down to rampDown level, until ground portio polygons below ctiy wall can be easily isolated
 
-
+		highways = NavMeshUtils.filterOutPolygonsByMask(highways, -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(highways, this.highwayAltitude);
-		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsInner, this.wardRoadAltitude);
-		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsOuter, this.wardRoadAltitude);
+		
+		let allRoadsInnerOuter = NavMeshUtils.filterOutPolygonsByMask(roadsInner.concat(roadsOuter), -1, true)
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(allRoadsInnerOuter, this.wardRoadAltitude);
 
+
+		rampDowns = NavMeshUtils.filterOutPolygonsByMask(rampDowns, -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(rampDowns, rampDownLevel);
+
+		navmesh.regions = highways.concat(allRoadsInnerOuter).concat(rampDowns);
 
 		// Connect highways to ramp-downs at city wall entrances
 		this.cityWallEntrancePoints.forEach((p)=>{
@@ -2788,6 +2794,7 @@ class SVGCityReader {
 		});
 		rampDowns.forEach((r)=>{
 			let edge = r.edge;
+			r.sep = true;
 			do {
 				if (edge.twin && edge.twin.polygon.connectRamp) {
 					console.log("detected rampdown edge");

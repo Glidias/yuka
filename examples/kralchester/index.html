@@ -30,6 +30,7 @@
 	function init() {
 		var cityReader = new YUKA.SVGCityReader();
 		cityReader.parse(document.getElementById('svgholder').innerHTML, document.getElementById("svgpreview"));
+		console.log( cityReader.getNavmeshExtrudedGeometry() );
 	}
 
 

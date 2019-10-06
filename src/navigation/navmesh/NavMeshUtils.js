@@ -47,8 +47,6 @@ var transformId = 0;
 
 class NavMeshUtils {
 
-    // TODO: extrude boundary edges to fill up by boundary edges
-    // boundary edge: add polygon extrude..
     // todo: boundary edge: inset
 
     /*
@@ -99,16 +97,14 @@ class NavMeshUtils {
         let profileMap = new Map();
 
         const faceIndices = [];
-        const borderEdges = [];
         let fi = 0;
-        let ei = 0;
         let edge;
+        let targYBottom;
         
         for (let i=0; i<len; i++) {
             let polygon = polygons[i];
             edge = polygon.edge;
 
-            ei = 0;
             fi = 0;
             extrudeParams = !polygon.yExtrudeParams ? defaultExtrudeParams : polygon.yExtrudeParams;
             if (profileMap.has(extrudeParams)) {
@@ -130,16 +126,52 @@ class NavMeshUtils {
 
                 faceIndices[fi++]  = edge.vertex.id;
 
-                if (!profile.has(edge.vertex.id)) {
+                ///*
+                if (extrudeParams.yBottom !== true && !profile.has(edge.vertex.id)) {
                     profile.set(edge.vertex.id, vc++);
                     vertices[vi++] = edge.vertex.x * xzScale;
-                    let targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
+                    targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
                     vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
                     vertices[vi++] = edge.vertex.z * xzScale;
                 }
+                //*/
                 
                 if (edge.twin === null) {
-                    borderEdges[ei++] = edge;
+                    ///*
+                    let a;
+                    let b;
+                    let c;
+                    let d;
+                    // tri 1
+                    targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.prev.vertex.y - extrudeParams.yVal;
+                    indices[ii++] = a = vc++;
+                    vertices[vi++] = edge.prev.vertex.x * xzScale;
+                    vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
+                    vertices[vi++] = edge.prev.vertex.z * xzScale;
+                    
+                    targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
+                    indices[ii++] = b = vc++;
+                    vertices[vi++] = edge.vertex.x * xzScale;
+                    vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
+                    vertices[vi++] = edge.vertex.z * xzScale;
+
+                    // top right
+                    indices[ii++] = c = vc++;
+                    vertices[vi++] = edge.vertex.x * xzScale;
+                    vertices[vi++] = edge.vertex.y;
+                    vertices[vi++] = edge.vertex.z * xzScale;
+
+                    // top left
+                    indices[ii++] = d = vc++;
+                    vertices[vi++] = edge.prev.vertex.x * xzScale;
+                    vertices[vi++] = edge.prev.vertex.y;
+                    vertices[vi++] = edge.prev.vertex.z * xzScale;
+
+                    // tri2
+                    indices[ii++] = a;
+                    indices[ii++] = c;
+                    indices[ii++] = d;
+                   // */
                 }
                
                 edge = edge.next;
@@ -155,6 +187,7 @@ class NavMeshUtils {
             }
 
             // set up lower bottom face indices if needed
+            ///*
             if (extrudeParams.yBottom !== true) {
                 for (let f=1; f< fLen; f++) {
                     indices[ii++] = profile.get(faceIndices[f+1]);
@@ -162,19 +195,7 @@ class NavMeshUtils {
                     indices[ii++] = profile.get(faceIndices[0]);
                 }   
             }
-
-            // set up border edge indices if needed
-            for (let e=0; e < ei; e++) {
-                edge = borderEdges[e];
-                indices[ii++] = profile.get(edge.prev.vertex.id);
-                indices[ii++] = profile.get(edge.vertex.id);
-                indices[ii++] = edge.vertex.id;
-
-                indices[ii++] = profile.get(edge.prev.vertex.id);
-                indices[ii++] = edge.vertex.id;
-                indices[ii++] = edge.prev.vertex.id;
-               
-            }
+            //*/
         }
 
         return collector;
@@ -414,7 +435,9 @@ class NavMeshUtils {
                 contours.length = c;
                 let poly;
                 filteredPolygons.push(poly = new Polygon().fromContour(contours));
-                if (polygon.yExtrudeParams) poly.yExtrudeParams = polygon.yExtrudeParams;
+                if (polygon.yExtrudeParams !== undefined) poly.yExtrudeParams = polygon.yExtrudeParams;
+                if (polygon.sep !== undefined) poly.sep = polygon.sep;
+                poly.mask = mask;
             } else filteredPolygons.push(polygon);
         }
         return filteredPolygons;
@@ -522,6 +545,19 @@ class NavMeshUtils {
         } while (edge !== polygon.edge);
     }
 
+    static seperateMarkedPolygonsVertices(polygons) {
+        let len = polygons.length;
+        for (let i=0;i<len; i++) {
+            let polygon = polygons[i];
+            if (!polygon.sep) continue;
+            let edge = polygon.edge;
+            do {
+                edge.vertex = edge.vertex.clone();
+                edge = edge.next;
+            } while (edge !== polygon.edge)
+        }
+        return polygons;
+    }
 
 
    /**
