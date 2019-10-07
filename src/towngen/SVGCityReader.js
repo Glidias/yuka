@@ -87,7 +87,8 @@ function svgLineFromTo(from, to) {
 function getNewGeometryCollector() {
 	return {
 		vertices: [],
-		indices: []
+		indices: [],
+		normals: []
 	}
 }
 
@@ -728,7 +729,7 @@ class SVGCityReader {
 		this.extrudeCityWallTowerWall = 0.8;
 
 		this.onlyElevateRoadsWithinWalls = false;
-		
+
 		this.detectCityWallEntranceTowersDist = 3;
 
 		// Road detection settings
@@ -903,7 +904,6 @@ class SVGCityReader {
 		var tempContainer = null;
 		if (previewContainer) {
 			$(previewContainer).append(svj);
-			window.document.body.style.zoom = "300%";
 		} else {
 			tempContainer = $(document.body).append($("<div></div>"));
 		}
@@ -1154,7 +1154,7 @@ class SVGCityReader {
 				} else {
 					polySoup.push(geom.head);
 				}
-			
+
 				accumSlopeY = this.slopeDownRamp(geom, accumSlopeY, slopeYDist, false);
 			} else {
 				polySoup.push(geom.head);
@@ -2058,7 +2058,7 @@ class SVGCityReader {
 		});
 		this.citadelWallPillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors))});
 		this.citadelWallEntrancePillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors))});
-		
+
 		this.cityWallEntrancePillarPoints = []; // TODO: need to find a way to detect this
 		edgeVertices.forEach((p)=>{
 			let pt = segPointToVector3(p);
@@ -2066,7 +2066,7 @@ class SVGCityReader {
 				return;
 			}
 			navmeshTagRegionByPt(navmesh, pt, null, errors);
-			
+
 			if (pt.region && !pt.region.mask) {
 				// Check if point is closest enough to entrance
 				//if (pt.squaredDistanceTo())
@@ -2076,7 +2076,7 @@ class SVGCityReader {
 		});
 
 		if (this.citadelWallEntrancePoint) navmeshTagRegionByPt(navmesh, this.citadelWallEntrancePoint, BIT_CITADEL_ENTRANCE, errors);
-		
+
 		errors.forEach((e)=>{
 			console.warn("city wall point region find error founds")
 			g.append(this.makeSVG("circle", {r:0.5, "stroke":"red", fill:"white", cx:e.x, cy:e.z}));
@@ -2091,7 +2091,7 @@ class SVGCityReader {
 
 		var g = $(this.makeSVG("g", {}));
 		this.map.append(g, {});
-		
+
 		// this.navmeshCityWall
 
 		let refPts = this.cityWallPillarPoints.concat(this.cityWallEntrancePillarPoints).concat(this.citadelWallPillarPoints).concat(this.citadelWallEntrancePillarPoints);
@@ -2101,7 +2101,7 @@ class SVGCityReader {
 		refPts.forEach((pt)=>{
 			if (!pt.region) return;
 			g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.5, d: polygonSVGString(pt.region)  }));
-			
+
 			//console.log("Walling:"+NavMeshUtils.countBorderEdges(pt.region));
 
 			NavMeshUtils.getBorderEdges(pt.region).forEach((e)=>{
@@ -2741,7 +2741,7 @@ class SVGCityReader {
 
 		highways = NavMeshUtils.filterOutPolygonsByMask(highways, -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(highways, this.highwayAltitude);
-		
+
 		let allRoadsInnerOuter = NavMeshUtils.filterOutPolygonsByMask(roadsInner.concat(roadsOuter), -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(allRoadsInnerOuter, this.wardRoadAltitude);
 

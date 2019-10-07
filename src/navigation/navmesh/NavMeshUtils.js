@@ -80,9 +80,15 @@ class NavMeshUtils {
 
         const vertices = collector.vertices;
         const indices = collector.indices;
+        const normals = collector.normals;
         let vi = vertices.length;
         let vc = vi / 3;
         let ii = indices.length;
+        let ni = vi;
+
+        let nx;
+        let nz;
+        let dn;
 
         let len = polygons.length;
         const defaultExtrudeParams = {
@@ -100,7 +106,7 @@ class NavMeshUtils {
         let fi = 0;
         let edge;
         let targYBottom;
-        
+
         for (let i=0; i<len; i++) {
             let polygon = polygons[i];
             edge = polygon.edge;
@@ -121,6 +127,9 @@ class NavMeshUtils {
                     vertices[vi++] = edge.vertex.x * xzScale;
                     vertices[vi++] = absoluteYRange ? extrudeParams.yVal : edge.vertex.y;
                     vertices[vi++] = edge.vertex.z * xzScale;
+                    normals[ni++] = 0;
+                    normals[ni++] = 1;
+                    normals[ni++] = 0;
                     edge.vertex.transformId = transformId;
                 }
 
@@ -133,9 +142,13 @@ class NavMeshUtils {
                     targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
                     vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
                     vertices[vi++] = edge.vertex.z * xzScale;
+
+                    normals[ni++] = 0;
+                    normals[ni++] = -1;
+                    normals[ni++] = 0;
                 }
                 //*/
-                
+
                 if (edge.twin === null) {
                     ///*
                     let a;
@@ -148,24 +161,51 @@ class NavMeshUtils {
                     vertices[vi++] = edge.prev.vertex.x * xzScale;
                     vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
                     vertices[vi++] = edge.prev.vertex.z * xzScale;
-                    
+                    nx = -edge.prev.vertex.z;
+                    nz = edge.prev.vertex.x;
+                    dn = Math.sqrt(nx*nx + nz*nz);
+                    nx /= dn;
+                    nz /= dn;
+                    normals[ni++] = nx;
+                    normals[ni++] = 0;
+                    normals[ni++] = nz;
+
                     targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
                     indices[ii++] = b = vc++;
                     vertices[vi++] = edge.vertex.x * xzScale;
                     vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
                     vertices[vi++] = edge.vertex.z * xzScale;
+                    nx = -edge.vertex.z;
+                    nz = edge.vertex.x;
+                    dn = Math.sqrt(nx*nx + nz*nz);
+                    nx /= dn;
+                    nz /= dn;
+                    normals[ni++] = nx;
+                    normals[ni++] = 0;
+                    normals[ni++] = nz;
 
                     // top right
                     indices[ii++] = c = vc++;
                     vertices[vi++] = edge.vertex.x * xzScale;
                     vertices[vi++] = edge.vertex.y;
                     vertices[vi++] = edge.vertex.z * xzScale;
+                    normals[ni++] = nx;
+                    normals[ni++] = 0;
+                    normals[ni++] = nz;
 
                     // top left
-                    indices[ii++] = d = vc++;
+                    d = vc++;
                     vertices[vi++] = edge.prev.vertex.x * xzScale;
                     vertices[vi++] = edge.prev.vertex.y;
                     vertices[vi++] = edge.prev.vertex.z * xzScale;
+                    nx = -edge.prev.vertex.z;
+                    nz = edge.prev.vertex.x;
+                    dn = Math.sqrt(nx*nx + nz*nz);
+                    nx /= dn;
+                    nz /= dn;
+                    normals[ni++] = nx;
+                    normals[ni++] = 0;
+                    normals[ni++] = nz;
 
                     // tri2
                     indices[ii++] = a;
@@ -173,7 +213,7 @@ class NavMeshUtils {
                     indices[ii++] = d;
                    // */
                 }
-               
+
                 edge = edge.next;
             } while(edge !== polygon.edge)
 
@@ -193,7 +233,7 @@ class NavMeshUtils {
                     indices[ii++] = profile.get(faceIndices[f+1]);
                     indices[ii++] = profile.get(faceIndices[f]);
                     indices[ii++] = profile.get(faceIndices[0]);
-                }   
+                }
             }
             //*/
         }
@@ -218,7 +258,7 @@ class NavMeshUtils {
         nx /=d;
         nz /=d;
         let contours = [
-            edge.prev.vertex.clone(), 
+            edge.prev.vertex.clone(),
             new Vector3(edge.prev.vertex.x + extrudeVal * nx, edge.prev.vertex.y, edge.prev.vertex.z+  extrudeVal * nz),
             new Vector3(edge.vertex.x + extrudeVal * nx, edge.vertex.y, edge.vertex.z + extrudeVal* nz),
             edge.vertex.clone()
@@ -228,7 +268,7 @@ class NavMeshUtils {
 
     /**
      * Clones a polygon entirely with an entir enew set of HalfEdges and vertex references
-     * @param {Polygon} polygon 
+     * @param {Polygon} polygon
      */
     static clonePolygon(polygon) {
         let contours = [];
@@ -263,10 +303,10 @@ class NavMeshUtils {
 
     /**
      * LInk polygons by connecting quad polygons
-     * @param {HalfEdge} connector A HalfEdge of a Polygon #1 
+     * @param {HalfEdge} connector A HalfEdge of a Polygon #1
      * @param {HalfEdge} connector2 A HalfEdge of a Polygon #2
      * @param {Polygon} connector3 This will be the connecting polygon to link the polgons if any, given 2 border edges
-     * @return The resulting connecting polygons 
+     * @return The resulting connecting polygons
      */
     static linkPolygons(connector, connector2=null, connector3=null) {
         let polies = [];
@@ -287,13 +327,13 @@ class NavMeshUtils {
             POINT.z = (connector.prev.vertex.z + connector.vertex.z) * 0.5;
             edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
             // edge to connector
-            
+
             contours[c++] = edge.vertex;
             contours[c++] = connector.prev.vertex;
             contours[c++] = connector.vertex;
             contours[c++] = edge.prev.vertex;
 
-            
+
             let p;
             polies.push(p = new Polygon().fromContour(contours));
 
@@ -311,7 +351,7 @@ class NavMeshUtils {
                 contours[c++] = connector2.prev.vertex;
                 contours[c++] = connector2.vertex;
                 contours[c++] = edge.prev.vertex;
-                
+
                 polies.push(p2 =  new Polygon().fromContour(contours));
                 p2.edge.twin = connector2.prev;
                 connector2.prev.twin = p2.edge;
@@ -350,7 +390,7 @@ class NavMeshUtils {
             } while (edge !== r.edge);
         }
         return result;
-    } 
+    }
 
     static scalePolygons(polygons, xzScale) {
         transformId++;
