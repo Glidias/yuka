@@ -780,7 +780,7 @@ class SVGCityReader {
 
 		this.cityWallCeilThickness = 1;
 		// extude thickness, if negative value, will sink into ground exclude bottom base faces
-		this.cityWallEntranceExtrudeThickness = 1;
+		this.cityWallEntranceExtrudeThickness = 1.4;
 		this.highwayExtrudeThickness = 3;
 		this.wardRoadExtrudeThickness = 0.7;
 		this.rampedBuildingExtrudeThickness = -1;
@@ -2749,6 +2749,11 @@ class SVGCityReader {
 		rampDowns = NavMeshUtils.filterOutPolygonsByMask(rampDowns, -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(rampDowns, rampDownLevel);
 
+		const cityWallEntranceExtrudeParams = {
+			yVal: this.cityWallEntranceExtrudeThickness,
+			yBottom: false
+		};
+
 		navmesh.regions = highways.concat(allRoadsInnerOuter).concat(rampDowns);
 
 		// Connect highways to ramp-downs at city wall entrances
@@ -2763,6 +2768,7 @@ class SVGCityReader {
 				e.prev.vertex = e.prev.vertex.clone();
 				e.vertex = e.vertex.clone();
 
+				p.region.yExtrudeParams = cityWallEntranceExtrudeParams
 				let entryWay = NavMeshUtils.clonePolygon(p.region);
 				NavMeshUtils.setAbsAltitudeOfPolygon(entryWay, this.highwayAltitude);
 				entryWay.mask = BIT_HIGHWAY;
