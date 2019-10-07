@@ -120,9 +120,9 @@ class NavMeshUtils {
             }
 
             let absoluteYRange = typeof extrudeParams.yBottom === "number";
-
+            let edgeIndex = 0;
             do {
-                if (edge.vertex.transformId !== transformId) {
+                if (edge.vertex.transformId !== transformId && !extrudeParams.bordersOnly) {
                     edge.vertex.id = vc++;
                     vertices[vi++] = edge.vertex.x * xzScale;
                     vertices[vi++] = absoluteYRange ? extrudeParams.yVal : edge.vertex.y;
@@ -136,7 +136,7 @@ class NavMeshUtils {
                 faceIndices[fi++]  = edge.vertex.id;
 
                 ///*
-                if (extrudeParams.yBottom !== true && !profile.has(edge.vertex.id)) {
+                if (!extrudeParams.bordersOnly && extrudeParams.yBottom !== true && !profile.has(edge.vertex.id)) {
                     profile.set(edge.vertex.id, vc++);
                     vertices[vi++] = edge.vertex.x * xzScale;
                     targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
@@ -149,7 +149,7 @@ class NavMeshUtils {
                 }
                 //*/
 
-                if (edge.twin === null) {
+                if (!extrudeParams.bordersOnly ? edge.twin === null : (polygon.edgeMask & (1<<edgeIndex)) ) {
                     ///*
                     let a;
                     let b;
@@ -215,6 +215,7 @@ class NavMeshUtils {
                 }
 
                 edge = edge.next;
+                edgeIndex++;
             } while(edge !== polygon.edge)
 
             // set up upper top face indices
@@ -228,7 +229,7 @@ class NavMeshUtils {
 
             // set up lower bottom face indices if needed
             ///*
-            if (extrudeParams.yBottom !== true) {
+            if (!extrudeParams.bordersOnly && extrudeParams.yBottom !== true) {
                 for (let f=1; f< fLen; f++) {
                     indices[ii++] = profile.get(faceIndices[f+1]);
                     indices[ii++] = profile.get(faceIndices[f]);
@@ -270,7 +271,7 @@ class NavMeshUtils {
      * Clones a polygon entirely with an entir enew set of HalfEdges and vertex references
      * @param {Polygon} polygon
      */
-    static clonePolygon(polygon) {
+    static clonePolygon(polygon, reversed=false) {
         let contours = [];
         let edge = polygon.edge;
         do {
@@ -278,14 +279,15 @@ class NavMeshUtils {
             edge = edge.next;
         } while (edge !== polygon.edge);
 
+        if (reversed) contours.reverse();
         return new Polygon().fromContour(contours);
     }
 
-    static countBorderEdges(polygon) {
+    static countBorderEdges(polygon, countAllEdgeTypes=false) {
         let count = 0;
         let edge = polygon.edge;
         do {
-            count += !edge.twin ? 1 : 0;
+            count += !edge.twin || countAllEdgeTypes ? 1 : 0;
             edge = edge.next;
         } while (edge !== polygon.edge);
         return count;
@@ -328,17 +330,19 @@ class NavMeshUtils {
             edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
             // edge to connector
 
-            contours[c++] = edge.vertex;
-            contours[c++] = connector.prev.vertex;
-            contours[c++] = connector.vertex;
+           
             contours[c++] = edge.prev.vertex;
+             contours[c++] = connector.vertex;
+              contours[c++] = connector.prev.vertex;
+               contours[c++] = edge.vertex;
 
 
             let p;
+            contours.length = c;
             polies.push(p = new Polygon().fromContour(contours));
 
-            p.edge.twin = connector.prev;
-            connector.prev.twin = p.edge;
+            p.edge.prev.twin = connector;
+            connector.twin = p.edge.prev;
 
             if (connector2 !== null) {
                 let p2;
@@ -347,14 +351,16 @@ class NavMeshUtils {
                 POINT.z = (connector2.prev.vertex.z + connector2.vertex.z) * 0.5;
                 edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
 
-                contours[c++] = edge.vertex;
-                contours[c++] = connector2.prev.vertex;
-                contours[c++] = connector2.vertex;
+               
                 contours[c++] = edge.prev.vertex;
+                 contours[c++] = connector2.vertex;
+                  contours[c++] = connector2.prev.vertex;
+                  contours[c++] = edge.vertex;
 
+                contours.length = c;
                 polies.push(p2 =  new Polygon().fromContour(contours));
-                p2.edge.twin = connector2.prev;
-                connector2.prev.twin = p2.edge;
+                p2.edge.prev.twin = connector2;
+                connector2.twin = p2.edge.prev;
             }
         }
         return polies;
@@ -476,6 +482,7 @@ class NavMeshUtils {
                 let poly;
                 filteredPolygons.push(poly = new Polygon().fromContour(contours));
                 if (polygon.yExtrudeParams !== undefined) poly.yExtrudeParams = polygon.yExtrudeParams;
+                if (polygon.edgeMask !== undefined) poly.edgeMask = polygon.edgeMask;
                 if (polygon.sep !== undefined) poly.sep = polygon.sep;
                 poly.mask = mask;
             } else filteredPolygons.push(polygon);

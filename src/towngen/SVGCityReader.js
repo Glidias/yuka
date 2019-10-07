@@ -2754,6 +2754,12 @@ class SVGCityReader {
 			yBottom: false
 		};
 
+		const cityWallEntranceWallParams = {
+			yVal: rampDownLevel,
+			bordersOnly: true,
+			yBottom: true
+		};
+
 		navmesh.regions = highways.concat(allRoadsInnerOuter).concat(rampDowns);
 
 		// Connect highways to ramp-downs at city wall entrances
@@ -2768,11 +2774,27 @@ class SVGCityReader {
 				e.prev.vertex = e.prev.vertex.clone();
 				e.vertex = e.vertex.clone();
 
-				p.region.yExtrudeParams = cityWallEntranceExtrudeParams
+				p.region.yExtrudeParams = cityWallEntranceExtrudeParams;
+
+				let edge = p.region.edge;
+				let bi = NavMeshUtils.countBorderEdges(p.region, true);
+				let biMask = 0;
+				do {
+					bi--;
+					biMask |= edge.twin ? (1 << bi) : 0;
+					edge = edge.next;
+				} while (edge !== p.region.edge);
+				let entryWayWallsBelow = NavMeshUtils.clonePolygon(p.region, true);
+				entryWayWallsBelow.yExtrudeParams = cityWallEntranceWallParams;
+				entryWayWallsBelow.mask = BIT_WARD_ROAD;
+				entryWayWallsBelow.edgeMask = ~biMask; // not sure why need to flip
+				NavMeshUtils.setAbsAltitudeOfPolygon(entryWayWallsBelow, this.cityWallAltitude);
+
 				let entryWay = NavMeshUtils.clonePolygon(p.region);
 				NavMeshUtils.setAbsAltitudeOfPolygon(entryWay, this.highwayAltitude);
 				entryWay.mask = BIT_HIGHWAY;
 				navmesh.regions.push(entryWay);
+				navmesh.regions.push(entryWayWallsBelow);
 
 				g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.015, d: polygonSVGString(entryWay) }));
 				g.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":1, d: edgeSVGString(e) }));
@@ -2793,6 +2815,7 @@ class SVGCityReader {
 					r.mask = BIT_HIGHWAY;
 					g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: polygonSVGString(r) }));
 					navmesh.regions.push(r);
+					//console.log("COnnected poly:"+r.convex(true));
 				});
 			} else {
 				console.warn("Missed Entrance connect highway entirely!")
@@ -2806,6 +2829,7 @@ class SVGCityReader {
 					console.log("detected rampdown edge");
 					edge.prev.vertex.y = this.highwayAltitude;
 					edge.vertex.y = this.highwayAltitude;
+					//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
 				}
 				edge = edge.next;
 			} while(edge !== r.edge)
