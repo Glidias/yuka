@@ -484,7 +484,7 @@ class NavMeshUtils {
                 if (polygon.yExtrudeParams !== undefined) poly.yExtrudeParams = polygon.yExtrudeParams;
                 if (polygon.edgeMask !== undefined) poly.edgeMask = polygon.edgeMask;
                 if (polygon.sep !== undefined) poly.sep = polygon.sep;
-                poly.mask = mask;
+                poly.mask = polygon.mask;
             } else filteredPolygons.push(polygon);
         }
         return filteredPolygons;
