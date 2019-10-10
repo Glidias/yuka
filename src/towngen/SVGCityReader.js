@@ -1140,39 +1140,39 @@ class SVGCityReader {
 							nz /=d;
 							let wv = wardCollector.vertices.length / 3;
 
-							ex = buildingInset!==0 ? -vertexNormals[(1<<i)]*buildingInset : 0;
-							ez = buildingInset!==0 ? -vertexNormals[(1<<i)+1]*buildingInset : 0;
-							wardCollector.vertices.push(pt[0]*scaleXZ+ex, upperLevel, pt[1]*scaleXZ+ez);
+							ex = buildingInset!==0 ? vertexNormals[(i*2)]*buildingInset : 0;
+							ez = buildingInset!==0 ? vertexNormals[(i*2)+1]*buildingInset : 0;
+							wardCollector.vertices.push(pt[0]*scaleXZ-ex, upperLevel, pt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
-							wardCollector.vertices.push(pt[0]*scaleXZ+ex , groundLevel, pt[1]*scaleXZ+ez);
+							wardCollector.vertices.push(pt[0]*scaleXZ-ex , groundLevel, pt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
-							ex = buildingInset!==0 ? -vertexNormals[(1<<prevIndex)]*buildingInset : 0;
-							ez = buildingInset!==0 ? -vertexNormals[(1<<prevIndex)+1]*buildingInset : 0;
-							wardCollector.vertices.push(prevPt[0]*scaleXZ+ex , groundLevel, prevPt[1]*scaleXZ+ez);
+							ex = buildingInset!==0 ? vertexNormals[(prevIndex*2)]*buildingInset : 0;
+							ez = buildingInset!==0 ? vertexNormals[(prevIndex*2)+1]*buildingInset : 0;
+							wardCollector.vertices.push(prevPt[0]*scaleXZ-ex , groundLevel, prevPt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
-							wardCollector.vertices.push(prevPt[0]*scaleXZ+ex , upperLevel, prevPt[1]*scaleXZ+ez);
+							wardCollector.vertices.push(prevPt[0]*scaleXZ-ex , upperLevel, prevPt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
 							wardCollector.indices.push(wv, wv+1, wv+2,   wv, wv+2, wv+3);
 
 							if (i >= 1 && i < bLen) {
 
-								ex = buildingInset!==0 ? -vertexNormals[(1<<0)]*buildingInset : 0;
-								ez = buildingInset!==0 ? -vertexNormals[(1<<0)+1]*buildingInset : 0;
-								wardCollector.vertices.push(building[0][0]*scaleXZ + ex, upperLevel, building[0][1]*scaleXZ + ez);
+								ex = buildingInset!==0 ? vertexNormals[0]*buildingInset : 0;
+								ez = buildingInset!==0 ? vertexNormals[1]*buildingInset : 0;
+								wardCollector.vertices.push(building[0][0]*scaleXZ - ex, upperLevel, building[0][1]*scaleXZ - ez);
 								wardCollector.normals.push(0, 1, 0);
 
-								ex = buildingInset!==0 ? -vertexNormals[(1<<i)]*buildingInset : 0;
-								ez = buildingInset!==0 ? -vertexNormals[(1<<i)+1]*buildingInset : 0;
-								wardCollector.vertices.push(pt[0]*scaleXZ + ex, upperLevel, pt[1]*scaleXZ+ez);
+								ex = buildingInset!==0 ? vertexNormals[i*2]*buildingInset : 0;
+								ez = buildingInset!==0 ? vertexNormals[(i*2)+1]*buildingInset : 0;
+								wardCollector.vertices.push(pt[0]*scaleXZ - ex, upperLevel, pt[1]*scaleXZ-ez);
 								wardCollector.normals.push(0, 1, 0);
 
-								ex = buildingInset!==0 ? -vertexNormals[(1<<nextIndex)]*buildingInset : 0;
-								ez = buildingInset!==0 ? -vertexNormals[(1<<nextIndex)+1]*buildingInset : 0;
-								wardCollector.vertices.push(nextPt[0]*scaleXZ + ex, upperLevel, nextPt[1]*scaleXZ + ez);
+								ex = buildingInset!==0 ? vertexNormals[(nextIndex*2)]*buildingInset : 0;
+								ez = buildingInset!==0 ? vertexNormals[(nextIndex*2)+1]*buildingInset : 0;
+								wardCollector.vertices.push(nextPt[0]*scaleXZ - ex, upperLevel, nextPt[1]*scaleXZ - ez);
 								wardCollector.normals.push(0, 1, 0);
 
 								wardCollector.indices.push(wv+6, wv+5, wv+4);
