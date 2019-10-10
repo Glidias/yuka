@@ -785,6 +785,9 @@ class SVGCityReader {
 		this.wardRoadExtrudeThickness = 0.7;
 		this.rampedBuildingExtrudeThickness = -1;
 
+		this.buildingMinHeight = 3;
+		this.buildingMaxHeight = 7;
+
 		// Export 3d scale settings
 		this.exportScaleXZ = 4;
 	}
@@ -1062,9 +1065,137 @@ class SVGCityReader {
 		// TODO: vertices and indices, for now, just get all per ward neighborhood for collision detection DBVH/BVH
 		// for rendering buffer, consider renderPerWard, else render all
 
+		let wardCollectors = [];
+		let wardCollector;
+		const scaleXZ = this.exportScaleXZ;
+		let groundLevel;
+		let upperLevel;
+		console.log(this.wards.length + ": Wards counted");
+		let totalVertices = 0;
+
+		const VERTEX_NORMALS = [];
+
+		this.wards.forEach((wardObj)=> {
+			wardCollector = getNewGeometryCollector();
+			wardCollectors.push(wardCollector);
+			wardObj.neighborhoodPts.forEach((buildingsList)=> {
+				buildingsList.forEach((building)=>{
+
+						if (this.rampedBuildings.has(building)) {
+							// 	console.log("Skiping ramped building")
+							return;
+						}
+						let w0 =  wardCollector.vertices.length;
+
+						groundLevel = this.innerWardAltitude;
+						upperLevel = groundLevel + this.buildingMinHeight + (this.buildingMaxHeight - this.buildingMinHeight) * Math.random();
+						const bLen = building.length - 1;
+
+						let vertexNormals = VERTEX_NORMALS;
+						if (buildingInset !== 0) {
+							let vi = 0;
+
+							building.forEach((pt, i) => {
+								let prevIndex = i >= 1 ? i - 1 : bLen;
+								let prevPt = building[prevIndex];
+								let nextIndex = i < bLen ? i + 1 : 0;
+								let nextPt = building[nextIndex];
+								let dx = pt[0] - prevPt[0];
+								let dz = pt[1] - prevPt[1];
+								let nx = dz;
+								let nz = -dx;
+								let d = Math.sqrt(nx*nx + nz*nz);
+								nx /=d;
+								nz /=d;
+
+								let nx2;
+								let nz2;
+
+								dx = nextPt[0] - pt[0];
+								dz = nextPt[1] - pt[1];
+								nx2 = dz;
+								nz2 = -dx;
+								d = Math.sqrt(nx2*nx2 + nz2*nz2);
+								nx2 /= d;
+								nz2 /= d;
+								vertexNormals[vi++] = (nx + nx2) * 0.5;
+								vertexNormals[vi++] = (nz + nz2) * 0.5;
+							});
+						}
+
+						building.forEach((pt, i) => {
+							let prevIndex = i >= 1 ? i - 1 : bLen;
+							let prevPt = building[prevIndex];
+							let nextIndex = i < bLen ? i + 1 : 0;
+							let nextPt = building[nextIndex];
+							let dx = pt[0] - prevPt[0];
+							let dz = pt[1] - prevPt[1];
+							let nx = dz;
+							let nz = -dx;
+							let ex;
+							let ez;
+							let bi;
+							let d = Math.sqrt(nx*nx + nz*nz);
+							nx /=d;
+							nz /=d;
+							let wv = wardCollector.vertices.length / 3;
+
+							ex = buildingInset!==0 ? -vertexNormals[(1<<i)]*buildingInset : 0;
+							ez = buildingInset!==0 ? -vertexNormals[(1<<i)+1]*buildingInset : 0;
+							wardCollector.vertices.push(pt[0]*scaleXZ+ex, upperLevel, pt[1]*scaleXZ+ez);
+							wardCollector.normals.push(nx, 0, nz);
+
+							wardCollector.vertices.push(pt[0]*scaleXZ+ex , groundLevel, pt[1]*scaleXZ+ez);
+							wardCollector.normals.push(nx, 0, nz);
+
+							ex = buildingInset!==0 ? -vertexNormals[(1<<prevIndex)]*buildingInset : 0;
+							ez = buildingInset!==0 ? -vertexNormals[(1<<prevIndex)+1]*buildingInset : 0;
+							wardCollector.vertices.push(prevPt[0]*scaleXZ+ex , groundLevel, prevPt[1]*scaleXZ+ez);
+							wardCollector.normals.push(nx, 0, nz);
+
+							wardCollector.vertices.push(prevPt[0]*scaleXZ+ex , upperLevel, prevPt[1]*scaleXZ+ez);
+							wardCollector.normals.push(nx, 0, nz);
+
+							wardCollector.indices.push(wv, wv+1, wv+2,   wv, wv+2, wv+3);
+
+							if (i >= 1 && i < bLen) {
+
+								ex = buildingInset!==0 ? -vertexNormals[(1<<0)]*buildingInset : 0;
+								ez = buildingInset!==0 ? -vertexNormals[(1<<0)+1]*buildingInset : 0;
+								wardCollector.vertices.push(building[0][0]*scaleXZ + ex, upperLevel, building[0][1]*scaleXZ + ez);
+								wardCollector.normals.push(0, 1, 0);
+
+								ex = buildingInset!==0 ? -vertexNormals[(1<<i)]*buildingInset : 0;
+								ez = buildingInset!==0 ? -vertexNormals[(1<<i)+1]*buildingInset : 0;
+								wardCollector.vertices.push(pt[0]*scaleXZ + ex, upperLevel, pt[1]*scaleXZ+ez);
+								wardCollector.normals.push(0, 1, 0);
+
+								ex = buildingInset!==0 ? -vertexNormals[(1<<nextIndex)]*buildingInset : 0;
+								ez = buildingInset!==0 ? -vertexNormals[(1<<nextIndex)+1]*buildingInset : 0;
+								wardCollector.vertices.push(nextPt[0]*scaleXZ + ex, upperLevel, nextPt[1]*scaleXZ + ez);
+								wardCollector.normals.push(0, 1, 0);
+
+								wardCollector.indices.push(wv+6, wv+5, wv+4);
+
+								//==wardCollector.indices.push(w0, wv, )
+								//[ii++] = faceIndices[0];
+								//indices[ii++] = faceIndices[f];
+								//indices[ii++] = faceIndices[f+1]
+							}
+
+
+						});
+					});
+				});
+			});
+
 		// later, consider varying base heights at different wards even from outside city wall, at number 2 districts from city wall should be lower altitude
 		//  depending on distance to city wall, let highways still extend outside city wall after ramp down
+
+		return wardCollectors;
 	}
+
+
 
 
 	// -----
@@ -3469,7 +3600,7 @@ class SVGCityReader {
 				//console.log(arr.length + " VS " + vLen  + " :: "+indexTrace+","+i);
 				vLen = arr.length;
 
-				for (v=0; v<vLen; v++) {
+				for (v=vLen-1; v>=0; v--) {
 					let pArr = arr[v].split(",");
 					pArr = pArr.map((p=>{return parseFloat(p.trim())}))
 

@@ -31,7 +31,7 @@
 		var cityReader = new YUKA.SVGCityReader();
 		cityReader.parse(document.getElementById('svgholder').innerHTML, document.getElementById("svgpreview"));
 		console.log( cityReader.getNavmeshExtrudedGeometry() );
-
+		console.log( cityReader.getWardBuildingsGeometry() );
 		window.document.body.style.zoom = "300%";
 	}
 
