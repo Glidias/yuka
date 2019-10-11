@@ -120,6 +120,8 @@ class NavMeshUtils {
             }
 
             let absoluteYRange = typeof extrudeParams.yBottom === "number";
+            let considerEdges = yVal !== 0 || (absoluteYRange || yBottom);
+
             let edgeIndex = 0;
             do {
                 if (edge.vertex.transformId !== transformId && !extrudeParams.bordersOnly) {
@@ -149,7 +151,7 @@ class NavMeshUtils {
                 }
                 //*/
 
-                if (!extrudeParams.bordersOnly ? edge.twin === null : (polygon.edgeMask & (1<<edgeIndex)) ) {
+                if (!extrudeParams.bordersOnly ? edge.twin === null && considerEdges : (polygon.edgeMask & (1<<edgeIndex)) ) {
                     ///*
                     let a;
                     let b;
@@ -330,7 +332,7 @@ class NavMeshUtils {
             edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
             // edge to connector
 
-           
+
             contours[c++] = edge.prev.vertex;
              contours[c++] = connector.vertex;
               contours[c++] = connector.prev.vertex;
@@ -351,7 +353,7 @@ class NavMeshUtils {
                 POINT.z = (connector2.prev.vertex.z + connector2.vertex.z) * 0.5;
                 edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
 
-               
+
                 contours[c++] = edge.prev.vertex;
                  contours[c++] = connector2.vertex;
                   contours[c++] = connector2.prev.vertex;
