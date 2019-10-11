@@ -670,6 +670,7 @@ class SVGCityReader {
 
 		this.selectorRoads = "g[fill=none]"  // polyline
 
+		this.aabb2d = new AABB();
 
 
 		// stroke-width="1.9"
@@ -2083,11 +2084,13 @@ class SVGCityReader {
 			this.cityWallPillars.push(poly=svgPolyStrToPoints($(item).attr("points")));
 			let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
 			this.cityWallPillarPoints.push(pt);
+			this.aabb2d.expand(pt);
 		});
 
 		jEntrances.each((index, item)=>{
 			let pt = getBBoxCenter($(item).children()[0].getBBox());
 			this.cityWallEntrancePoints.push(pt);
+			this.aabb2d.expand(pt);
 		});
 
 
@@ -2125,6 +2128,7 @@ class SVGCityReader {
 			let citadelEntranceLines = jSelCitadelWall.find(this.subSelectorEntranceLines);
 			if (citadelEntranceLines.length >=3) {
 				this.citadelWallEntrancePoint = getBBoxCenter(citadelEntranceLines[0].getBBox());
+				this.aabb2d.expand(this.citadelWallEntrancePoint);
 				this.citadelWallEntrancePillarPoints.push(
 					getBBoxCenter(citadelEntranceLines[1].getBBox()), // right first
 					getBBoxCenter(citadelEntranceLines[2].getBBox())	// left
@@ -2434,14 +2438,12 @@ class SVGCityReader {
 
 			}
 
-
-
 			len = hullPoints.length;
-
 
 			for (i=0; i<len; i++) {
 				let hullVertex;
 				hullVerticesSoup.push(hullVertex = [hullPoints[i].x, hullPoints[i].z]);
+				this.aabb2d.expand(hullPoints[i]);
 				hullVertex.id = index; // ward index
 				if (i > 0) {
 					if (i < len - 1) {
