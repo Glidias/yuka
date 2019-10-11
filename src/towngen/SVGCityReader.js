@@ -10,6 +10,8 @@ import cleanPSLG from "clean-pslg";
 import {NavMesh} from "../navigation/navmesh/NavMesh.js";
 import {NavMeshUtils} from "../navigation/navmesh/NavMeshUtils.js";
 
+import {MathUtils} from "../math/MathUtils.js";
+
 import {Dijkstra} from "../graph/search/Dijkstra.js";
 import { NavEdge } from "../navigation/core/NavEdge.js";
 
@@ -39,44 +41,10 @@ const BIT_HIGHWAY_RAMP = 4;
 For Kralchester3D
 
 SVGCityReader identify:
-- City Wall tower/entrance key polygons, tower/entrance pillar border edges (inward/outward 2e ach)
-- entrance+highways, tower+roads connecting edges through above
-
-for NavMeshUtils's: for
-- linkPolygons(entrance+highways ... tower+roads)
-
-- getNewExtrudeEdgePolygon(tower/entrance pillar)
 
 ( // kiv later)
 - addConnectingPortal(subjectEdge, connectingEdge, setTwinLinks?=false)
 
-
-All Navmeshes:
-UPPER WARDS* (kiv: 3D buildings on upper ward built from SVGCityReader)
-CITY WALL
-HIGHWAYS*
-UPPER ROADS*
-GROUND* (3D buildings on ground built from SVGCityReader)
-RAMPS (3D built from SVGCityReader)
-
-* kiv Will be Linked by RAMPS to combine into 1 interconnected Navmesh
-
-getNavmeshExtrudedGeometry()
-
-3D remaining:
-- collectExtrudeGeometry(tower/entrance rooftops , extruded tower/pillar wall, HIGHWAYS (ramp down tagged), UPPER ROADS, CITY WALL(entry downs(CITY WALL tagged))  )
-
-Base collection groups:
-- Buildings (lower/upper)
-- City Wall
-- Highways
-- Upper Roads
-- Ramps
-(not built/kiv, until altitude/heightmap considerations included in: Ground)
-
-// -- done as of above
-
-getWardBuildingsGeometry
 */
 
 
@@ -702,6 +670,7 @@ class SVGCityReader {
 
 		this.selectorRoads = "g[fill=none]"  // polyline
 
+		this.aabb2d = new AABB();
 
 
 		// stroke-width="1.9"
@@ -788,8 +757,20 @@ class SVGCityReader {
 		this.buildingMinHeight = 3;
 		this.buildingMaxHeight = 7;
 
+
 		// Export 3d scale settings
 		this.exportScaleXZ = 4;
+
+		// Building filtering export settings
+		this.minBuildingEdges = 3;	// >=4 to be considered
+		this.maxBuildingEdges = 3; // >=4 to be considered
+		this.minBuildingEdgeLength = 0;
+		this.maxBuildingEdgeLength = 0; // >0 to be considered
+
+		this.smallenBuildingEdgeLength = 0; // >0 to be considered
+		this.largenBuildingEdgeLength = 0; // >0 to be considered
+		this.smallenSqRootAreaTest = false;
+		this.largenSqRootAreaTest= false;
 	}
 
 	extrudePathOfPoints(points, radius, loop, cap, newPoints, _isLooping) {
@@ -1062,7 +1043,7 @@ class SVGCityReader {
 	 * @return {*} vertices/indices Object, or array of it with renderPerWard
 	 */
 	getWardBuildingsGeometry(buildingInset=0, renderPerWard=false) {
-		// TODO: vertices and indices, for now, just get all per ward neighborhood for collision detection DBVH/BVH
+		// kiv todo: vertices and indices, for now, just get all per ward neighborhood for collision detection DBVH/BVH
 		// for rendering buffer, consider renderPerWard, else render all
 
 		let wardCollectors = [];
@@ -1073,7 +1054,14 @@ class SVGCityReader {
 		console.log(this.wards.length + ": Wards counted");
 		let totalVertices = 0;
 
+
+		const A = new Vector3();
+		const B = new Vector3();
+		const C = new Vector3();
+
 		const VERTEX_NORMALS = [];
+		const EDGE_DIRECTIONS = [];
+		const BASE_BUILDING_HEIGHT_RANGE = this.buildingMaxHeight - this.buildingMinHeight;
 
 		this.wards.forEach((wardObj)=> {
 			wardCollector = getNewGeometryCollector();
@@ -1085,43 +1073,136 @@ class SVGCityReader {
 							// 	console.log("Skiping ramped building")
 							return;
 						}
+						if (this.minBuildingEdges >= 4 && building.length < this.minBuildingEdges) {
+							return;
+						}
+						if (this.maxBuildingEdges >= 4 && building.length > this.maxBuildingEdges) {
+							return;
+						}
+
+
 						let w0 =  wardCollector.vertices.length;
 
-						groundLevel = this.innerWardAltitude;
-						upperLevel = groundLevel + this.buildingMinHeight + (this.buildingMaxHeight - this.buildingMinHeight) * Math.random();
+
 						const bLen = building.length - 1;
 
 						let vertexNormals = VERTEX_NORMALS;
-						if (buildingInset !== 0) {
-							let vi = 0;
+						let edgeDirs = EDGE_DIRECTIONS;
+						let vi = 0;
+						let ei = 0;
 
-							building.forEach((pt, i) => {
-								let prevIndex = i >= 1 ? i - 1 : bLen;
-								let prevPt = building[prevIndex];
-								let nextIndex = i < bLen ? i + 1 : 0;
-								let nextPt = building[nextIndex];
-								let dx = pt[0] - prevPt[0];
-								let dz = pt[1] - prevPt[1];
-								let nx = dz;
-								let nz = -dx;
-								let d = Math.sqrt(nx*nx + nz*nz);
-								nx /=d;
-								nz /=d;
+						building.forEach((pt, i) => {
+							let d;
+							let prevIndex = i >= 1 ? i - 1 : bLen;
+							let prevPt = building[prevIndex];
+							let nextIndex = i < bLen ? i + 1 : 0;
+							let nextPt = building[nextIndex];
+							let dx = pt[0] - prevPt[0];
+							let dz = pt[1] - prevPt[1];
 
-								let nx2;
-								let nz2;
+							d = Math.sqrt(dx*dx + dz*dz);
+							dx /=d;
+							dz /=d;
+							edgeDirs[ei++] = dx;
+							edgeDirs[ei++] = dz;
+							let x;
+							let z;
 
-								dx = nextPt[0] - pt[0];
-								dz = nextPt[1] - pt[1];
-								nx2 = dz;
-								nz2 = -dx;
-								d = Math.sqrt(nx2*nx2 + nz2*nz2);
-								nx2 /= d;
-								nz2 /= d;
-								vertexNormals[vi++] = (nx + nx2) * 0.5;
-								vertexNormals[vi++] = (nz + nz2) * 0.5;
-							});
+							let nx = dz;
+							let nz = -dx;
+
+							let nx2;
+							let nz2;
+
+							dx = nextPt[0] - pt[0];
+							dz = nextPt[1] - pt[1];
+							d = Math.sqrt(dx*dx + dz*dz);
+							dx /=d;
+							dz /=d;
+							nx2 = dz;
+							nz2 = -dx;
+							vertexNormals[vi++] = (nx + nx2) * 0.5;
+							vertexNormals[vi++] = (nz + nz2) * 0.5;
+						});
+
+
+						let smallestEdgeDist = Infinity;
+						let buildingArea = 0;
+
+						for (let i=0; i< building.length; i++) {
+							let pt = building[i];
+							let prevIndex = i >= 1 ? i - 1 : bLen;
+							let prevPt = building[prevIndex];
+							let nextIndex = i < bLen ? i + 1 : 0;
+							let nextPt = building[nextIndex];
+
+							let ex;
+							let ez;
+
+							let dx = (pt[0]*scaleXZ-vertexNormals[i*2]*buildingInset) - (prevPt[0]*scaleXZ-vertexNormals[prevIndex*2]*buildingInset);
+							let dz = (pt[1]*scaleXZ-vertexNormals[i*2+1]*buildingInset) - (prevPt[1]*scaleXZ-vertexNormals[prevIndex*2+1]*buildingInset);
+							let nx = edgeDirs[i*2];
+							let nz = edgeDirs[i*2+1];
+							let d = nx * dx + nz * dz;
+
+							if (this.minBuildingEdgeLength > 0 && d < this.minBuildingEdgeLength) {
+								return;
+							}
+
+							if (d <= 0) {
+								// kiv need to collapse edges... for now treat as auto-filtered out
+								return;
+							}
+
+							if (this.maxBuildingEdgeLength > 0 && d > this.maxBuildingEdgeLength) {
+								return;
+							}
+							if (d < smallestEdgeDist) {
+								smallestEdgeDist = d;
+							}
+
+							if (i >= 1 && i < bLen) {
+								ex = vertexNormals[0]*buildingInset;
+								ez = vertexNormals[1]*buildingInset;
+								C.x = building[0][0]*scaleXZ - ex;
+								C.z =  building[0][1]*scaleXZ - ez;
+
+								ex = vertexNormals[(i*2)]*buildingInset;
+								ez = vertexNormals[(i*2)+1]*buildingInset;
+								B.x = pt[0]*scaleXZ - ex;
+								B.z = pt[1]*scaleXZ-ez;
+
+								ex = vertexNormals[(nextIndex*2)]*buildingInset;
+								ez = vertexNormals[(nextIndex*2)+1]*buildingInset;
+								A.x = nextPt[0]*scaleXZ - ex;
+								A.z = nextPt[1]*scaleXZ - ez;
+
+								buildingArea += MathUtils.area(A, B, C);
+							}
 						}
+						let sampleSmallestEdgeDist = smallestEdgeDist;
+						let scaleHeightRange = 1;
+
+
+						let increase =  BASE_BUILDING_HEIGHT_RANGE * Math.random();
+
+						smallestEdgeDist = this.smallenSqRootAreaTest ? Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
+
+						if (this.smallenBuildingEdgeLength > 0 && smallestEdgeDist < this.smallenBuildingEdgeLength) {
+							scaleHeightRange = (smallestEdgeDist - this.minBuildingEdgeLength) / (this.smallenBuildingEdgeLength - this.minBuildingEdgeLength);
+						}
+
+						smallestEdgeDist = this.largenSqRootAreaTest ? Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
+
+						if (this.largenBuildingEdgeLength > 0 &&  smallestEdgeDist > this.smallenBuildingEdgeLength && this.largenBuildingEdgeLength > this.smallenBuildingEdgeLength) {
+							scaleHeightRange = 1 + ((smallestEdgeDist - this.smallenBuildingEdgeLength)/(this.largenBuildingEdgeLength-this.smallenBuildingEdgeLength)) * (1 - (increase / BASE_BUILDING_HEIGHT_RANGE));
+						}
+
+						increase *= scaleHeightRange;
+
+						groundLevel = this.innerWardAltitude;
+						upperLevel = groundLevel + this.buildingMinHeight + increase;
+
 
 						building.forEach((pt, i) => {
 							let prevIndex = i >= 1 ? i - 1 : bLen;
@@ -1140,16 +1221,16 @@ class SVGCityReader {
 							nz /=d;
 							let wv = wardCollector.vertices.length / 3;
 
-							ex = buildingInset!==0 ? vertexNormals[(i*2)]*buildingInset : 0;
-							ez = buildingInset!==0 ? vertexNormals[(i*2)+1]*buildingInset : 0;
+							ex = vertexNormals[(i*2)]*buildingInset;
+							ez = vertexNormals[(i*2)+1]*buildingInset;
 							wardCollector.vertices.push(pt[0]*scaleXZ-ex, upperLevel, pt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
 							wardCollector.vertices.push(pt[0]*scaleXZ-ex , groundLevel, pt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
-							ex = buildingInset!==0 ? vertexNormals[(prevIndex*2)]*buildingInset : 0;
-							ez = buildingInset!==0 ? vertexNormals[(prevIndex*2)+1]*buildingInset : 0;
+							ex = vertexNormals[(prevIndex*2)]*buildingInset;
+							ez = vertexNormals[(prevIndex*2)+1]*buildingInset;
 							wardCollector.vertices.push(prevPt[0]*scaleXZ-ex , groundLevel, prevPt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
@@ -1160,18 +1241,18 @@ class SVGCityReader {
 
 							if (i >= 1 && i < bLen) {
 
-								ex = buildingInset!==0 ? vertexNormals[0]*buildingInset : 0;
-								ez = buildingInset!==0 ? vertexNormals[1]*buildingInset : 0;
+								ex = vertexNormals[0]*buildingInset;
+								ez = vertexNormals[1]*buildingInset;
 								wardCollector.vertices.push(building[0][0]*scaleXZ - ex, upperLevel, building[0][1]*scaleXZ - ez);
 								wardCollector.normals.push(0, 1, 0);
 
-								ex = buildingInset!==0 ? vertexNormals[i*2]*buildingInset : 0;
-								ez = buildingInset!==0 ? vertexNormals[(i*2)+1]*buildingInset : 0;
+								ex = vertexNormals[(i*2)]*buildingInset;
+								ez = vertexNormals[(i*2)+1]*buildingInset;
 								wardCollector.vertices.push(pt[0]*scaleXZ - ex, upperLevel, pt[1]*scaleXZ-ez);
 								wardCollector.normals.push(0, 1, 0);
 
-								ex = buildingInset!==0 ? vertexNormals[(nextIndex*2)]*buildingInset : 0;
-								ez = buildingInset!==0 ? vertexNormals[(nextIndex*2)+1]*buildingInset : 0;
+								ex = vertexNormals[(nextIndex*2)]*buildingInset;
+								ez = vertexNormals[(nextIndex*2)+1]*buildingInset;
 								wardCollector.vertices.push(nextPt[0]*scaleXZ - ex, upperLevel, nextPt[1]*scaleXZ - ez);
 								wardCollector.normals.push(0, 1, 0);
 
@@ -2006,11 +2087,13 @@ class SVGCityReader {
 			this.cityWallPillars.push(poly=svgPolyStrToPoints($(item).attr("points")));
 			let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
 			this.cityWallPillarPoints.push(pt);
+			this.aabb2d.expand(pt);
 		});
 
 		jEntrances.each((index, item)=>{
 			let pt = getBBoxCenter($(item).children()[0].getBBox());
 			this.cityWallEntrancePoints.push(pt);
+			this.aabb2d.expand(pt);
 		});
 
 
@@ -2048,6 +2131,7 @@ class SVGCityReader {
 			let citadelEntranceLines = jSelCitadelWall.find(this.subSelectorEntranceLines);
 			if (citadelEntranceLines.length >=3) {
 				this.citadelWallEntrancePoint = getBBoxCenter(citadelEntranceLines[0].getBBox());
+				this.aabb2d.expand(this.citadelWallEntrancePoint);
 				this.citadelWallEntrancePillarPoints.push(
 					getBBoxCenter(citadelEntranceLines[1].getBBox()), // right first
 					getBBoxCenter(citadelEntranceLines[2].getBBox())	// left
@@ -2357,14 +2441,12 @@ class SVGCityReader {
 
 			}
 
-
-
 			len = hullPoints.length;
-
 
 			for (i=0; i<len; i++) {
 				let hullVertex;
 				hullVerticesSoup.push(hullVertex = [hullPoints[i].x, hullPoints[i].z]);
+				this.aabb2d.expand(hullPoints[i]);
 				hullVertex.id = index; // ward index
 				if (i > 0) {
 					if (i < len - 1) {
