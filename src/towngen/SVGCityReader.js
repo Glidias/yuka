@@ -1144,13 +1144,16 @@ class SVGCityReader {
 							let nx = edgeDirs[i*2];
 							let nz = edgeDirs[i*2+1];
 							let d = nx * dx + nz * dz;
-							if (d < this.minBuildingEdgeLength) {
+
+							if (this.minBuildingEdgeLength > 0 && d < this.minBuildingEdgeLength) {
 								return;
 							}
+
 							if (d <= 0) {
 								// kiv need to collapse edges... for now treat as auto-filtered out
 								return;
 							}
+
 							if (this.maxBuildingEdgeLength > 0 && d > this.maxBuildingEdgeLength) {
 								return;
 							}
