@@ -6,6 +6,7 @@ import {Delaunay} from "d3-delaunay";
 
 import cdt2d from "cdt2d";
 import cleanPSLG from "clean-pslg";
+import CSG from "csg2d";
 
 import {NavMesh} from "../navigation/navmesh/NavMesh.js";
 import {NavMeshUtils} from "../navigation/navmesh/NavMeshUtils.js";
@@ -34,6 +35,7 @@ const BIT_CITADEL_WALL = 16;
 const BIT_HIGHWAY = 1;
 const BIT_WARD_ROAD = 2;
 const BIT_HIGHWAY_RAMP = 4;
+const BIT_WARD_ROAD_OUTER = 8;
 // const BIT_INNER_ROAD = 4;
 
 
@@ -655,7 +657,6 @@ class SVGCityReader {
 	constructor() {
 		this.wards = [];
 		this.citadel = null;
-
 		// path
 		this.selectorWards = "g[fill='#99948A'][stroke='#1A1917']";
 
@@ -744,6 +745,7 @@ class SVGCityReader {
 		this.cityWallTowerBaseAltitude = 14;
 		this.highwayAltitude = 12;
 		this.wardRoadAltitude = 3;
+		this.outerRoadAltitude = 0;
 		// this.innerWardRoadAltitude = 0;
 		this.innerWardAltitude = 0;
 
@@ -752,6 +754,7 @@ class SVGCityReader {
 		this.cityWallEntranceExtrudeThickness = 1.4;
 		this.highwayExtrudeThickness = 3;
 		this.wardRoadExtrudeThickness = 0.7;
+		this.outerRoadExtrudeThickness = 0;
 		this.rampedBuildingExtrudeThickness = -1;
 
 		this.buildingMinHeight = 3;
@@ -769,8 +772,8 @@ class SVGCityReader {
 
 		this.smallenBuildingEdgeLength = 0; // >0 to be considered
 		this.largenBuildingEdgeLength = 0; // >0 to be considered
-		this.smallenSqRootAreaTest = false;
-		this.largenSqRootAreaTest= false;
+		this.smallenSqRootAreaTest = 0;
+		this.largenSqRootAreaTest= 0;
 	}
 
 	extrudePathOfPoints(points, radius, loop, cap, newPoints, _isLooping) {
@@ -945,6 +948,7 @@ class SVGCityReader {
 			}
 
 		}
+		
 
 		if (this.selectorWards) {
 			this.selectorWards = map.children(this.selectorWards);
@@ -988,7 +992,7 @@ class SVGCityReader {
 
 		let deployGeom = {};
 		let navmesh;
-		let gLevel  = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.wardRoadAltitude;
+		let gLevel  = this.innerWardAltitude;
 		if (this.navmeshCityWall) {
 			// City Wall
 			deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(),NavMeshUtils.seperateMarkedPolygonsVertices(this.navmeshCityWall.regions), gLevel, this.exportScaleXZ, true, gLevel);
@@ -1011,13 +1015,21 @@ class SVGCityReader {
 			navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY, true)));
 			deployGeom.highways = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
 				this.highwayExtrudeThickness >= 0 ? this.highwayExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.highwayExtrudeThickness < 0, this.innerWardRoadAltitude);
-			// Upper Roads
+			// Upper Roads within walls
 			navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
 			navmesh.attemptMergePolies = false;
 			navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD, true)));
 			deployGeom.wardRoads = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
 				this.wardRoadExtrudeThickness >= 0 ? this.wardRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.wardRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
+			
+			// Outer roads outside walls
+			navmesh = new NavMesh();
+			navmesh.attemptBuildGraph = false;
+			navmesh.attemptMergePolies = false;
+			navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD_OUTER, true)));
+			deployGeom.wardRoadsOuter = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
+			this.outerRoadExtrudeThickness >= 0 ? this.outerRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.outerRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
 		}
 
 		if (this.rampedBuildings) {
@@ -1186,13 +1198,13 @@ class SVGCityReader {
 
 						let increase =  BASE_BUILDING_HEIGHT_RANGE * Math.random();
 
-						smallestEdgeDist = this.smallenSqRootAreaTest ? Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
+						smallestEdgeDist = this.smallenSqRootAreaTest ? this.smallenSqRootAreaTest < 0 ? Math.min(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
 
 						if (this.smallenBuildingEdgeLength > 0 && smallestEdgeDist < this.smallenBuildingEdgeLength) {
 							scaleHeightRange = (smallestEdgeDist - this.minBuildingEdgeLength) / (this.smallenBuildingEdgeLength - this.minBuildingEdgeLength);
 						}
 
-						smallestEdgeDist = this.largenSqRootAreaTest ? Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
+						smallestEdgeDist = this.largenSqRootAreaTest ? this.largenSqRootAreaTest < 0 ? Math.min(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
 
 						if (this.largenBuildingEdgeLength > 0 &&  smallestEdgeDist > this.smallenBuildingEdgeLength && this.largenBuildingEdgeLength > this.smallenBuildingEdgeLength) {
 							scaleHeightRange = 1 + ((smallestEdgeDist - this.smallenBuildingEdgeLength)/(this.largenBuildingEdgeLength-this.smallenBuildingEdgeLength)) * (1 - (increase / BASE_BUILDING_HEIGHT_RANGE));
@@ -1952,6 +1964,52 @@ class SVGCityReader {
 		return el;
 	}
 
+	collectVerticesEdgesFromCSG(vertices, edges, csg) {
+		let segments = csg.segments;
+		let mapVerts = new Map();
+		let vi = vertices.length;
+		let ei = edges.length;
+		segments.forEach((seg)=>{
+			let key = seg.vertices[0].x + "," + seg.vertices[0].y;
+			let key2 =  seg.vertices[1].x + "," + seg.vertices[1].y;
+			if (!mapVerts.has(key)) {
+				vertices.push([seg.vertices[0].x, seg.vertices[0].y]);
+				mapVerts.set(key, vi++);
+			}
+			if (!mapVerts.has(key2)) {
+				vertices.push(([seg.vertices[1].x, seg.vertices[1].y]));
+				mapVerts.set(key2, vi++);
+			}
+			edges[ei++] = [mapVerts.get(key), mapVerts.get(key2)];
+		});
+	}
+
+	getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
+		let polygonsListCSG = [];
+		pointsList.forEach((points, index)=> {
+			if (processPointsMethod) points = processPointsMethod(points, index);
+			polygonsListCSG.push(CSG.fromPolygons([points]))
+		});
+
+		let csg = polygonsListCSG[0];
+		for (let i=1; i<polygonsListCSG.length; i++) {
+			csg = csg.union(polygonsListCSG[i]);
+		}
+
+		let vertices = params.vertices ? params.vertices.slice(0) : [];
+		let edges = params.edges ? params.edges.slice(0) : [];
+		this.collectVerticesEdgesFromCSG(vertices, edges, csg);
+
+		if (cleanup) {
+			cleanPSLG(vertices, edges);
+		}
+
+		let cdt = cdt2d(vertices, edges, (params ? params : {exterior:true}));
+		return {vertices:vertices, edges:edges, cdt:cdt};
+	}
+
+	//convertCSGPolygonsTo
+
 	getCDTObjFromPointsList(pointsList, cleanup, params, processPointsMethod) {
 		let vertices = params.vertices ? params.vertices.slice(0) : [];
 		let edges = params.edges ? params.edges.slice(0) : [];
@@ -1970,10 +2028,6 @@ class SVGCityReader {
 		});
 
 		if (cleanup) {
-			if (this.citadelWallSegments.length > 0) {
-				// go through all edges, if 1 of the edges have
-				// look for points of citaldel wall edges
-			}
 			cleanPSLG(vertices, edges);
 		}
 
@@ -2224,7 +2278,7 @@ class SVGCityReader {
 		let lineSegments = groundMode ? this.citadelWallSegments.concat(this.cityWallSegments) : this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
 
 		//.concat(this.citadelWallPillars).concat(this.cityWallPillars);
-		let cdtObj = this.getCDTObjFromPointsList(lineSegments,
+		let cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
 			true, {exterior:false},
 			(points, index)=>{
 				//points = points.slice(0).reverse();
@@ -2246,16 +2300,19 @@ class SVGCityReader {
 		});
 		*/
 		NavMeshUtils.weldVertices(navmesh);
+
+		/*  // only needed if using non union option cdt
 		let holesArr = NavMeshUtils.patchHoles(navmesh.regions);
 		let combinedRegions = navmesh.regions.concat(holesArr); //NavMeshUtils.unlinkPolygons();
 		navmesh.regions = combinedRegions;
+		//*/
 
 		//navmesh = new NavMesh();
 		//navmesh.attemptBuildGraph = false;
 		//navmesh.fromPolygons(combinedRegions);
 
 		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
-
+		//g.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 		/*
 		g.append(
 			this.makeSVG("path", {"fill":"rgba(255,255,0,1)", "stroke-width":0.1, "stroke":"red",
@@ -2808,7 +2865,7 @@ class SVGCityReader {
 
 
 		let rampDowns = [];
-		const rampDownLevel = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.wardRoadAltitude;
+		const rampDownLevel = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.outerRoadAltitude;
 		let highways = [];
 		let roadsInner = [];
 		let roadsOuter = [];
@@ -2822,7 +2879,9 @@ class SVGCityReader {
 			edge = r.edge;
 
 			let numOfLongEdges = 0;
+			let numOfLongEdgesAbs = 0;
 			let numOfShortEdges = 0;
+			let totalEdgesAllTypes = 0;
 			let numOfEdgesWithinCityWalls = 0;
 			let extremeLongPerpCount = 0;
 			let numOfEdgesJustOutsideCityWalls = 0;
@@ -2830,6 +2889,8 @@ class SVGCityReader {
 			let streetwards = new Set();
 
 			do {
+				totalEdgesAllTypes++;
+				
 				if (edge.twin !== null &&
 					edge.prev.vertex.id >= 0 && edge.vertex.id >= 0 &&
 					edge.vertex.id !== edge.prev.vertex.id
@@ -2867,7 +2928,14 @@ class SVGCityReader {
 						extremeLongPerpCount++;
 					}
 
+
+
 					if (dist <= highwayMaxWidthSq) {
+
+						if (edge.prev.vertex.squaredDistanceTo(edge.vertex) >= highwayMinWidthSq) {
+							numOfLongEdgesAbs++;
+						}
+
 						if (dist < highwayMinWidthSq ) { // normal street
 							//g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.25, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
 							g.append(this.makeSVG("line", {stroke:"rgb(0,122,110)", "stroke-width":0.25, x1:edge.prev.vertex.x, y1: edge.prev.vertex.z, x2:edge.vertex.x, y2:edge.vertex.z}));
@@ -2899,10 +2967,10 @@ class SVGCityReader {
 			// && numOfEdgesWithinCityWalls === totalEdges && extremeLongPerpCount ===0
 			if (totalEdges >= 2 ) {
 				// || !this.checkWithinCityWall(r.centroid.x, r.centroid.z , true)
-				if ( numOfLongEdges !== 0) {
-					if ( (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)) {
+				if ( numOfLongEdges !== 0 || (totalEdgesAllTypes ===3 && numOfLongEdgesAbs >=2) ) {
+					if ( (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)  ) {
 						let isRampDown = numOfEdgesWithinCityWalls < 2;
-						r.mask = isRampDown ? BIT_HIGHWAY_RAMP : BIT_HIGHWAY;
+						r.mask = isRampDown ? (BIT_HIGHWAY_RAMP|BIT_HIGHWAY) : BIT_HIGHWAY;
 						if (isRampDown) {
 							r.yExtrudeParams = rampDownParams;
 							rampDowns.push(r);
@@ -2922,16 +2990,16 @@ class SVGCityReader {
 
 					} else {
 						if (!this.onlyElevateRoadsWithinWalls || numOfEdgesWithinCityWalls>=2) {
-							r.mask = BIT_WARD_ROAD; // could be thick also
-							roadsInner.push(r);
+							r.mask = numOfEdgesWithinCityWalls>=2 ? BIT_WARD_ROAD : BIT_WARD_ROAD_OUTER; // could be thick also
+							(numOfEdgesWithinCityWalls>=2  ? roadsInner : roadsOuter).push(r);
 							g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(44,0,44,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
 						}
 					}
 				}
 				else {
 					if (!this.onlyElevateRoadsWithinWalls || (numOfEdgesWithinCityWalls >= 2)) {
-						r.mask = BIT_WARD_ROAD; // always thin
-						roadsOuter.push(r);
+						r.mask = numOfEdgesWithinCityWalls>=2 ? BIT_WARD_ROAD : BIT_WARD_ROAD_OUTER; // always thin
+						(numOfEdgesWithinCityWalls>=2  ? roadsInner : roadsOuter).push(r);
 						g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,0,255,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
 					}
 				}
@@ -2940,7 +3008,8 @@ class SVGCityReader {
 
 		potentialHighwayRoadCrossroads.forEach((r)=> {
 			if (this.validateShortRoadEdges(2, r)) {
-				r.mask |= BIT_WARD_ROAD;
+				r = NavMeshUtils.clonePolygon(r);
+				r.mask = BIT_WARD_ROAD;
 				roadsInner.push(r);
 				g.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.1, d: polygonSVGString(r) }));
 			}
@@ -2955,8 +3024,11 @@ class SVGCityReader {
 		highways = NavMeshUtils.filterOutPolygonsByMask(highways, -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(highways, this.highwayAltitude);
 
-		let allRoadsInnerOuter = NavMeshUtils.filterOutPolygonsByMask(roadsInner.concat(roadsOuter), -1, true)
-		NavMeshUtils.setAbsAltitudeOfAllPolygons(allRoadsInnerOuter, this.wardRoadAltitude);
+		roadsInner = NavMeshUtils.filterOutPolygonsByMask(roadsInner, -1, true);
+		//roadsOuter = NavMeshUtils.filterOutPolygonsByMask(roadsOuter, -1, true);
+		
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsInner, this.wardRoadAltitude);
+		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsOuter, this.outerRoadAltitude);
 
 
 		rampDowns = NavMeshUtils.filterOutPolygonsByMask(rampDowns, -1, true)
@@ -2973,7 +3045,7 @@ class SVGCityReader {
 			yBottom: true
 		};
 
-		navmesh.regions = highways.concat(allRoadsInnerOuter).concat(rampDowns);
+		navmesh.regions = highways.concat(roadsOuter).concat(roadsInner);
 
 		// Connect highways to ramp-downs at city wall entrances
 		this.cityWallEntrancePoints.forEach((p)=>{
@@ -3034,6 +3106,8 @@ class SVGCityReader {
 				console.warn("Missed Entrance connect highway entirely!")
 			}
 		});
+
+		let rampDownsSet = new Set();
 		rampDowns.forEach((r)=>{
 			let edge = r.edge;
 			r.sep = true;
@@ -3042,11 +3116,15 @@ class SVGCityReader {
 					console.log("detected rampdown edge");
 					edge.prev.vertex.y = this.highwayAltitude;
 					edge.vertex.y = this.highwayAltitude;
+					rampDownsSet.add(edge.polygon);
 					//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
 				}
 				edge = edge.next;
 			} while(edge !== r.edge)
 		});
+
+		rampDowns = rampDowns.filter((r)=> {return rampDownsSet.has(r)});
+		navmesh.regions = navmesh.regions.concat(rampDowns);
 
 		// kiv todo: connect ward roads at tower connections and mark as secondary-entrance for tower
 
