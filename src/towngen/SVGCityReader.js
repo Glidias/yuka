@@ -767,6 +767,10 @@ class SVGCityReader {
 		// Export 3d scale settings
 		this.exportScaleXZ = 4;
 
+		// Building roofings
+		this.roofMethod = SVGCityReader.buildBasicQuadRoofs;
+		this.roofApexHeight = 3.2;
+
 		// Building filtering export settings
 		this.minBuildingEdges = 3;	// >=4 to be considered
 		this.maxBuildingEdges = 3; // >=4 to be considered
@@ -1062,7 +1066,11 @@ class SVGCityReader {
 		// for rendering buffer, consider renderPerWard, else render all
 
 		let wardCollectors = [];
+		this.wardCollectors = wardCollectors;
+		let wardRoofCollectors = [];
+		this.wardRoofCollectors = wardRoofCollectors;
 		let wardCollector;
+		let wardRoofCollector;
 		const scaleXZ = this.exportScaleXZ;
 		let groundLevel;
 		let upperLevel;
@@ -1077,10 +1085,13 @@ class SVGCityReader {
 		const VERTEX_NORMALS = [];
 		const EDGE_DIRECTIONS = [];
 		const BASE_BUILDING_HEIGHT_RANGE = this.buildingMaxHeight - this.buildingMinHeight;
+		const buildingTopIndices = [];
 
 		this.wards.forEach((wardObj)=> {
 			wardCollector = getNewGeometryCollector();
 			wardCollectors.push(wardCollector);
+			wardRoofCollector = getNewGeometryCollector();
+			wardRoofCollectors.push(wardRoofCollector);
 			wardObj.neighborhoodPts.forEach((buildingsList)=> {
 				buildingsList.forEach((building)=>{
 
@@ -1219,6 +1230,10 @@ class SVGCityReader {
 						upperLevel = groundLevel + this.buildingMinHeight + increase;
 
 
+						
+						let bti = 0;
+						
+
 						building.forEach((pt, i) => {
 							let prevIndex = i >= 1 ? i - 1 : bLen;
 							let prevPt = building[prevIndex];
@@ -1240,6 +1255,7 @@ class SVGCityReader {
 							ez = vertexNormals[(i*2)+1]*buildingInset;
 							wardCollector.vertices.push(pt[0]*scaleXZ-ex, upperLevel, pt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
+							buildingTopIndices[bti++] =wv;
 
 							wardCollector.vertices.push(pt[0]*scaleXZ-ex , groundLevel, pt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
@@ -1254,13 +1270,14 @@ class SVGCityReader {
 
 							wardCollector.indices.push(wv, wv+1, wv+2,   wv, wv+2, wv+3);
 
+							/*  Deprecrated roofing (flat)
 							if (i >= 1 && i < bLen) {
 
 								ex = vertexNormals[0]*buildingInset;
 								ez = vertexNormals[1]*buildingInset;
 								wardCollector.vertices.push(building[0][0]*scaleXZ - ex, upperLevel, building[0][1]*scaleXZ - ez);
 								wardCollector.normals.push(0, 1, 0);
-
+								
 								ex = vertexNormals[(i*2)]*buildingInset;
 								ez = vertexNormals[(i*2)+1]*buildingInset;
 								wardCollector.vertices.push(pt[0]*scaleXZ - ex, upperLevel, pt[1]*scaleXZ-ez);
@@ -1278,9 +1295,15 @@ class SVGCityReader {
 								//indices[ii++] = faceIndices[f];
 								//indices[ii++] = faceIndices[f+1]
 							}
+							*/
 
 
 						});
+
+						buildingTopIndices.length = bti;
+						//buildingTopIndices.reverse();
+						this.roofMethod(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset );
+
 					});
 				});
 			});
@@ -1291,6 +1314,93 @@ class SVGCityReader {
 		return wardCollectors;
 	}
 
+	static buildFlatRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset) {
+		let len = buildingTopIndices.length;
+		let wv = wardCollector.vertices.length / 3;
+		let i;
+		for (i=0; i< len; i++) {
+			let vi = buildingTopIndices[i] * 3;
+			wardCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
+			wardCollector.normals.push(0, 1, 0);
+		}
+		len--;
+		for (i=1; i<len ; i++) {
+			wardCollector.indices.push(wv+i+1, wv+i, wv);
+		}
+		return null;
+	}
+
+	static buildBasicQuadRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset) {
+		if (buildingTopIndices.length !== 4) {
+			SVGCityReader.buildFlatRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset);
+			return;
+		}
+
+		// todo: consider square-cross roofing variation
+
+		// identify long side
+		let len = buildingTopIndices.length;
+		let bLen = len - 1;
+		let wv = wardCollector.vertices.length / 3;
+		let i;
+		let i2;
+		let D;
+		let D2;
+		let vi = buildingTopIndices[3] * 3;
+		let vi2 = buildingTopIndices[0] * 3;
+		let dx = wardCollector.vertices[vi] - wardCollector.vertices[vi2];
+		let dz = wardCollector.vertices[vi+2] - wardCollector.vertices[vi2+2];
+		D = dx*dx + dz * dz;
+		vi = buildingTopIndices[0] * 3;
+		vi2 = buildingTopIndices[1] * 3;
+		dx =  wardCollector.vertices[vi] - wardCollector.vertices[vi2];
+		dz = wardCollector.vertices[vi+2] - wardCollector.vertices[vi2+2];
+		D2 = dx*dx + dz*dz;
+
+		// Roof sides
+		let dIndex0;
+		let dIndex1;
+		let dIndex2;
+		let dIndex3;
+		// add  
+		if (D < D2) { 
+			dIndex0 = 3;
+			dIndex1 = 0;
+			
+			dIndex2 = 1;
+			dIndex3 = 2;
+
+		} else {  // 
+			dIndex0 = 0;
+			dIndex1 = 1;
+			
+			dIndex2 = 2;
+			dIndex3 = 3;
+
+		}
+		i = buildingTopIndices[dIndex1];
+		i2 = i + 3;
+		vi = i * 3;
+		vi2 = i2 * 3;
+		wardCollector.vertices.push((wardCollector.vertices[vi] + wardCollector.vertices[vi2]) * 0.5,
+			wardCollector.vertices[vi+1] + this.roofApexHeight,
+			(wardCollector.vertices[vi+2] + wardCollector.vertices[vi2+2]) * 0.5);
+		wardCollector.normals.push(wardCollector.normals[i*3], wardCollector.normals[i2*3+1], wardCollector.normals[i*3+2]);
+		wardCollector.indices.push(i, i2, wv++);
+
+		i = buildingTopIndices[dIndex3];
+		i2 = i + 3;
+		vi = i * 3;
+		vi2 = i2 * 3;
+		wardCollector.vertices.push((wardCollector.vertices[vi] + wardCollector.vertices[vi2]) * 0.5,
+			wardCollector.vertices[vi+1] + this.roofApexHeight,
+			(wardCollector.vertices[vi+2] + wardCollector.vertices[vi2+2]) * 0.5);
+		wardCollector.normals.push(wardCollector.normals[i*3], wardCollector.normals[i*3+1], wardCollector.normals[i*3+2]);
+		wardCollector.indices.push(i , i2, wv++);
+
+		// Roof tops
+		
+	}
 
 
 
