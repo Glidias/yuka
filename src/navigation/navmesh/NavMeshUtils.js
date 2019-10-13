@@ -252,7 +252,7 @@ class NavMeshUtils {
      * kiv open border parameter
      * @return The sepearte newly-created polygon formed as a result of the extruded edge
      */
-    static getNewExtrudeEdgePolygon(edge, extrudeVal) {
+    static getNewExtrudeEdgePolygon(edge, extrudeVal, keepVertices=false) {
         let dx = edge.vertex.x - edge.prev.vertex.x;
         let dz = edge.vertex.z - edge.prev.vertex.z;
         let nx = -dz;
@@ -261,10 +261,10 @@ class NavMeshUtils {
         nx /=d;
         nz /=d;
         let contours = [
-            edge.prev.vertex.clone(),
+            (keepVertices ? edge.prev.vertex : edge.prev.vertex.clone()),
             new Vector3(edge.prev.vertex.x + extrudeVal * nx, edge.prev.vertex.y, edge.prev.vertex.z+  extrudeVal * nz),
             new Vector3(edge.vertex.x + extrudeVal * nx, edge.vertex.y, edge.vertex.z + extrudeVal* nz),
-            edge.vertex.clone()
+            (keepVertices ? edge.vertex : edge.vertex.clone())
         ];
         return new Polygon().fromContour(contours);
     }
@@ -343,6 +343,9 @@ class NavMeshUtils {
             contours.length = c;
             polies.push(p = new Polygon().fromContour(contours));
 
+            edge.twin = p.edge.prev;
+            p.edge.prev.twin = edge;
+
             p.edge.prev.twin = connector;
             connector.twin = p.edge.prev;
 
@@ -361,6 +364,10 @@ class NavMeshUtils {
 
                 contours.length = c;
                 polies.push(p2 =  new Polygon().fromContour(contours));
+                
+                edge.twin = p.edge.prev;
+                 p.edge.prev.twin = edge;
+                
                 p2.edge.prev.twin = connector2;
                 connector2.twin = p2.edge.prev;
             }

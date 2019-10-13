@@ -702,7 +702,7 @@ class SVGCityReader {
 
 		this.detectCityWallEntranceTowersDist = 3;
 
-		// Road detection settings
+		// Road detection/heuristic settings
 		this.maxRoadEdgeLength = 8; //8;
 		this.highwayMinWidth = 1.8;
 		this.highwayMaxWidth = 6.2;
@@ -712,6 +712,9 @@ class SVGCityReader {
 		this.detectRampConnectMaxDist = 8;
 		this.detectHighwayConnectMaxDist = 5;
 		this.detectRoadConnectMaxDist = 8;
+
+		this.highwayMinRampBorderLength = 5;
+		this.highwayPerchNoRampLength = 2.7;
 		//this.optimalStreetThickness = 2.0;
 
 		// Staircase/ramp settings
@@ -3033,6 +3036,11 @@ class SVGCityReader {
 
 		rampDowns = NavMeshUtils.filterOutPolygonsByMask(rampDowns, -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(rampDowns, rampDownLevel);
+	
+		let resetupRamps = new NavMesh();
+		resetupRamps.attemptBuildGraph = false;
+		resetupRamps.attemptMergePolies = false;
+		resetupRamps.fromPolygons(rampDowns);
 
 		const cityWallEntranceExtrudeParams = {
 			yVal: this.cityWallEntranceExtrudeThickness,
@@ -3102,28 +3110,142 @@ class SVGCityReader {
 					navmesh.regions.push(r);
 					//console.log("COnnected poly:"+r.convex(true));
 				});
+
+				/*
+				edge = entryWay.edge;
+				do {
+					
+					if (edge.twin ) {
+						g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
+					}
+					edge = edge.next;
+				} while (edge !== entryWay.edge);	
+				*/
+
+				if (!e2) { // add a highway perch leading out from entryway polygon
+					edge = p.region.edge;
+					let edgeEntryway = entryWay.edge;
+					console.log("Consider perch..");
+					do {
+						
+						if (!edge.twin && !edgeEntryway.twin) {
+							console.log("DEtected 1 perch:");
+							
+							let perch = NavMeshUtils.getNewExtrudeEdgePolygon(edgeEntryway, this.highwayPerchNoRampLength, true);
+							g.append(this.makeSVG("path", {stroke:"red", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: polygonSVGString(perch) }));
+							perch.mask = BIT_HIGHWAY;
+
+							NavMeshUtils.setAbsAltitudeOfPolygon(perch, this.highwayAltitude);
+							navmesh.regions.push(perch);
+						}
+						edgeEntryway = edgeEntryway.next;
+						edge = edge.next;
+					} while (edge !== p.region.edge);					
+				}
 			} else {
 				console.warn("Missed Entrance connect highway entirely!")
 			}
 		});
 
 		let rampDownsSet = new Set();
+		let additionalTri = new Set();
+		let considerAdditionalRamps = [];
+		const rampLengthSquaredReq = this.highwayMinRampBorderLength * this.highwayMinRampBorderLength;
 		rampDowns.forEach((r)=>{
 			let edge = r.edge;
-			r.sep = true;
-			do {
-				if (edge.twin && edge.twin.polygon.connectRamp) {
-					console.log("detected rampdown edge");
-					edge.prev.vertex.y = this.highwayAltitude;
-					edge.vertex.y = this.highwayAltitude;
-					rampDownsSet.add(edge.polygon);
+			//r.sep = true;
+			let longestBorderLength = 0;
+			let count = 0;
+			let hasNeighborRampPolygon = false;
+			do {	
+				if (edge.twin) {
+					
+					if (edge.twin.polygon.connectRamp) {
+						console.log("detected rampdown edge");
+						edge.prev.vertex.y = this.highwayAltitude;
+						edge.vertex.y = this.highwayAltitude;
+						rampDownsSet.add(edge.polygon);
+					}
+					else if ((edge.twin.polygon.mask & BIT_HIGHWAY_RAMP)) {
+						hasNeighborRampPolygon = true;
+						// weld on the fly			
+						edge.twin.vertex = edge.prev.vertex;	
+						edge.twin.prev.vertex = edge.vertex;	
+					}
 					//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
+				} else {
+					let dx = edge.vertex.x - edge.prev.vertex.x;
+					let dz = edge.vertex.z - edge.prev.vertex.z;
+
+					let testLength = dx*dx + dz*dz;
+					if (testLength > longestBorderLength) {
+						longestBorderLength = testLength;
+					}
 				}
+				count++;
 				edge = edge.next;
-			} while(edge !== r.edge)
+			} while(edge !== r.edge);
+			//console.log(longestBorderLength + ", "+rampLengthSquaredReq);
+			if (rampDownsSet.has(r) && longestBorderLength < rampLengthSquaredReq && hasNeighborRampPolygon) {
+				considerAdditionalRamps.push(r);
+				r.longestBorderLength = Math.sqrt(longestBorderLength);
+				edge = r.edge;
+				do {
+					edge.vertex.y = this.highwayAltitude;
+					edge = edge.next;
+				} while(edge !== r.edge);
+			}
 		});
 
+		while (considerAdditionalRamps.length > 0) {
+			let r = considerAdditionalRamps.pop();
+			let edge = r.edge;
+			let longestBorderLength = 0;
+			let hasNeighborRampPolygon = false;
+			let addedNeighbor;
+
+			do {	
+				if (edge.twin) {
+					if ((edge.twin.polygon.mask & BIT_HIGHWAY_RAMP)) {
+						if ( !rampDownsSet.has(edge.twin.polygon)) {
+							if (!hasNeighborRampPolygon) {
+								hasNeighborRampPolygon = true;
+								addedNeighbor = edge.twin.polygon;
+								edge.twin.vertex = edge.prev.vertex;	
+								edge.twin.prev.vertex = edge.vertex;	
+								rampDownsSet.add(edge.twin.polygon);
+							} 
+						} 
+						//console.log("ADDED ADDITIONAL)");
+					}
+					//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
+				} else {
+					let dx = edge.vertex.x - edge.prev.vertex.x;
+					let dz = edge.vertex.z - edge.prev.vertex.z;
+					let testLength = dx*dx + dz*dz;
+					if (testLength > longestBorderLength) {
+						longestBorderLength = testLength;
+					}
+				}
+				edge = edge.next;
+			} while (edge !== r.edge);
+
+
+			longestBorderLength = Math.sqrt(longestBorderLength);
+			//console.log("RUnning comparisons:"+hasNeighborRampPolygon + ", "+r.longestBorderLength + ", "+longestBorderLength);
+			if (hasNeighborRampPolygon && r.longestBorderLength + longestBorderLength  < this.highwayMinRampBorderLength) {
+				considerAdditionalRamps.push(addedNeighbor);
+				addedNeighbor.longestBorderLength = r.longestBorderLength + longestBorderLength;
+				edge = r.edge;
+				do {
+					edge.vertex.y = this.highwayAltitude;
+					edge = edge.next;
+				} while(edge !== r.edge);
+			}
+		}
+
 		rampDowns = rampDowns.filter((r)=> {return rampDownsSet.has(r)});
+		NavMeshUtils.unlinkPolygons(rampDowns);
 		navmesh.regions = navmesh.regions.concat(rampDowns);
 
 		// kiv todo: connect ward roads at tower connections and mark as secondary-entrance for tower
