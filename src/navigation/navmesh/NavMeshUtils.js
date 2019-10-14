@@ -10,6 +10,9 @@ var MAX_HOLE_LEN = 16;
 
 const PLANE = new Plane();
 const POINT = new Vector3();
+const A = new Vector3();
+const B = new Vector3();
+const C = new Vector3();
 
 // dfs search through edges by related mapped edge.prev vertices
 function searchEdgeList(map, builtContour, startingEdge) {
@@ -65,6 +68,16 @@ class NavMeshUtils {
 		return this.regionIndexMap.has(region) ? this.regionIndexMap.get(region) : -1;
     }
     */
+
+   static planeFromCoplarVertexIndices(vertices, i, i2, i3) {
+        i*=3;
+        i2*=3;
+        i3*=3;
+        A.set(vertices[i], vertices[i+1], vertices[i+2]);
+        B.set(vertices[i2], vertices[i2+1], vertices[i2+2]);
+        C.set(vertices[i3], vertices[i3+1], vertices[i3+2]);
+        return PLANE.fromCoplanarPoints(A, B, C);
+   }
 
     /**
      * Sets up triangulated data for 3D rendering from  polygon references to be extruded
@@ -364,10 +377,10 @@ class NavMeshUtils {
 
                 contours.length = c;
                 polies.push(p2 =  new Polygon().fromContour(contours));
-                
+
                 edge.twin = p.edge.prev;
                  p.edge.prev.twin = edge;
-                
+
                 p2.edge.prev.twin = connector2;
                 connector2.twin = p2.edge.prev;
             }

@@ -770,6 +770,7 @@ class SVGCityReader {
 		// Building roofings
 		this.roofMethod = SVGCityReader.buildBasicQuadRoofs;
 		this.roofApexHeight = 3.2;
+		this.quadRoofChance = 1;
 
 		// Building filtering export settings
 		this.minBuildingEdges = 3;	// >=4 to be considered
@@ -955,7 +956,7 @@ class SVGCityReader {
 			}
 
 		}
-		
+
 
 		if (this.selectorWards) {
 			this.selectorWards = map.children(this.selectorWards);
@@ -1029,7 +1030,7 @@ class SVGCityReader {
 			navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD, true)));
 			deployGeom.wardRoads = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
 				this.wardRoadExtrudeThickness >= 0 ? this.wardRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.wardRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
-			
+
 			// Outer roads outside walls
 			navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
@@ -1230,9 +1231,9 @@ class SVGCityReader {
 						upperLevel = groundLevel + this.buildingMinHeight + increase;
 
 
-						
+
 						let bti = 0;
-						
+
 
 						building.forEach((pt, i) => {
 							let prevIndex = i >= 1 ? i - 1 : bLen;
@@ -1277,7 +1278,7 @@ class SVGCityReader {
 								ez = vertexNormals[1]*buildingInset;
 								wardCollector.vertices.push(building[0][0]*scaleXZ - ex, upperLevel, building[0][1]*scaleXZ - ez);
 								wardCollector.normals.push(0, 1, 0);
-								
+
 								ex = vertexNormals[(i*2)]*buildingInset;
 								ez = vertexNormals[(i*2)+1]*buildingInset;
 								wardCollector.vertices.push(pt[0]*scaleXZ - ex, upperLevel, pt[1]*scaleXZ-ez);
@@ -1316,32 +1317,32 @@ class SVGCityReader {
 
 	static buildFlatRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset) {
 		let len = buildingTopIndices.length;
-		let wv = wardCollector.vertices.length / 3;
+		let wv = wardRoofCollector.vertices.length / 3;
 		let i;
 		for (i=0; i< len; i++) {
 			let vi = buildingTopIndices[i] * 3;
-			wardCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
-			wardCollector.normals.push(0, 1, 0);
+			wardRoofCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
+			wardRoofCollector.normals.push(0, 1, 0);
 		}
 		len--;
 		for (i=1; i<len ; i++) {
-			wardCollector.indices.push(wv+i+1, wv+i, wv);
+			wardRoofCollector.indices.push(wv+i+1, wv+i, wv);
 		}
 		return null;
 	}
 
 	static buildBasicQuadRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset) {
-		if (buildingTopIndices.length !== 4) {
+		if (buildingTopIndices.length !== 4 || Math.random() > this.quadRoofChance) {
 			SVGCityReader.buildFlatRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset);
 			return;
 		}
-
 		// todo: consider square-cross roofing variation
 
 		// identify long side
 		let len = buildingTopIndices.length;
 		let bLen = len - 1;
 		let wv = wardCollector.vertices.length / 3;
+		let wvr = wardRoofCollector.vertices.length / 3;
 		let i;
 		let i2;
 		let D;
@@ -1362,18 +1363,18 @@ class SVGCityReader {
 		let dIndex1;
 		let dIndex2;
 		let dIndex3;
-		// add  
-		if (D < D2) { 
+		// add
+		if (D < D2) {
 			dIndex0 = 3;
 			dIndex1 = 0;
-			
+
 			dIndex2 = 1;
 			dIndex3 = 2;
 
-		} else {  // 
+		} else {  //
 			dIndex0 = 0;
 			dIndex1 = 1;
-			
+
 			dIndex2 = 2;
 			dIndex3 = 3;
 
@@ -1398,8 +1399,67 @@ class SVGCityReader {
 		wardCollector.normals.push(wardCollector.normals[i*3], wardCollector.normals[i*3+1], wardCollector.normals[i*3+2]);
 		wardCollector.indices.push(i , i2, wv++);
 
+		let ap = (wv - 2) * 3;
+		let ap2 = (wv - 1) * 3;
+
+
 		// Roof tops
-		
+		if (D < D2) {
+			dIndex0 = 0;
+			dIndex1 = 1;
+
+			dIndex2 = 2;
+			dIndex3 = 3;
+
+		} else {  //
+			dIndex0 = 1;
+			dIndex1 = 2;
+
+			dIndex2 = 3;
+			dIndex3 = 0;
+		}
+
+
+		i = buildingTopIndices[dIndex1];
+		i2 = i + 3;
+		vi = i * 3;
+		vi2 = i2 * 3;
+		let plane;
+		wardRoofCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
+		wardRoofCollector.vertices.push(wardCollector.vertices[ap2], wardCollector.vertices[ap2+1], wardCollector.vertices[ap2+2]);
+		wardRoofCollector.vertices.push(wardCollector.vertices[vi2], wardCollector.vertices[vi2+1], wardCollector.vertices[vi2+2]);
+		wardRoofCollector.vertices.push(wardCollector.vertices[ap], wardCollector.vertices[ap+1], wardCollector.vertices[ap+2]);
+
+		plane = NavMeshUtils.planeFromCoplarVertexIndices(wardRoofCollector.vertices, wvr+2, wvr+1, wvr);
+
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+
+		wardRoofCollector.indices.push(wvr+2, wvr+3, wvr+1);
+		wardRoofCollector.indices.push(wvr+2, wvr+1, wvr);
+		wvr += 4;
+
+		i = buildingTopIndices[dIndex3];
+		i2 = i + 3;
+		vi = i * 3;
+		vi2 = i2 * 3;
+		wardRoofCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
+		wardRoofCollector.vertices.push(wardCollector.vertices[ap], wardCollector.vertices[ap+1], wardCollector.vertices[ap+2]);
+		wardRoofCollector.vertices.push(wardCollector.vertices[vi2], wardCollector.vertices[vi2+1], wardCollector.vertices[vi2+2]);
+		wardRoofCollector.vertices.push(wardCollector.vertices[ap2], wardCollector.vertices[ap2+1], wardCollector.vertices[ap2+2]);
+
+		plane = NavMeshUtils.planeFromCoplarVertexIndices(wardRoofCollector.vertices, wvr+2, wvr+1, wvr);
+
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+		wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+
+		wardRoofCollector.indices.push(wvr+2, wvr+3, wvr+1);
+		wardRoofCollector.indices.push(wvr+2, wvr+1, wvr);
+		wvr += 4;
 	}
 
 
@@ -3003,7 +3063,7 @@ class SVGCityReader {
 
 			do {
 				totalEdgesAllTypes++;
-				
+
 				if (edge.twin !== null &&
 					edge.prev.vertex.id >= 0 && edge.vertex.id >= 0 &&
 					edge.vertex.id !== edge.prev.vertex.id
@@ -3139,14 +3199,14 @@ class SVGCityReader {
 
 		roadsInner = NavMeshUtils.filterOutPolygonsByMask(roadsInner, -1, true);
 		//roadsOuter = NavMeshUtils.filterOutPolygonsByMask(roadsOuter, -1, true);
-		
+
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsInner, this.wardRoadAltitude);
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsOuter, this.outerRoadAltitude);
 
 
 		rampDowns = NavMeshUtils.filterOutPolygonsByMask(rampDowns, -1, true)
 		NavMeshUtils.setAbsAltitudeOfAllPolygons(rampDowns, rampDownLevel);
-	
+
 		let resetupRamps = new NavMesh();
 		resetupRamps.attemptBuildGraph = false;
 		resetupRamps.attemptMergePolies = false;
@@ -3224,12 +3284,12 @@ class SVGCityReader {
 				/*
 				edge = entryWay.edge;
 				do {
-					
+
 					if (edge.twin ) {
 						g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
 					}
 					edge = edge.next;
-				} while (edge !== entryWay.edge);	
+				} while (edge !== entryWay.edge);
 				*/
 
 				if (!e2) { // add a highway perch leading out from entryway polygon
@@ -3237,10 +3297,10 @@ class SVGCityReader {
 					let edgeEntryway = entryWay.edge;
 					console.log("Consider perch..");
 					do {
-						
+
 						if (!edge.twin && !edgeEntryway.twin) {
 							console.log("DEtected 1 perch:");
-							
+
 							let perch = NavMeshUtils.getNewExtrudeEdgePolygon(edgeEntryway, this.highwayPerchNoRampLength, true);
 							g.append(this.makeSVG("path", {stroke:"red", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: polygonSVGString(perch) }));
 							perch.mask = BIT_HIGHWAY;
@@ -3250,7 +3310,7 @@ class SVGCityReader {
 						}
 						edgeEntryway = edgeEntryway.next;
 						edge = edge.next;
-					} while (edge !== p.region.edge);					
+					} while (edge !== p.region.edge);
 				}
 			} else {
 				console.warn("Missed Entrance connect highway entirely!")
@@ -3267,9 +3327,9 @@ class SVGCityReader {
 			let longestBorderLength = 0;
 			let count = 0;
 			let hasNeighborRampPolygon = false;
-			do {	
+			do {
 				if (edge.twin) {
-					
+
 					if (edge.twin.polygon.connectRamp) {
 						console.log("detected rampdown edge");
 						edge.prev.vertex.y = this.highwayAltitude;
@@ -3278,9 +3338,9 @@ class SVGCityReader {
 					}
 					else if ((edge.twin.polygon.mask & BIT_HIGHWAY_RAMP)) {
 						hasNeighborRampPolygon = true;
-						// weld on the fly			
-						edge.twin.vertex = edge.prev.vertex;	
-						edge.twin.prev.vertex = edge.vertex;	
+						// weld on the fly
+						edge.twin.vertex = edge.prev.vertex;
+						edge.twin.prev.vertex = edge.vertex;
 					}
 					//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
 				} else {
@@ -3314,18 +3374,18 @@ class SVGCityReader {
 			let hasNeighborRampPolygon = false;
 			let addedNeighbor;
 
-			do {	
+			do {
 				if (edge.twin) {
 					if ((edge.twin.polygon.mask & BIT_HIGHWAY_RAMP)) {
 						if ( !rampDownsSet.has(edge.twin.polygon)) {
 							if (!hasNeighborRampPolygon) {
 								hasNeighborRampPolygon = true;
 								addedNeighbor = edge.twin.polygon;
-								edge.twin.vertex = edge.prev.vertex;	
-								edge.twin.prev.vertex = edge.vertex;	
+								edge.twin.vertex = edge.prev.vertex;
+								edge.twin.prev.vertex = edge.vertex;
 								rampDownsSet.add(edge.twin.polygon);
-							} 
-						} 
+							}
+						}
 						//console.log("ADDED ADDITIONAL)");
 					}
 					//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
