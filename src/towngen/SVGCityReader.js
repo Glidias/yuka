@@ -1055,17 +1055,36 @@ class SVGCityReader {
 		return deployGeom;
 	}
 
-	/**
-	 *
-	 * @param {Number} scaleXZ
-	 * @param {Number} buildingInset
-	 * @param {Boolean} renderPerWard
-	 * @return {*} vertices/indices Object, or array of it with renderPerWard
-	 */
-	getWardBuildingsGeometry(buildingInset=0, renderPerWard=false) {
-		// kiv todo: vertices and indices, for now, just get all per ward neighborhood for collision detection DBVH/BVH
-		// for rendering buffer, consider renderPerWard, else render all
 
+	getNeighborhoodHullsGeometry() {
+		const collector = getNewGeometryCollector();
+		const gLevel = this.innerWardAltitude;
+		const scaleXZ = this.exportScaleXZ;
+
+		this.wards.forEach((wardObj)=> {
+			wardObj.neighborhoodHulls.forEach((hull)=> {
+				let bLen = hull.length - 1;
+				let wv = collector.vertices.length / 3;
+				hull.forEach((pt, i)=> {
+					//let prevIndex = i >= 1 ? i - 1 : bLen;
+					//let prevPt = hull[prevIndex];
+
+					let nextIndex = i < bLen ? i + 1 : 0;
+					let nextPt = hull[nextIndex];
+					collector.vertices.push(pt[0]*scaleXZ, gLevel, pt[1]*scaleXZ);
+					collector.normals.push(0, 1, 0);
+					if (i >= 1 && i < bLen) {
+						collector.indices.push(wv, wv+i, wv+i+1);
+					}
+				});
+
+			});
+		});
+		return collector;
+	}
+
+
+	getWardBuildingsGeometry(buildingInset=0) {
 		let wardCollectors = [];
 		this.wardCollectors = wardCollectors;
 		let wardRoofCollectors = [];
