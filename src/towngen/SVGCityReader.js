@@ -5,7 +5,7 @@ import { LineSegment } from "../math/LineSegment.js";
 import {Delaunay} from "d3-delaunay";
 
 import cdt2d from "cdt2d";
-import cleanPSLG from "clean-pslg";
+//import cleanPSLG from "clean-pslg";
 import CSG from "csg2d";
 
 import {NavMesh} from "../navigation/navmesh/NavMesh.js";
