@@ -667,6 +667,8 @@ class SVGCityReader {
 		this.selectorLandmark = "g[fill-rule='nonzero'][fill='#99948A'][stroke='#1A1917']";
 		this.selectorCitadel = "g[fill-rule='nonzero'][fill='#99948A'][stroke='#1A1917']";
 
+		this.selectorPlaza = "g[fill-rule='nonzero'][fill='#99948A'][stroke='#1A1917'][stroke-width='0.09999999999999999']";
+
 		this.selectorFarmhouses = "g[fill-rule='nonzero'][stroke='#99948A'][stroke-linecap='butt']";
 
 		this.selectorRoads = "g[fill=none]"  // polyline
@@ -903,24 +905,15 @@ class SVGCityReader {
 			tempContainer = $(document.body).append($("<div></div>"));
 		}
 
-
-
 		let dummySelector = $("<g></g>");
 		if (this.selectorRoads) {
+			// kiv v2
 			this.selectorRoads = map.children(this.selectorRoads);
-
 		}
+
 		if (this.selectorFarmhouses) {
+			// kiv v2
 			this.selectorFarmhouses = map.children(this.selectorFarmhouses);
-
-		}
-		if (this.selectorCitadel) {
-			this.selectorCitadel = map.children(this.selectorCitadel);
-
-
-		}
-		if (this.selectorLandmark) {
-			this.selectorLandmark = map.children(this.selectorLandmark);
 		}
 
 		if (this.selectorCityWallPath) {
@@ -957,6 +950,39 @@ class SVGCityReader {
 
 		}
 
+
+		if (this.selectorCitadel) {
+			this.selectorCitadel = map.children(this.selectorCitadel);
+			if (this.selectorCitadel.length) {
+				if (this.selectorCitadel.length >= 2) {
+					alert(this.selectorCitadel.length);
+				}
+
+				this.parseCitadel(this.selectorCitadel);
+			} else {
+				console.warn("JSelector Citadel not found!");
+			}
+		}
+
+		if (this.selectorLandmark) {
+			this.selectorLandmark = map.children(this.selectorLandmark);
+			if (this.selectorLandmark.length) {
+				if (this.selectorLandmark.length >= 2) {
+					//alert(this.selectorLandmark.length);
+					// smalltest of all, filter out seletorCitadel
+				}
+
+				this.parseLandmark(this.selectorLandmark);
+			} else {
+				console.warn("JSelector Landmark not found!");
+			}
+		}
+
+		if (this.selectorPlaza) {
+			this.selectorPlaza = map.children(this.selectorPlaza);
+			//alert(this.selectorPlaza.length);
+			this.parsePlaza(this.selectorPlaza);
+		}
 
 		if (this.selectorWards) {
 			this.selectorWards = map.children(this.selectorWards);
@@ -2228,6 +2254,18 @@ class SVGCityReader {
 		return {vertices:vertices, edges:edges, cdt:cdt};
 	}
 
+	parseCitadel(jSel) {
+
+	}
+
+	parseLandmark(jSel) {
+
+	}
+
+	parsePlaza(jSel) {
+
+	}
+
 	parseCityWalls(jSel, jSelPath, jSelCitadelWall) {
 		// assumed already arranged seperately in anticlockwise order
 		let jEntrances = jSel.children("g");
@@ -2434,7 +2472,7 @@ class SVGCityReader {
 		cleanPSLG(edgeVertices, edgesBoundary);
 
 		let cdt = cdt2d(edgeVertices, edgesBoundary, {exterior:false});
-		this.cityWallCDTBoundary = {tris:cdt, vertices:edgeVertices};
+		this.cityWallCDTBoundary = {cdt:cdt, vertices:edgeVertices};
 		/*
 		g.append(
 			this.makeSVG("path", {"fill":"rgba(155,255,122,0.3)", "stroke-width":0.1, "stroke":"red",
@@ -2442,6 +2480,11 @@ class SVGCityReader {
 		);
 		*/
 
+		this.citadelWallCDTBoundary = this.getCDTObjFromPointsList(this.citadelWallSegments, true, {exterior:false});
+		g.append(
+			this.makeSVG("path", {"fill":"rgba(155,111,122,0.7)", "stroke-width":0.1, "stroke":"red",
+				d: this.citadelWallCDTBoundary.cdt.map((tri)=>{return triSVGString(this.citadelWallCDTBoundary.vertices, tri)}).join(" ")})
+		);
 
 		let wallRadius = 1;
 		let verticesSoup = [];
@@ -3461,8 +3504,12 @@ class SVGCityReader {
 
 	checkWithinCityWall(x, y, defaultVal=false) {
 		if (!this.cityWallCDTBoundary) return defaultVal;
-		let tris = this.cityWallCDTBoundary.tris;
-		let vertices = this.cityWallCDTBoundary.vertices;
+		return this.checkWithinCDTBoundary(this.cityWallCDTBoundary, x,y);
+	}
+
+	checkWithinCDTBoundary(cdtBoundary, x, y) {
+		let tris = cdtBoundary.cdt;
+		let vertices = cdtBoundary.vertices;
 		let len = tris.length;
 		for (let i=0; i<len; i++) {
 			let tri = tris[i];
