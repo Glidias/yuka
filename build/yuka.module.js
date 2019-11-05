@@ -15360,6 +15360,27 @@ class Polygon {
 
 	}
 
+	/**
+	* Get the edge that can be used to reach the
+	* given polygon over its twin reference.
+	*
+	* @param {Polygon} polygon - The polygon to reach.
+	* @return {HalfEdge} The edge.
+	*/
+	getEdgeTo( polygon ) {
+		let edge = this.edge;
+		do {
+			if ( edge.twin !== null ) {
+				if ( edge.twin.polygon === polygon ) {
+					return edge;
+				}
+			}
+			edge = edge.next;
+
+		} while ( edge !== this.edge );
+		return null;
+	}
+
 }
 
 // from the book "Computational Geometry in C, Joseph O'Rourke"
