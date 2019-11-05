@@ -240,7 +240,7 @@ class NavMesh {
 	/**
 	* Returns the region that contains the given point. The computational overhead
 	* of this method for complex navigation meshes can be reduced by using a spatial index.
-	* If not convex region contains the point, *null* is returned.
+	* If no convex region contains the point, *null* is returned.
 	*
 	* @param {Vector3} point - A point in 3D space.
 	* @param {Number} epsilon - Tolerance value for the containment test.
@@ -417,7 +417,7 @@ class NavMesh {
 					const region = this.regions[ polygonPath[ i ] ];
 					const nextRegion = this.regions[ polygonPath[ i + 1 ] ];
 
-					region.getPortalEdgeTo( nextRegion, portalEdge );
+					this._getPortalEdge( region, nextRegion, portalEdge );
 
 					corridor.push( portalEdge.left, portalEdge.right );
 
@@ -771,7 +771,7 @@ class NavMesh {
 
 			}
 
-			// user only border edges from adjacent convex regions (fast)
+			// use only border edges from adjacent convex regions (fast)
 
 			borderEdges = edges;
 
@@ -807,6 +807,40 @@ class NavMesh {
 		}
 
 		return this;
+
+	}
+
+	// Determines the portal edge that can be used to reach the given polygon over its twin reference.
+
+	_getPortalEdge( region1, region2, portalEdge ) {
+
+		let edge = region1.edge;
+
+		do {
+
+			if ( edge.twin !== null ) {
+
+				if ( edge.twin.polygon === region2 ) {
+
+					// the direction of portal edges are reversed. so "left" is the edge's origin vertex and "right"
+					// is the destintation vertex. More details in issue #5
+
+					portalEdge.left = edge.prev.vertex;
+					portalEdge.right = edge.vertex;
+					return portalEdge;
+
+				}
+
+			}
+
+			edge = edge.next;
+
+		} while ( edge !== region1.edge );
+
+		portalEdge.left = null;
+		portalEdge.right = null;
+
+		return portalEdge;
 
 	}
 

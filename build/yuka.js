@@ -887,7 +887,11 @@
 		*/
 		angleTo( v ) {
 
-			const theta = this.dot( v ) / ( Math.sqrt( this.squaredLength() * v.squaredLength() ) );
+			const denominator = Math.sqrt( this.squaredLength() * v.squaredLength() );
+
+			if ( denominator === 0 ) return 0;
+
+			const theta = this.dot( v ) / denominator;
 
 			// clamp, to handle numerical problems
 
@@ -6971,7 +6975,7 @@
 	/**
 	* This class can be used to smooth the result of a vector calculation. One use case
 	* is the smoothing of the velocity vector of game entities in order to avoid a shaky
-	* movements du to conflicting forces.
+	* movements due to conflicting forces.
 	*
 	* @author {@link https://github.com/Mugen87|Mugen87}
 	* @author {@link https://github.com/robp94|robp94}
@@ -8884,21 +8888,14 @@
 		constructor() {
 
 			/**
-			* The start time of this timer.
-			* @type Number
-			* @default 0
-			*/
-			this.startTime = 0;
-
-			/**
-			* The time stamp of the last simulation step.
+			* The time stamp of the last simulation step in milliseconds.
 			* @type Number
 			* @default 0
 			*/
 			this.previousTime = 0;
 
 			/**
-			* The time stamp of the current simulation step.
+			* The time stamp of the current simulation step in milliseconds.
 			* @type Number
 			*/
 			this.currentTime = this.now();
@@ -8922,6 +8919,11 @@
 
 			}
 
+			// private members
+
+			this._elapsedTime = 0;
+			this._deltaTime = 0;
+
 		}
 
 		/**
@@ -8931,18 +8933,19 @@
 		*/
 		getDelta() {
 
-			return ( this.currentTime - this.previousTime ) / 1000;
+			return this._deltaTime / 1000;
 
 		}
 
 		/**
-		* Returns the elapsed time in seconds of this timer.
+		* Returns the elapsed time in seconds of this timer. It's the accumulated
+		* value of all previous time deltas.
 		*
 		* @return {Number} The elapsed time in seconds.
 		*/
 		getElapsed() {
 
-			return ( this.currentTime - this.startTime ) / 1000;
+			return this._elapsedTime / 1000;
 
 		}
 
@@ -8955,6 +8958,9 @@
 
 			this.previousTime = this.currentTime;
 			this.currentTime = this.now();
+
+			this._deltaTime = this.currentTime - this.previousTime;
+			this._elapsedTime += this._deltaTime;
 
 			return this;
 
@@ -12937,7 +12943,7 @@
 		* @param {Graph} graph - The graph.
 		* @param {Number} source - The index of the source node.
 		* @param {Number} target - The index of the target node.
-		* @return {Number} The manhattan distance between both nodes.
+		* @return {Number} The value 0.
 		*/
 		static calculate( /* graph, source, target */ ) {
 
@@ -14955,12 +14961,12 @@
 		/**
 		* Constructs a new half-edge.
 		*
-		* @param {Vector3} vertex - The (origin) vertex of this half-edge.
+		* @param {Vector3} vertex - The vertex of this half-edge. It represents the head/destination of the respective full edge.
 		*/
 		constructor( vertex = new Vector3() ) {
 
 			/**
-			* The (origin) vertex of this half-edge.
+			* The vertex of this half-edge. It represents the head/destination of the respective full edge.
 			* @type Vector3
 			*/
 			this.vertex = vertex;
@@ -15357,46 +15363,6 @@
 			} while ( edge !== this.edge );
 
 			return result;
-
-		}
-
-		/**
-		* Determines the portal edge that can be used to reach the
-		* given polygon over its twin reference. The result is stored
-		* in the given portal edge data structure. If the given polygon
-		* is no direct neighbor, the references of the portal edge data
-		* structure are set to null.
-		*
-		* @param {Polygon} polygon - The polygon to reach.
-		* @param {Object} portalEdge - The portal edge.
-		* @return {Object} The portal edge.
-		*/
-		getPortalEdgeTo( polygon, portalEdge ) {
-
-			let edge = this.edge;
-
-			do {
-
-				if ( edge.twin !== null ) {
-
-					if ( edge.twin.polygon === polygon ) {
-
-						portalEdge.left = edge.prev.vertex;
-						portalEdge.right = edge.vertex;
-						return portalEdge;
-
-					}
-
-				}
-
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-
-			portalEdge.left = null;
-			portalEdge.right = null;
-
-			return portalEdge;
 
 		}
 
@@ -18207,7 +18173,7 @@
 		/**
 		* Returns the region that contains the given point. The computational overhead
 		* of this method for complex navigation meshes can be reduced by using a spatial index.
-		* If not convex region contains the point, *null* is returned.
+		* If no convex region contains the point, *null* is returned.
 		*
 		* @param {Vector3} point - A point in 3D space.
 		* @param {Number} epsilon - Tolerance value for the containment test.
@@ -18378,7 +18344,7 @@
 						const region = this.regions[ polygonPath[ i ] ];
 						const nextRegion = this.regions[ polygonPath[ i + 1 ] ];
 
-						region.getPortalEdgeTo( nextRegion, portalEdge );
+						this._getPortalEdge( region, nextRegion, portalEdge );
 
 						corridor.push( portalEdge.left, portalEdge.right );
 
@@ -18730,7 +18696,7 @@
 
 				}
 
-				// user only border edges from adjacent convex regions (fast)
+				// use only border edges from adjacent convex regions (fast)
 
 				borderEdges = edges;
 
@@ -18766,6 +18732,40 @@
 			}
 
 			return this;
+
+		}
+
+		// Determines the portal edge that can be used to reach the given polygon over its twin reference.
+
+		_getPortalEdge( region1, region2, portalEdge ) {
+
+			let edge = region1.edge;
+
+			do {
+
+				if ( edge.twin !== null ) {
+
+					if ( edge.twin.polygon === region2 ) {
+
+						// the direction of portal edges are reversed. so "left" is the edge's origin vertex and "right"
+						// is the destintation vertex. More details in issue #5
+
+						portalEdge.left = edge.prev.vertex;
+						portalEdge.right = edge.vertex;
+						return portalEdge;
+
+					}
+
+				}
+
+				edge = edge.next;
+
+			} while ( edge !== region1.edge );
+
+			portalEdge.left = null;
+			portalEdge.right = null;
+
+			return portalEdge;
 
 		}
 
@@ -19125,7 +19125,7 @@
 
 				const primitive = definition.primitives[ 0 ];
 
-				if ( primitive.mode !== 4 ) {
+				if ( primitive.mode !== undefined && primitive.mode !== 4 ) {
 
 					throw new Error( 'YUKA.NavMeshLoader: Invalid geometry format. Please ensure to represent your geometry as triangles.' );
 
