@@ -53,6 +53,13 @@ class NavMesh {
 		this.attemptMergePolies = true;
 
 		/**
+		 * Whether to build navigation graph via it's own internal method. Defaults to true.
+		 * You may set this to false if you intend to manually set up the graph yourself through other methods.
+		 * @type Boolean
+		 */
+		this.attemptBuildGraph = true;
+
+		/**
 		* The list of convex regions.
 		* @type Array
 		*/
@@ -167,7 +174,7 @@ class NavMesh {
 
 		// now build the navigation graph
 
-		this._buildGraph();
+		if (this.attemptBuildGraph) this._buildGraph();
 
 		return this;
 
@@ -771,7 +778,7 @@ class NavMesh {
 
 			}
 
-			// use only border edges from adjacent convex regions (fast)
+			// user only border edges from adjacent convex regions (fast)
 
 			borderEdges = edges;
 
