@@ -3623,7 +3623,7 @@
 		}
 
 		/**
-		 * Override this handler to perform behaviour setup for vehicle removal of behaviour
+		 * Override this handler to perform behaviour setup for vehicle upon addition of behaviour
 		 * @param {*} vehicle
 		 */
 		onAdded(vehicle) {}
@@ -6685,7 +6685,7 @@
 		add( behavior ) {
 
 			this.behaviors.push( behavior );
-			behaviour.onAdded(this.vehicle);
+			behavior.onAdded(this.vehicle);
 			return this;
 
 		}
@@ -6700,7 +6700,7 @@
 
 			const index = this.behaviors.indexOf( behavior );
 			this.behaviors.splice( index, 1 );
-			behaviour.onRemoved(this.vehicle);
+			behavior.onRemoved(this.vehicle);
 			return this;
 
 		}
@@ -15155,7 +15155,7 @@
 
 				let current, prev, next;
 
-				if ( i === 0 ) {
+				if ( i === 0 ) {
 
 					current = edges[ i ];
 					prev = edges[ l - 1 ];
@@ -17968,6 +17968,19 @@
 			this.graph.digraph = true;
 
 			/**
+			 * Whether to merge polygons when constructing regions. Defaults to true unless set otherwise.
+			 * @type Boolean
+			 */
+			this.attemptMergePolies = true;
+
+			/**
+			 * Whether to build navigation graph via it's own internal method. Defaults to true.
+			 * You may set this to false if you intend to manually set up the graph yourself through other methods.
+			 * @type Boolean
+			 */
+			this.attemptBuildGraph = true;
+
+			/**
 			* The list of convex regions.
 			* @type Array
 			*/
@@ -17998,24 +18011,6 @@
 
 			this._borderEdges = new Array();
 
-		}
-
-		weldNeighboringVertices() {
-			var regions = this.regions;
-			for ( let i = 0, il = regions.length; i < il; i ++ ) {
-				let r = regions[i];
-				let edge = r.edge;
-				do {
-					if (edge.twin !== null) {
-						if (edge.prev.vertex !== edge.twin.vertex) {
-							edge.twin.vertex = edge.prev.vertex;
-						}
-						if (edge.vertex !== edge.twin.prev.vertex) {
-							edge.twin.prev.vertex = edge.vertex;
-						}
-					}
-				} while ( edge !== r.edge );
-			}
 		}
 
 		/**
@@ -18100,7 +18095,7 @@
 
 			// now build the navigation graph
 
-			this._buildGraph();
+			if (this.attemptBuildGraph) this._buildGraph();
 
 			return this;
 
@@ -18186,7 +18181,9 @@
 			if ( this.spatialIndex !== null ) {
 
 				const index = this.spatialIndex.getIndexForPosition( point );
-				regions = this.spatialIndex.cells[ index ].entries;
+				regions = this.spatialIndex.cells[ index ];
+				if (!regions) return null;
+				regions = regions.entries;
 
 			} else {
 
@@ -18224,63 +18221,6 @@
 			return this.regions.indexOf( region );
 
 		}
-
-
-		/**
-		* Returns the shortest path that leads from the given start position to the end position.
-		* The computational overhead of this method for complex navigation meshes can greatly
-		* reduced by using a spatial index.
-		*
-		* @param {Vector3} from - The start/source position.
-		* @param {Vector3} to - The end/destination position.
-		* @return {Array} Path of regions. If same region, returns array length 1 same region
-		*/
-		findPathOfRegions( from, to ) {
-
-			const graph = this.graph;
-			const path = new Array();
-
-			let fromRegion = this.getRegionForPoint( from, this.epsilonContainsTest );
-			let toRegion = this.getRegionForPoint( to, this.epsilonContainsTest );
-
-			if ( fromRegion === null || toRegion === null ) {
-
-				// if source or target are outside the navmesh, choose the nearest convex region
-
-				if ( fromRegion === null ) fromRegion = this.getClosestRegion( from );
-				if ( toRegion === null ) toRegion = this.getClosestRegion( to );
-
-			}
-
-			// check if both convex region are identical
-
-			if ( fromRegion === toRegion ) {
-
-				// no search necessary, directly create the path
-
-				path.push( fromRegion );
-				return path;
-
-			} else {
-
-				// source and target are not in same region, perform search
-
-				const source = this.getNodeIndex( fromRegion );
-				const target = this.getNodeIndex( toRegion );
-
-				const astar = new AStar( graph, source, target );
-				astar.search();
-
-				if ( astar.found === true ) {
-
-					for ( let i = 0, l = ( polygonPath.length ); i < l; i ++ ) {
-						path.push( this.regions[ polygonPath[ i ] ] );
-					}
-				}
-				return path;
-			}
-		}
-
 
 		/**
 		* Returns the shortest path that leads from the given start position to the end position.
@@ -18525,7 +18465,9 @@
 				const polygon = candidate.polygon;
 				polygon.edge = candidate.prev;
 
-				if ( polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
+				let attemptMergePolies = this.attemptMergePolies;
+
+				if ( attemptMergePolies && polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
 
 					// correct polygon reference of all edges
 
@@ -18696,7 +18638,7 @@
 
 				}
 
-				// use only border edges from adjacent convex regions (fast)
+				// user only border edges from adjacent convex regions (fast)
 
 				borderEdges = edges;
 
@@ -20468,26 +20410,1560 @@
 
 	}
 
-	// import { Vector3 } from '../../math/Vector3.js';
+	class FlowVertex extends Vector3 {
+		constructor(v) {
+			super();
+			this.vertex = v;
+		}
 
-	//const desiredVelocity = new Vector3();
+		/**
+		 * Initialises known variables for spinning flow vertex (rotating flow vector) to handle interpolated movement around sharp corners
+		 * http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.68.875&rep=rep1&type=pdf#page=3
+		 * @param {*} edgeWithin
+		 */
+		initSpinning(edgeWithin, onRight, edgeNext, finalDestPt, diagonalEdgeMode = false) {
+			this.spinningOnRight = onRight;
+
+			// pre-calculate normal proceeding outward from inner edgeWithin to determine when flow vertex starts to spin
+			// as long as it meets splitNormal condition, result flow vector will always spin towards agent
+
+			// Is there any intersection that will cause subdivision into sub triangles?
+			// check edgeWithin.polygon if it's a triangle or a non-triangle?
+			// for triangle, can easily get split point along known boundary edge of polygon (left or right)
+			// Get spin edge accordingly and point along split edge for spinningRegion
+				this.splitNormal = new Vector3();
+				//this.splitPoint = new FlowVertex();
+			// flag that determines region check to then check for sub-triangles if needed for agent
+				//this.splitRegion = edgeWithin.polygon;
+
+			// for non-triangle, triangulation is variable based on the flow to next portal edgeWithin, from start portal edge.
+			//    For the sake of simplciity, assumed a quad split on left to right diagonal from startPortal to edgeWithin.
+			// In some cases, , this might result in a triangle if both portal edges share the same vertex
+
+			// whether it needs to split into 3rd sub-triangle, is determined based on subsequent edge's flowVertex along common split edge in question
+			// Could this action be lazy-defered later until agent enters into splittingRegion?
+			// this.edgeOfFlowVertexToCheck = edgeNext???
+				// this.splitNormal2 = new Vector3();
+				// this.splitPoint2 = new FlowVertex();
+			// howver, if edgeNext is unavailable, then use assumed finalDestPt to determine 3rd sub-triangle split immediately
+
+			return this;
+		}
+
+		initFinal(destPt) {
+			this.final = true;
+			return this;
+		}
+	}
+
+	const HANDEDNESS_RIGHT = 1;
+	const HANDEDNESS_LEFT = -1;
+	var USE_HANDEDNESS = HANDEDNESS_LEFT;
+
+	var DISCONTINUOUS = false;
 
 	/**
-	* Flowfield behaviour through a navmesh
+	 * Makeshift triangulation of a non-tri polygon using a prefered fromPortal to nextPortal main lane (`==0`) (within navmesh polygon region)
+	 * and fanned edges leading to nextPortal that forms sub-lanes (`<0` for left fan lanes and `>0` for right fan lanes)
+	 *
+	 * Also contains static/non-static method to triangulate flow vertices for a given agent.
+	 */
+	class FlowTriangulate {
+
+		static setRightHanded(rightHanded) {
+			USE_HANDEDNESS = rightHanded ? HANDEDNESS_RIGHT : HANDEDNESS_LEFT;
+		}
+
+		static setDiscontinuous(boo=true) {
+			DISCONTINUOUS = boo;
+		}
+
+		constructor(fromPortal, nextPortal) {
+			if (fromPortal.polygon !== nextPortal.polygon) throw new Error("Invalid portals -- dont belong to same polygon!")
+
+			this.fromPortal = fromPortal;
+			this.nextPortal = nextPortal;
+
+			//  normals and vectors
+			let polygon = this.fromPortal.polygon;
+			let isQuadCorridoor = nextPortal.next !== fromPortal && nextPortal.prev !== fromPortal;
+			if (isQuadCorridoor) {
+				let dx = nextPortal.prev.vertex.x - fromPortal.prev.vertex.x;
+				let dz = nextPortal.prev.vertex.z - fromPortal.prev.vertex.z;
+				this.diagonal = new Vector3(-dz*USE_HANDEDNESS, 0, dx*USE_HANDEDNESS);
+				if (this.diagonal.squaredLength() === 0) {
+					console.log(this);
+					console.error("Diagonal zero length detected");
+				}
+				this.diagonal.normalize(); // todo: remove and test not needed
+				this.diagonal.offset = this.diagonal.x * fromPortal.prev.vertex.x + this.diagonal.z * fromPortal.prev.vertex.z;
+			}
+
+			let isQuad = polygon.edge.next.next.next.next === polygon.edge;
+
+			// if quad and fromPortal and nextPortal is disconnected, don't need to proceed further as no additional edges to fan to nextPortal
+			if (isQuad && isQuadCorridoor) return;
+
+			if (nextPortal.next !== fromPortal) {
+				this.leftEdgeDirs = [new Vector3()];
+				this.leftEdgeFlows = [FlowTriangulate.calculateDirForFanEdge(fromPortal.prev.vertex, nextPortal.vertex, this.leftEdgeDirs[0], false)];
+			}
+			if (nextPortal.prev !== fromPortal) {
+				this.rightEdgeDirs = [new Vector3()];
+				this.rightEdgeFlows = [FlowTriangulate.calculateDirForFanEdge(fromPortal.vertex, nextPortal.prev.vertex, this.rightEdgeDirs[0], true)];
+			}
+
+			let edge = polygon.edge;
+			let fEdge;
+			let dir;
+			let debugCount = 0;
+			let debugEdgeCount = 0;
+
+
+
+			do { //  debug check this calculation quantities
+				debugEdgeCount++;
+
+				if (edge.vertex !== fromPortal.vertex && edge.vertex !== fromPortal.prev.vertex && edge.vertex !== nextPortal.vertex && edge.vertex !== nextPortal.prev.vertex) {
+					dir = this.leftEdgeDirs ? this.leftEdgeDirs[0] : null;
+					let resolved = false;
+					if (dir &&  (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset ) ) {
+						dir = new Vector3();
+						fEdge = FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.vertex, dir, false);
+						this.leftEdgeDirs.push(dir);
+						this.leftEdgeFlows.push(fEdge);
+						debugCount++;
+
+						resolved = true;
+					}
+					dir = this.rightEdgeDirs ? this.rightEdgeDirs[0] : null;
+					if (dir &&  (dir.x*edge.vertex.x + dir.z*edge.vertex.z > dir.offset ) ) {
+						dir = new Vector3();
+						fEdge = FlowTriangulate.calculateDirForFanEdge(edge.vertex, nextPortal.prev.vertex, dir, true);
+
+						this.rightEdgeDirs.push(dir);
+						this.rightEdgeFlows.push(fEdge);
+						debugCount++;
+
+						resolved = true;
+					}
+					if (!resolved) console.warn("Failed to resolve vertex side...:"+(this.leftEdgeDirs ? " 1 ": "") + ", " + (this.rightEdgeDirs ? " 2 " : ""));
+				}
+				edge = edge.next;
+			} while (edge!==polygon.edge)
+
+			// For debug tracing
+			if (debugCount !== debugEdgeCount - (isQuadCorridoor ? 4 : 3) ) {
+				console.warn("Debug count assertion mismatch!!: " + debugCount + " / "+ debugEdgeCount);
+				console.log(this);
+				edge.polygon.gotErrorTriangulation = this;
+				this.debugInfo = {leftEdgeDirs:this.leftEdgeDirs, rightEdgeDirs:this.rightEdgeDirs, leftEdgeFlows:this.leftEdgeFlows, rightEdgeFlows:this.rightEdgeFlows};
+
+			}
+			edge.polygon.debugTriangulation = this;
+
+			if (this.leftEdgeDirs && this.leftEdgeDirs.length === 1) {
+				this.leftEdgeDirs = null;
+				this.leftEdgeFlows = null;
+			}
+			if (this.rightEdgeDirs && this.rightEdgeDirs.length === 1) {
+				this.rightEdgeDirs = null;
+				this.rightEdgeFlows = null;
+			}
+		}
+
+		/**
+		 * Updates agent's a,b,c flow triangle flow-vertices from a given tri-region polygon along main path corridoor
+		 * @param {Vector3} pos	The position of agent within polygon region
+		 * @param {Object} result Typically a FlowAgent object that has `a`, `b`, and `c` flow vertices=
+		 * @param {Map} edgeFieldMap Edge field map from flowfield to get flow vectors along main region portals along path corridoor
+		 */
+		static updateTriRegion(region, result, edgeFieldMap) {
+			let targetEdge =
+				edgeFieldMap.has(region.edge) ? region.edge :
+				edgeFieldMap.has(region.edge.prev) ? region.edge.prev :
+													 region.edge.next;
+
+
+			result.a = edgeFieldMap.get(targetEdge.next.vertex);
+			targetEdge = edgeFieldMap.get(targetEdge);
+			result.b = targetEdge[1];
+			result.c = targetEdge[0];
+
+			if (result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.prevEdge)) {
+				result.prevEdge = null;
+			}
+			if (result.lastSavedEdge && result.lastSavedEdge !== result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.lastSavedEdge)) {
+				result.lastSavedEdge = null;
+			}
+			// todo: check for spinning flowVertex splitNormal for subtriangle selection?
+		}
+
+			// Method 1 , check fan sector
+			/*	// alternate approach, check with fan
+			let foundTriEdge = null;
+			let dx;
+			let dz;
+			let handedness = USE_HANDEDNESS;
+			do {
+				dz = -edge.prev.vertex.x + finalDestPt.x;
+				dx = edge.prev.vertex.z - finalDestPt.z;
+				dz *= handedness;
+				dx *+ handedness;
+				if (dz * pos.z + dx * pos.x < 0) {
+					edge = edge.next;
+					continue;
+				}
+
+				dz = -edge.vertex.x + finalDestPt.x;
+				dx = edge.vertex.z - finalDestPt.z;
+				dz *= handedness;
+				dx *+ handedness;
+				if (dz * pos.z + dx * pos.x > 0) {
+					edge = edge.next;
+					continue;
+				}
+
+				foundTriEdge = edge;
+				break;
+
+			} while (edge !== region.edge)
+			*/
+
+			/*	// Method 2 , check sector triangle
+			if (pointInTriangle(finalDestPt, edge.prev.vertex, edge.vertex, pos)) {
+				foundTriEdge = edge;
+				break;
+			}
+			edge = edge.next;
+			*/
+
+		/**
+		 * Updates agent's a,b,c flow triangle flow-vertices for final destination's n-gon region based off agent's position
+		 * @param {Vector3} pos	The position of agent within polygon region
+		 * @param {Object} result Typically a FlowAgent object that has `a`, `b`, and `c` flow vertice
+		 * @param {Map} edgeFieldMap Edge field map from flowfield to get flow vectors
+		 * @param {Vector3} finalDestPt The final destination point
+		 */
+		static updateNgonFinalTri(region, pos, result, edgeFieldMap, finalDestPt) {
+			let edge = region.edge;
+			let foundTriEdge = null;
+			let dx;
+			let dz;
+			let handedness = USE_HANDEDNESS;
+			do {
+				dz = -edge.prev.vertex.x + finalDestPt.x;
+				dx = edge.prev.vertex.z - finalDestPt.z;
+				dz *= handedness;
+				if (dz * pos.z + dx * pos.x < 0) {
+					edge = edge.next;
+					continue;
+				}
+
+				dz = -edge.vertex.x + finalDestPt.x;
+				dx = edge.vertex.z - finalDestPt.z;
+				dz *= handedness;
+				if (dz * pos.z + dx * pos.x > 0) {
+					edge = edge.next;
+					continue;
+				}
+
+				foundTriEdge = edge;
+				break;
+
+			} while (edge !== region.edge)
+
+			if (foundTriEdge === null) {
+				console.log(region);
+				throw new Error("Failed to find final destination center fan triangle");
+			}
+
+			result.a = edgeFieldMap.get(finalDestPt);
+			result.b = edgeFieldMap.get(foundTriEdge.prev.vertex);
+			result.c = edgeFieldMap.get(foundTriEdge.vertex);
+
+			if (result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.prevEdge)) {
+				result.prevEdge = null;
+			}
+			if (result.lastSavedEdge && result.lastSavedEdge !== result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.lastSavedEdge)) {
+				result.lastSavedEdge = null;
+			}
+		}
+
+		/**
+		 * Naive cache flow vertex check for agent to re-use previous flow-edge vertices along flowfield (if any)
+		 * @param {Object} result The agent with a,b,c flow vertices
+		 * @param {Array<FlowVertex>} prevFlowEdge	The flow edge cache to check
+		 * @return Whether there were any incident vertices to the given prevFlowEdge parameter
+		 */
+		static checkPrevFlowVertices(result, prevFlowEdge) {
+			if (DISCONTINUOUS) return false;
+
+			let gotReplace = false;
+			if ( prevFlowEdge[0] && result.a.vertex === prevFlowEdge[0].vertex  ) {
+				result.a = prevFlowEdge[0];
+				gotReplace = true;
+			} else if (prevFlowEdge[1] && result.a.vertex === prevFlowEdge[1].vertex  ) {
+				result.a = prevFlowEdge[1];
+				gotReplace = true;
+			}
+
+			if (prevFlowEdge[0] && result.b.vertex === prevFlowEdge[0].vertex  ) {
+				result.b = prevFlowEdge[0];
+				gotReplace = true;
+			} else if (prevFlowEdge[1] && result.b.vertex === prevFlowEdge[1].vertex  ) {
+				result.b = prevFlowEdge[1];
+				gotReplace = true;
+			}
+
+			if (prevFlowEdge[0] && result.c.vertex === prevFlowEdge[0].vertex  ) {
+				result.c = prevFlowEdge[0];
+				gotReplace = true;
+			} else if (prevFlowEdge[1] && result.c.vertex === prevFlowEdge[1].vertex  ) {
+				result.c = prevFlowEdge[1];
+				gotReplace = true;
+			}
+			return gotReplace;
+		}
+
+		/**
+		 * Updates agent's a,b,c flow triangle flow-vertices based on it's stored lane value
+		 * @param {Vector3} pos	The position of agent within polygon region
+		 * @param {Object} result Typically a FlowAgent object that has `a`, `b`, and `c` flow vertices, and `lane` index variable storage that was already updated based off it's position
+		 * @param {Map} edgeFieldMap Edge field map from flowfield to get flow vectors along main region portals along path corridoor
+		 */
+		updateFlowTriLaned(pos, result, edgeFieldMap) {
+			let norm;
+			let a;
+			let b;
+			let c;
+			let tarEdgeFlows;
+			if (result.lane === 0) {
+				if (this.diagonal) { // quad lane
+					norm = this.diagonal;
+					a = edgeFieldMap.get(this.fromPortal)[0]; // this.fromPortal.prev.vertex;
+					if (norm.x * pos.x + norm.z * pos.z >= norm.offset) {	// left (top left)
+						b = edgeFieldMap.get(this.nextPortal)[1]; // this.nextPortal.prev.vertex;
+						c = edgeFieldMap.get(this.nextPortal)[0]; // this.nextPortal.vertex;
+					} else {	// right (bottom right)
+						b = edgeFieldMap.get(this.fromPortal)[1]; // this.fromPortal.vertex;
+						c = edgeFieldMap.get(this.nextPortal)[1]; // this.nextPortal.prev.vertex;
+					}
+				} else { // tri lane
+					a = edgeFieldMap.get(this.fromPortal)[0]; // this.fromPortal.prev.vertex;
+					b = edgeFieldMap.get(this.fromPortal)[1]; // this.fromPortal.vertex;
+					c = edgeFieldMap.get(this.nextPortal)[this.nextPortal.vertex !== a.vertex && this.nextPortal.vertex !== b.vertex ? 0 : 1];
+				}
+			} else {
+				let leftwards = result.lane < 0;
+				tarEdgeFlows = leftwards ? this.leftEdgeFlows : this.rightEdgeFlows;
+				let index = leftwards ? -result.lane - 1 : result.lane - 1;
+				let subIndex = leftwards ? 1 : 0;
+				let edgeFlow = tarEdgeFlows[index][subIndex];
+				index++;
+				let edgeFlow2 = tarEdgeFlows[index][subIndex];
+				let portalVertexFlow = tarEdgeFlows[index][leftwards ? 0 : 1];
+
+
+				// leftwards: edgeFlow, portalVertexFlow, edgeFlow2
+				// rightwards: edgeFlow, edgeFlow2, portalVertexFlow
+				if (leftwards) {
+					a = edgeFlow;
+					b = portalVertexFlow;
+					c = edgeFlow2;
+				} else {
+					a = edgeFlow;
+					b = edgeFlow2;
+					c = portalVertexFlow;
+				}
+			}
+
+			if (!a || !b || !c) throw new Error("Should have abc vertices! " + result.lane + " / " + (tarEdgeFlows ? tarEdgeFlows.length : '') + " ::"+a+","+b+","+c + "["+(leftwards ? "<" : ">")+"]");
+
+			result.a = a;
+			result.b = b;
+			result.c = c;
+
+			if (result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.prevEdge)) {
+				result.prevEdge = null;
+			}
+			if (result.lastSavedEdge && result.lastSavedEdge !== result.prevEdge && !FlowTriangulate.checkPrevFlowVertices(result, result.lastSavedEdge)) {
+				result.lastSavedEdge = null;
+			}
+			// TODO: check for spinning flowVertex splitNormal for subtriangle selection?
+		}
+
+		/**
+		 * Updates agent's lane index within non-tri polygon
+		 * @param {Vector3} pos	The position of agent within polygon region
+		 * @param {Object} result Typically a FlowAgent object that has `a`, `b`, and `c` flow vertices, and `lane` index variable storage
+		 */
+		updateLane(pos, result) {
+			let dir;
+			let lane;
+			let len;
+			let i;
+			let prevLane;
+			if ( (dir=(this.leftEdgeDirs ? this.leftEdgeDirs[0] : false)) && (dir.x*pos.x + dir.z*pos.z > dir.offset) ) {
+				lane = -1;
+				len = this.leftEdgeDirs.length - 1;
+				for (i=1; i<len; i++) {
+					dir = this.leftEdgeDirs[i];
+					if (dir.offset >= dir.x * pos.x + dir.z * pos.z) {
+						break;
+					}
+					lane--;
+				}
+				if (lane < result.lane) { // agent inadvertedly dislodged/backpedaled position
+					// break continuity of motion
+					result.lastSavedEdge = null;
+					result.prevEdge = null;
+				} else if (lane > result.lane) {
+					// update prevEdge
+					prevLane = lane - 1;
+					result.prevEdge = -prevLane < this.leftEdgeDirs.length - 1 ? this.leftEdgeDirs[-prevLane] : null;
+					if (!result.lastSavedEdge) result.lastSavedEdge = result.prevEdge;
+					if (result.prevEdge === null) {
+						result.lastSavedEdge = null;
+						console.warn("Out of bounds detected for position..left");
+					}
+				}
+
+			} else if ( (dir=(this.rightEdgeDirs ? this.rightEdgeDirs[0] : false)) && (dir.x*pos.x + dir.z*pos.z > dir.offset) ) {
+				lane = 1;
+				len = this.rightEdgeDirs.length - 1;
+				for (i=1; i<len; i++) {
+					dir = this.rightEdgeDirs[i];
+					if (dir.offset >= dir.x * pos.x + dir.z * pos.z) {
+						break;
+					}
+					lane++;
+				}
+				if (lane > result.lane) { // agent inadvertedly dislodged/backpedaled position
+					// break continuity of motion
+					result.lastSavedEdge = null;
+					result.prevEdge = null;
+				} else if (lane < result.lane) {
+					prevLane = lane + 1;
+					result.prevEdge = prevLane < this.rightEdgeDirs.length - 1 ? this.rightEdgeDirs[prevLane] : null;
+					if (!result.lastSavedEdge) result.lastSavedEdge = result.prevEdge;
+					if (result.prevEdge === null) {
+						result.lastSavedEdge = null;
+						console.warn("Out of bounds detected for position..right");
+					}
+				}
+			} else {
+				lane = 0;
+			}
+
+			// debug
+			if (lane != 0) console.log("Lane != 0 case detected:"+lane +" / "+ (lane < 0 ? this.leftEdgeDirs : this.rightEdgeDirs ).length);
+
+			result.lane = lane;
+		}
+
+		static calculateDirForFanEdge(startVertex, destVertex, dir, rightSided) {
+			let dx = destVertex.x - startVertex.x;
+			let dz = destVertex.z - startVertex.z;
+			let flowVertex = new FlowVertex(startVertex);
+			flowVertex.x = dx;
+			flowVertex.z = dz;
+			flowVertex.normalize();  // todo: remove and test not needed
+
+			// perp
+			let multSide = rightSided ? -USE_HANDEDNESS : USE_HANDEDNESS;
+			dir.x = -dz*multSide;
+			dir.z = dx*multSide;
+			dir.normalize(); // <- consider not needed:: remove for production
+			dir.offset = dir.x * startVertex.x + dir.z * startVertex.z;
+
+			// flow vertices below
+			return rightSided ? [flowVertex, null] :  [null, flowVertex];
+		}
+
+	}
+
+	const CALC_VEC = new Vector3();
+	const CALC_VEC2 = new Vector3();
+	const CALC_VEC3 = new Vector3();
+
+	/**
+	 * Gridless flowfield on navmesh generation
+	 * https://gingkoapp.com/how-to-gridless-rts
+	 */
+
+	class NavMeshFlowField {
+		constructor(navMesh) {
+			this.navMesh = navMesh;
+
+			this._flowedFinal = false;
+		}
+
+		static cacheRegionIndexLookup(navMesh) {
+			if (!navMesh.regionIndexMap) {
+				navMesh.regionIndexMap = new Map();
+				var len = navMesh.regions.length;
+				for (var i=0; i<len; i++) {
+					navMesh.regionIndexMap.set(navMesh.regions[i], i);
+				}
+				navMesh.getNodeIndex = NavMeshFlowField.getCachedNodeIndexForRegionProto;
+			}
+		}
+
+		static getCachedNodeIndexForRegionProto(region) {
+			return this.regionIndexMap.has(region) ? this.regionIndexMap.get(region) : -1;
+		}
+
+		/**
+		 * Init persistant flowfield for leading up to a specific final  destination node, or for a single fixed path
+		 * @param {[Node]|(Dijkstra|Map)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra result cost map
+		 */
+		initPersistant(pathRef) {
+			this.edgeFieldMap = new Map();	// <Edge (of portal), [vec1, vec2]>
+			this.triangulationMap = new Map();	// <Edge (of portal?|region), FlowTriangulate>
+			this.savedRegionFlows = new Map();
+			this.pathRef = pathRef;
+		}
+
+		resetPersistant(pathRef) {
+			this.edgeFieldMap.clear();
+			this.triangulationMap.clear();
+			this.savedRegionFlows.clear();
+			this.pathRef = pathRef;
+		}
+
+		initTransitional(fromNode, node, pathRef) {
+			this.edgeFieldMap = new Map();	// <Edge (of portal), [vec1, vec2]>
+			this.triangulationMap = null;
+			this.savedRegionFlows = null;
+			this.pathRef = null;
+
+			this.calcRegionFlow(fromNode, node, pathRef);
+			return "";	// return string-based key for external LRU cache storage
+		}
+
+		hasFlowFromRegion(fromRegion, pathRef) {
+			if (!pathRef) pathRef = this.pathRef;
+			return !Array.isArray(pathRef) ? pathRef._cost.has(this.navMesh.getNodeIndex(fromRegion)) // Dijkstra assumed pre-searched (ie. source is fill "destination")
+				: pathRef.indexOf(this.navMesh.getNodeIndex(fromRegion)) >= 0; // Pathed array
+		}
+
+		/**
+		 *
+		 * @param {Number} node	Node index to start from
+		 * @param {[Node]|(Dijkstra)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra with .source as the final destination and .destination as -1
+		 * @param {BooleanD} getAll Always get all flow edges until reach end of path
+		 * @return [Number] All portal edges that comprise of the necesary regions to be able to help calculate flowfield from given node (as if starting from that node).
+		 *  If no path can be found from given node, returns null.
+		 */
+		getFlowEdges(node, pathRef, getAll) {
+			let resultArr = [];
+			let n;
+			let tryNode;
+			let tryEdge;
+			let firstEdge = null;
+
+			this._flowedFinal = false;	// for test-debugging purposes
+
+			if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
+				// iterate through all regions to find lowest costs
+				let costs = pathRef._cost;
+				if (!costs.has(node)) {
+					return null;
+				}
+				let tryCost = Infinity;
+				n = node;
+				if (node === pathRef.source) {
+					this._flowedFinal = true;
+					return resultArr;
+				}
+
+				while(n !== null) {
+					let edges = this.navMesh.graph._edges.get( n );
+					let len = edges.length;
+
+
+					tryNode = null;
+
+
+					for (let i=0; i<len; i++) {
+
+						let toN = edges[i].to;
+						if (toN === pathRef.source) {
+							tryNode = toN;
+							break;
+						}
+						if (costs.has(toN) && costs.get(toN) < tryCost) {
+							tryCost = costs.get(toN);
+							tryNode = toN;
+						}
+					}
+
+					if (tryNode !== null) {
+						tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
+						if (firstEdge !== null) {
+							resultArr.push(tryEdge);
+							n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
+
+							if (getAll) n = tryNode;
+
+						} else {
+							firstEdge = tryEdge;
+							resultArr.push(tryEdge);
+							n = tryNode;
+						}
+
+						if (tryNode === pathRef.source) {
+							this._flowedFinal = true;
+							break;
+						}
+					} else {
+						n = null;
+						tryNode = null;
+					}
+				}
+
+
+			} else {
+				var startIndex = pathRef.indexOf(node);
+				if (startIndex < 0) return null;
+				if (startIndex >= pathRef.length - 1) {
+					this._flowedFinal = true;
+					return resultArr;
+				}
+				tryNode = pathRef[++startIndex];
+				firstEdge = this.navMesh.regions[node].getEdgeTo(this.navMesh.regions[tryNode]);
+				resultArr.push(firstEdge);
+				n = tryNode;
+				while (n!==null) {
+					tryNode = pathRef[++startIndex];
+					if (!tryNode) break;
+					tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
+					resultArr.push(tryEdge);
+					n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
+
+					if (getAll) n = tryNode;
+				}
+
+				this._flowedFinal = startIndex >= pathRef.length - 1;
+			}
+			return resultArr;
+		}
+
+		collinear(portalEdge, edge) {
+			let x1 = portalEdge.prev.vertex.x;
+			let y1 = portalEdge.prev.vertex.z;
+			let x2 = portalEdge.vertex.x;
+			let y2 = portalEdge.vertex.z;
+			let tarVertex = portalEdge.prev === edge ? edge.prev.vertex : edge.vertex;
+			let x3 = tarVertex.x;
+			let y3 = tarVertex.z;
+			let collinear0 = x1 * (y2 - y3) +   x2 * (y3 - y1) +   x3 * (y1 - y2) === 0;
+			if (collinear0) console.log("Collinear detected");
+			return collinear0;
+		}
+
+		setupTriangulation(fromPortal, nextPortal, persistKey) {
+			// get conventional makeshift triangulation towards "nextPortal", pick largest opposite edge towards newPortal
+			// OR simply pick largest edge that isn't nextPortal
+
+			if (!fromPortal) {
+				let longestEdgeDist = 0;
+				let edge = nextPortal.polygon.edge;
+				do {
+					if (edge !== nextPortal && !this.collinear(nextPortal, edge)) {
+						let dist = edge.squaredLength();
+						if (dist >= longestEdgeDist) {  // (fromPortal && (!fromPortal.twin && edge.twin))
+							longestEdgeDist = dist;
+							fromPortal = edge;
+						}
+					}
+					edge = edge.next;
+				} while(edge !== nextPortal.polygon.edge);
+			}
+
+
+			let triangulation = null;
+			if (!this.triangulationMap) {
+				if (!this.localTriangulation) {
+					this.localTriangulation = new FlowTriangulate(fromPortal, nextPortal);
+				}
+				triangulation = this.localTriangulation;
+
+			} else {	// persitant
+				let triangulationMap = this.triangulationMap;
+				if (!persistKey) persistKey = fromPortal;
+				triangulation = triangulationMap.get(persistKey);
+				if (!triangulation) {
+					// setup triangulation o store in map
+					triangulation = new FlowTriangulate(fromPortal, nextPortal);
+					triangulationMap.set(persistKey, triangulation);
+				}
+			}
+			return triangulation;
+		}
+
+		/**
+		 * An implementation of:
+		 * http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.68.875&rep=rep1&type=pdf#page=2
+		 * @param {Polygon} region The starting polygon reference to calculate flowfield for
+		 * @param {Array<HalfEdge>} edgeFlows List of connecting portal edges along path up to the edge which doesn't share any vertex with the first portal edge
+		 * @param {Vector3} finalDestPt	Final destination point reference
+		 */
+		_calcTriRegionField(region, edgeFlows, finalDestPt) {
+			// link   nextPortal  vertex vectors along incident  X and B sets
+			const a = CALC_VEC;
+			const b = CALC_VEC2;
+			let edgeFieldMap = this.edgeFieldMap;
+
+			// Launch flow vector from isolated vertex corner
+
+			let edge = region.edge;	// 1st edge
+			let tryEdge = edgeFlows[0];
+			// link start vertex vector to nextPortal's midpoint
+			// get start corner flow vertex
+			if (edge !== tryEdge) {
+				edge = edge.next; // 2nd edge
+				if (edge !== tryEdge) {
+					edge = edge.next;	// 3rd edge
+				}
+			}
+
+			let isolatedV = edge.next.vertex;
+
+			a.x = isolatedV.x;
+			a.z = isolatedV.z;
+			b.x = (edge.vertex.x + edge.prev.vertex.x) * 0.5;
+			b.z = (edge.vertex.z + edge.prev.vertex.z) * 0.5;
+
+			edgeFieldMap.set(isolatedV, new FlowVertex(isolatedV).subVectors(b,a).normalize());
+
+			// Calculate destination portal flow vectors
+			this._calcDestPortalField(edgeFlows, isolatedV, null, finalDestPt);
+		}
+
+		_calcDestPortalField(edgeFlows, iVertex, iVertex2, finalDestPt) {
+			const a = CALC_VEC;
+			const b = CALC_VEC2;
+			const c = CALC_VEC3;
+			let edgeFieldMap = this.edgeFieldMap;
+
+			let edge = edgeFlows[0];
+			let isolatedV;
+
+			const HANDEDNESS = USE_HANDEDNESS;
+
+			// Calculate destination portal flow vectors
+			let leftFlowVertex;
+			let rightFlowVertex;
+			let t;
+			let i;
+			// (C1) determine left B1, B2 edge to flow vertex check
+			t = 0;
+			isolatedV = iVertex;
+			edge = edgeFlows[0];
+			a.x = edge.vertex.x - isolatedV.x;
+			a.z = edge.vertex.z - isolatedV.z;
+			// perp boundary normal inward
+			c.x = a.z * HANDEDNESS;
+			c.z = -a.x * HANDEDNESS;
+
+			tryEdge = edgeFlows[++t];
+			// find non-incident portal edge along flow to vertex
+			while (tryEdge && edge.vertex === tryEdge.vertex) {
+				tryEdge = edgeFlows[++t];
+			}
+			if (tryEdge) {
+				// flow along b2 for next non-incident portal
+				b.x = tryEdge.vertex.x - edge.vertex.x;
+				b.z = tryEdge.vertex.z - edge.vertex.z;
+				// does flow along b2 lie within boundary normal?
+				leftFlowVertex = new FlowVertex(edge.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize();
+			} else {
+				if (tryEdge) { // leads indirectly to end
+					leftFlowVertex =  new FlowVertex(edge.vertex).copy(a).normalize();
+				} else { // assumed leads directly into final destination node from starting node, finalDestPt requried
+					b.x = finalDestPt.x - edge.vertex.x;
+					b.z = finalDestPt.z - edge.vertex.z;
+					leftFlowVertex =  new FlowVertex(edge.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize().initFinal(finalDestPt);
+					// !Check if need to non-normalize for finalDestPt?
+				}
+			}
+			// (C2) check X portal edges incident to leftFlowVertex to determine if initSpinning required
+			for (i=1; i<t; i++) {
+				tryEdge = edgeFlows[i];
+				a.x = tryEdge.prev.vertex.x - tryEdge.vertex.x;
+				a.z = tryEdge.prev.vertex.z - tryEdge.vertex.z;
+				// perp forward normal along edge flow X
+				c.x = -a.z * HANDEDNESS;
+				c.z = a.x * HANDEDNESS;
+				if (leftFlowVertex.x * c.x + leftFlowVertex.z * c.z < 0) {
+					leftFlowVertex.initSpinning(tryEdge, false, edgeFlows[i+1], finalDestPt);
+					break;
+				}
+			}
+			// consider left to right non-tri triangulation diagonal case
+			// (from left entering portal vertex to right destination portal vertex along main triangulation corridoor, if any)
+			if (t === edgeFlows.length - 1) {
+				tryEdge = edgeFlows[t];
+				if (tryEdge.next.next.next !== tryEdge && tryEdge.prev.vertex !== edge.vertex) {
+					a.x = tryEdge.prev.vertex.x - edge.vertex.x;
+					a.z = tryEdge.prev.vertex.z - edge.vertex.z;
+					// perp forward normal along edge flow X
+					c.x = -a.z * HANDEDNESS;
+					c.z = a.x * HANDEDNESS;
+					if (leftFlowVertex.x * c.x + leftFlowVertex.z * c.z < 0) {
+						leftFlowVertex.initSpinning(tryEdge, false, null, finalDestPt, true);
+					}
+				}
+			}
+
+			// (C1) determine right B1, B2 edge to flow vertex check
+			t = 0;
+			edge = edgeFlows[0];
+			isolatedV = iVertex2 ? iVertex2 : iVertex;
+			a.x = edge.prev.vertex.x - isolatedV.x;
+			a.z = edge.prev.vertex.z - isolatedV.z;
+			// perp boundary normal inwards (flipped in other direction for other side)
+			c.x = -a.z * HANDEDNESS;
+			c.z = a.x * HANDEDNESS;
+
+			tryEdge = edgeFlows[++t];
+			// find non-incident portal edge along flow to vertex
+			while (tryEdge && edge.prev.vertex === tryEdge.prev.vertex) {
+				tryEdge = edgeFlows[++t];
+			}
+			if (tryEdge) {
+				// flow along b2 for next non-incident portal
+				b.x = tryEdge.prev.vertex.x - edge.prev.vertex.x;
+				b.z = tryEdge.prev.vertex.z - edge.prev.vertex.z;
+				// does flow along b2 lie within boundary normal?
+				rightFlowVertex = new FlowVertex(edge.prev.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize();
+			} else {
+				if (tryEdge) { // leads indirectly to end
+					rightFlowVertex =  new FlowVertex(edge.prev.vertex).copy(a).normalize();
+				} else { // assumed leads directly into final destination node from starting node, finalDestPt requried
+					b.x = finalDestPt.x - edge.prev.vertex.x;
+					b.z = finalDestPt.z - edge.prev.vertex.z;
+					rightFlowVertex =  new FlowVertex(edge.prev.vertex).copy(b.x * c.x + b.z * c.z >= 0 ? b : a).normalize().initFinal(finalDestPt);
+				}
+			}
+			// (C2) check X portal edges incident to rightFlowVertex to determine if initSpinning required
+			for (i=1; i<t; i++) {
+				tryEdge = edgeFlows[i];
+				a.x = tryEdge.prev.vertex.x - tryEdge.vertex.x;
+				a.z = tryEdge.prev.vertex.z - tryEdge.vertex.z;
+				// perp forward normal along edge flow X
+				c.x = -a.z * HANDEDNESS;
+				c.z = a.x * HANDEDNESS;
+				if (rightFlowVertex.x * c.x + rightFlowVertex.z * c.z < 0) {
+					rightFlowVertex.initSpinning(tryEdge, true, edgeFlows[i+1], finalDestPt);
+					break;
+				}
+			}
+
+			let result = [leftFlowVertex, rightFlowVertex];
+			edgeFieldMap.set(edge, result);
+			return result;
+		}
+
+		_calcNonTriRegionField(triangulation, edgeFlows, finalDestPt) {
+			const a = CALC_VEC;
+			const b = CALC_VEC2;
+			let edgeFieldMap = this.edgeFieldMap;
+
+			let edge = triangulation.fromPortal;	// from inside of region
+			let tryEdge = triangulation.nextPortal; // from inside of region
+
+			if (tryEdge !== edgeFlows[0]) {
+				throw new Error("Assertion failed: nextPortal of triangulation should match edgeFlows[0] assumption!");
+			}
+
+			let leftFlowVertex = null;
+			let rightFlowVertex = null;
+
+			// Determine fromPortal flow vectors
+
+			// towards nextPortal on left border, fromPortal
+			if (edge.prev.vertex !== tryEdge.vertex) {
+				a.x = edge.prev.vertex.x;
+				a.z = edge.prev.vertex.z;
+				b.x = tryEdge.vertex.x;
+				b.z = tryEdge.vertex.z;
+				leftFlowVertex = new FlowVertex(edge.prev.vertex).subVectors(b, a).normalize();
+			} // else will share same vertex on fromPortal edge
+
+			// towards nextPortal on right border, fromPortal
+			if (edge.vertex !== tryEdge.prev.vertex) {
+				a.x = edge.vertex.x;
+				a.z = edge.vertex.z;
+				b.x = tryEdge.prev.vertex.x;
+				b.z = tryEdge.prev.vertex.z;
+				rightFlowVertex = new FlowVertex(edge.vertex).subVectors(b, a).normalize();
+			} // else will share same vertex on fromPortal edge
+
+			let fromPortalVectors;
+			edgeFieldMap.set(edge, fromPortalVectors = [leftFlowVertex, rightFlowVertex]);
+
+			// Calculate destination portal flow vectors
+			let result = this._calcDestPortalField(edgeFlows, leftFlowVertex ? leftFlowVertex.vertex : rightFlowVertex.vertex,
+				(leftFlowVertex && rightFlowVertex) ? rightFlowVertex.vertex : null, finalDestPt);
+
+
+			if (!fromPortalVectors[0]) {
+				fromPortalVectors[0] = result[0];
+			}
+
+			if (!fromPortalVectors[1]) {
+				fromPortalVectors[1] = result[1];
+			}
+
+			let destResult = result;
+
+			// debugging...
+			if (!fromPortalVectors[0] || !fromPortalVectors[1]) {
+				throw new Error("Could not resolve fromPortalVectors:"+fromPortalVectors);
+			}
+			let testEdgeVectors = edgeFieldMap.get(triangulation.nextPortal);
+			if (testEdgeVectors !== result) throw new Error("Should match!");
+			if (!testEdgeVectors[0] || !testEdgeVectors[1]) throw new Error("Should have all vectors!")
+
+			let i;
+			let len;
+			let fanEdgeFlows;
+			if (triangulation.leftEdgeFlows) {
+				fanEdgeFlows = triangulation.leftEdgeFlows;
+				len = fanEdgeFlows.length;
+				for (i=1; i<len; i++) {
+					result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][1].vertex, null, finalDestPt);
+					fanEdgeFlows[i][0] = result[0];
+					if (!fanEdgeFlows[i][0] || !fanEdgeFlows[i][1]) {
+						throw new Error("Did not fill up fan edge flows...left");
+					}
+				}
+				fanEdgeFlows[0][0] = destResult[0];
+				if (!fanEdgeFlows[0][0] || !fanEdgeFlows[0][1]) {
+					throw new Error("Did not fill up fan edge flows...left000");
+				}
+			}
+
+			if (triangulation.rightEdgeFlows) {
+				fanEdgeFlows = triangulation.rightEdgeFlows;
+				len = fanEdgeFlows.length;
+				for (i=1; i<len; i++) {
+					result = this._calcDestPortalField(edgeFlows, fanEdgeFlows[i][0].vertex, null, finalDestPt);
+					fanEdgeFlows[i][1] = result[1];
+					if (!fanEdgeFlows[i][0] || !fanEdgeFlows[i][1]) {
+						throw new Error("Did not fill up fan edge flows...right");
+					}
+				}
+				fanEdgeFlows[0][1] = destResult[1];
+				if (!fanEdgeFlows[0][0] || !fanEdgeFlows[0][1]) {
+					throw new Error("Did not fill up fan edge flows...right000");
+				}
+			}
+
+		}
+
+		static calcFinalRegionField(region, finalDestPt, edgeFieldMap) {
+			const a = CALC_VEC;
+			const b = CALC_VEC2;
+
+			// calculate
+			if (!edgeFieldMap.has(region.edge.vertex)) {
+				edge = region.edge;
+				do {
+					edgeFieldMap.set(edge.vertex, new FlowVertex(edge.vertex));
+					edge = edge.next;
+				} while (edge !== region.edge)
+			}
+
+			if (!edgeFieldMap.has(finalDestPt)) {
+				edgeFieldMap.set(finalDestPt, new FlowVertex(finalDestPt));
+			}
+
+			edge = region.edge;
+			//let longestTest;
+			//let longestLength = 0;
+
+			do {
+				flowVertex = edgeFieldMap.get(edge.vertex);
+				a.x = edge.vertex.x;
+				a.z = edge.vertex.z;
+				b.x = finalDestPt.x;
+				b.z = finalDestPt.z;
+				flowVertex.subVectors(b, a).initFinal(finalDestPt);
+
+				flowVertex.normalize();
+				/*
+				longestTest = flowVertex.x * flowVertex.x + flowVertex.z * flowVertex.z;
+				if (longestTest > longestLength) {
+					longestLength = longestTest;
+				}
+				*/
+				edge = edge.next;
+			} while(edge !== region.edge)
+
+			/*
+			if (longestLength === 0) throw new Error("Exception longest length zero found!");
+
+			longestLength = 1/Math.sqrt(longestLength);
+
+			do {
+				flowVertex = edgeFieldMap.get(edge.vertex);
+				longestTest = Math.sqrt(flowVertex.x * flowVertex.x + flowVertex.z * flowVertex.z);
+				longestTest *= longestLength;
+				flowVertex.x *= longestTest;
+				flowVertex.z *= longestTest;
+				edge = edge.next;
+			} while(edge !== region.edge)
+			/*/
+		}
+
+		getFromNodeIndex(lastRegion, newRegion, pathRef) {
+			let startIndex = this.navMesh.getNodeIndex(lastRegion);
+			let endIndex = this.navMesh.getNodeIndex(newRegion);
+			if (!pathRef) pathRef = this.pathRef;
+
+			if (!Array.isArray(pathRef)) { // Dijkstra assumed pre-searched (ie. source is fill "destination")
+				// iterate through all regions to find lowest costs
+				let costs = pathRef._cost;
+				let tryCost = Infinity;
+				let n = startIndex;
+				let tryNode;
+				let tryEdge;
+				let firstEdge = null;
+
+				while(n !== null) {
+					let edges = this.navMesh.graph._edges.get( n );
+					let len = edges.length;
+
+					tryNode = null;
+
+					for (let i=0; i<len; i++) {
+
+						let toN = edges[i].to;
+						if (toN === endIndex) {
+							return n;
+						}
+						if (costs.has(toN) && costs.get(toN) < tryCost) {
+							tryCost = costs.get(toN);
+							tryNode = toN;
+						}
+					}
+
+					// early break out continuiuty
+					if (tryNode !== null) {
+						tryEdge = this.navMesh.regions[n].getEdgeTo(this.navMesh.regions[tryNode]);
+						if (firstEdge !== null) {
+							n = tryEdge.vertex === firstEdge.vertex || tryEdge.prev.vertex === firstEdge.prev.vertex ? tryNode : null;
+						} else {
+							firstEdge = tryEdge;
+							n = tryNode;
+						}
+					} else {
+						return -1;
+					}
+				}
+
+				return -1;
+
+			} else {
+				var index = pathRef.indexOf(endIndex);
+				if (index <= 0) return -1;
+				return pathRef[index - 1];
+			}
+		}
+
+		/**
+		 *
+		 * @param {Number} fromNode	Node index to originate from (if any). If unspecified, put as -1.
+		 * Using this for entering non-tri regions can influence shape of main corridoor triangulation which goes directly (fromNode) to (destination node of node). Using this for entering tri-regions isn't required at all. (use -1)
+		 * @param {Number} node	Node index to start from
+		 * @param {[Node]|(Dijkstra)} pathRef	Result from getPath(), or pre-searched to destination Dijkstra
+		 * @param {Vector3}	finalDestPt	Final destination point for flowfield.
+		 * Required if the 'node' is a final node or last-before-final node along pathRef. If unsure, just include it in.
+		 * In some cases, this has to be excluded if final destination point is not known or ever-changing per frame, in which case 'node' cannot be the final node along pathRef.
+		 * @return {Array} List of edge-flows used in the calculation
+		 */
+		calcRegionFlow(fromNode, node, pathRef, finalDestPt) {
+			if (!pathRef) {
+				pathRef = this.pathRef;
+				if (!pathRef) throw new Error("calcRegionFlow:: unable to retrieve pathRef!");
+			}
+			let flowKey = fromNode + "," + node;
+			if (this.savedRegionFlows) {
+				if (this.savedRegionFlows.has(flowKey)) return this.savedRegionFlows.get(flowKey);
+			}
+
+			let region = this.navMesh.regions[node];
+			let edgeFieldMap = this.edgeFieldMap;
+
+
+			edgeFlows = this.getFlowEdges(node, pathRef);
+
+			if (this.savedRegionFlows) {
+				this.savedRegionFlows.set(flowKey, edgeFlows);
+			}
+
+			if (edgeFlows === null) {
+				// could not find path from "node" along pathRef
+				return null;
+			}
+
+
+			if (edgeFlows.length === 0) { // asssumed "node" is last region, finalDestPt must be included in order to calculate this
+				NavMeshFlowField.calcFinalRegionField(region, finalDestPt, edgeFieldMap);
+				return edgeFlows;
+			}
+
+			let nextPortal = edgeFlows[0];
+			if (!edgeFieldMap.has(nextPortal)) {
+				edgeFieldMap.set(nextPortal, [new FlowVertex(nextPortal.vertex), new FlowVertex(nextPortal.prev.vertex)]);
+			}
+
+			let fromPortal;
+			// fromPortal not required if calculating region flow in triangle node...
+			if (region.edge.next.next.next === region.edge) fromPortal = null;
+			else fromPortal = fromNode >= 0 ? this.navMesh.regions[fromNode].getEdgeTo(region).twin : null; // determine with node/fromNode (if any);
+
+			if (fromPortal) {
+				if (!edgeFieldMap.has(fromPortal)) {
+					edgeFieldMap.set(fromPortal, [new FlowVertex(fromPortal.vertex), new FlowVertex(fromPortal.prev.vertex)]);
+				}
+			}
+
+			// remove finalDestPt reference if not applicable along edgeFlows (ie. last destination node along edgeFLow isn't final destination node)
+			if (!this._flowedFinal) finalDestPt = null;
+
+			if (region.edge.next.next.next !== region.edge) {	// >=4ngon region
+				//if (fromPortal && this.collinear(fromPortal, nextPortal)) fromPortal = null;
+				let triangulation = this.setupTriangulation(null, nextPortal, nextPortal);
+				this._calcNonTriRegionField(triangulation, edgeFlows, finalDestPt);
+				this.lastTriangulation = triangulation;
+			} else {	// triangle region
+				this._calcTriRegionField(region, edgeFlows, finalDestPt);
+			}
+
+			return edgeFlows;
+		}
+
+	}
+
+	const CALC_VEC$1 = new Vector3();
+
+	class FlowAgent {
+
+		// A navmesh flow agent to manage continuous flowfield movement across navmesh regions for a given entity
+
+		// FlowVertex(s) for current triangle
+		// a
+		// b
+		// c
+		// curRegion	(FlowTriangulate OR Polygon)
+
+		// prevEdge: {[FlowVertex, FlowVertex]}
+		// lastSavedEdge: {[FlowVertex, FlowVertex]}
+
+		constructor() {
+
+		}
+
+		/**
+		 * Update direction of agent based off a,b,c flow vertices for agent
+		 * @param {Vector3} pt 	The position of agent
+		 * @param {Vector3} dir The result direction vector
+		 */
+		calcDir(pt, dir) {
+			let a = this.a.vertex;
+			let b = this.b.vertex;
+			let c = this.c.vertex;
+			let area;
+			let sumArea = 0;
+			let dx = 0;
+			let dz = 0;
+
+			let calcVec;
+
+			/*
+			// I J K vertex vectors
+			u(q) = (Ai*vqi + Aj*vqj + Ak*vqk)
+				  / (Ai + Aj + Ak)
+			Where area A`v` corresponds along triangle edge with vertices not incident to `v`
+		   */
+
+			// area Ac
+			calcVec = this.c;
+			area =  ( ( pt.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( pt.z - a.z ) );
+			sumArea += area;
+			if (calcVec.spinning || (calcVec.splitNormal && calcVec.splitNormal.x * pt.x + calcVec.splitNormal.z * pt.z > calcVec.splitNormal.offset) ) {
+				calcVec = CALC_VEC$1;
+				calcVec.x = pt.x - c.x;
+				calcVec.z = pt.z - c.z;
+				calcVec.normalize();
+			}
+			dx += area * calcVec.x;
+			dz += area * calcVec.z;
+
+			// area Aa
+			calcVec = this.a;
+			area =  ( ( pt.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( pt.z - b.z ) );
+			sumArea += area;
+			if (calcVec.spinning || (calcVec.splitNormal && calcVec.splitNormal.x * pt.x + calcVec.splitNormal.z * pt.z > calcVec.splitNormal.offset) ) {
+				calcVec = CALC_VEC$1;
+				calcVec.x = pt.x - a.x;
+				calcVec.z = pt.z - a.z;
+				calcVec.normalize();
+			}
+			dx += area * calcVec.x;
+			dz += area * calcVec.z;
+
+			// area Ab
+			calcVec = this.b;
+			area =  ( ( pt.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( pt.z - c.z ) );
+			sumArea += area;
+			if (calcVec.spinning || (calcVec.splitNormal && calcVec.splitNormal.x * pt.x + calcVec.splitNormal.z * pt.z > calcVec.splitNormal.offset) ) {
+				calcVec = CALC_VEC$1;
+				calcVec.x = pt.x - b.x;
+				calcVec.z = pt.z - b.z;
+				calcVec.normalize();
+			}
+			dx += area * calcVec.x;
+			dz += area * calcVec.z;
+
+			dir.x = dx / sumArea;
+			// dir.y = 0;
+			dir.z = dz / sumArea;
+			// dir.normalize();
+		}
+
+		reset(clearCurRegion) {
+			this.prevEdge = null;
+			this.lastSavedEdge = null;
+			this.lane = null;
+			if (clearCurRegion) {
+				this.curRegion = null;
+			}
+		}
+
+		withinFlowPlane(pt, epsilon = 1e-3) {
+			// distance to plane test
+			let curRegion = this.curRegion.fromPortal ? this.curRegion.fromPortal.polygon : this.curRegion;
+			return Math.abs( curRegion.distanceToPoint( pt ) ) <= epsilon;
+		}
+
+		static pointWithinTriangleBounds(pt, a, b, c) {
+			let px = pt.x;
+			let py = pt.z;
+			// convex test
+			return (c.x - px) * (a.z - py) - (a.x - px) * (c.z - py) >= 0 &&
+				   (a.x - px) * (b.z - py) - (b.x - px) * (a.z - py) >= 0 &&
+				   (b.x - px) * (c.z - py) - (c.x - px) * (b.z - py) >= 0;
+		}
+
+		currentTriArea() {
+			let a = this.a.vertex;
+			let b = this.b.vertex;
+			let c = this.c.vertex;
+			return ( ( c.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( c.z - a.z ) );
+		}
+
+		withinCurrentTriangleBounds(pt) {
+			let px = pt.x;
+			let py = pt.z;
+			let a = this.a.vertex;
+			let b = this.b.vertex;
+			let c = this.c.vertex;
+			// convex test
+			return (c.x - px) * (a.z - py) - (a.x - px) * (c.z - py) >= 0 &&
+				   (a.x - px) * (b.z - py) - (b.x - px) * (a.z - py) >= 0 &&
+				   (b.x - px) * (c.z - py) - (c.x - px) * (b.z - py) >= 0;
+		}
+
+		getCurRegion() {
+			return this.curRegion && this.curRegion.fromPortal ? this.curRegion.fromPortal.polygon : this.curRegion;
+		}
+
+		static pointWithinRegion(pt, curRegion) {
+			let edge = curRegion.edge;
+			// convex test
+			do {
+				const v1 = edge.tail();
+				const v2 = edge.head();
+
+				// MathUtils.area( v1, v2, pt ) < 0
+				if ( ( ( pt.x - v1.x ) * ( v2.z - v1.z ) ) - ( ( v2.x - v1.x ) * ( pt.z - v1.z ) ) < 0  ) {
+					return false;
+				}
+				edge = edge.next;
+
+			} while ( edge !== curRegion.edge );
+		}
+
+		withinCurrentRegionBounds(pt) {
+			let curRegion = this.curRegion.fromPortal ? this.curRegion.fromPortal.polygon : this.curRegion;
+			let edge = curRegion.edge;
+			// convex test
+			do {
+				const v1 = edge.tail();
+				const v2 = edge.head();
+
+				// MathUtils.area( v1, v2, pt ) < 0
+				if ( ( ( pt.x - v1.x ) * ( v2.z - v1.z ) ) - ( ( v2.x - v1.x ) * ( pt.z - v1.z ) ) < 0  ) {
+					return false;
+				}
+				edge = edge.next;
+
+			} while ( edge !== curRegion.edge );
+		}
+	}
+
+	const desiredVelocity$3 = new Vector3();
+
+	const closestPoint$2=  new Vector3();
+
+	const pointOnLineSegment$1 = new Vector3();
+	const lineSegment$2 = new LineSegment();
+	function clampPointWithinRegion(region, point) {
+		let edge = region.edge;
+		let minDistance = Infinity;
+
+		// consider todo: alternate faster implementation with edge perp dot product checks?
+		do {
+			lineSegment$2.set( edge.prev.vertex, edge.vertex );
+			const t = lineSegment$2.closestPointToPointParameter( point );
+			lineSegment$2.at( t, pointOnLineSegment$1 );
+			const distance = pointOnLineSegment$1.squaredDistanceTo( point );
+			if ( distance < minDistance ) {
+				minDistance = distance;
+				//closestBorderEdge.edge = edge;
+				//closestBorderEdge.
+				closestPoint$2.copy( pointOnLineSegment$1 );
+			}
+			edge = edge.next;
+		} while (edge !== region.edge);
+
+		return closestPoint$2;
+	}
+
+	/**
+	* Flowfield behavior through a navmesh
 	*
 	* @author Glidias
 	* @augments SteeringBehavior
 	*/
 
-	class NavMeshFlowFieldBehaviour extends SteeringBehavior {
+	class NavMeshFlowFieldBehavior extends SteeringBehavior {
 
 		/**
 		 *
-		 * @param {NavMesh} navmesh
-		 * @param {AStar|BFS|DFS|Dijkstra} pathRef
+		 * @param {NavMeshFlowField} flowField For now, only accepts a persistant NavMeshFLowField. (todo: non-persitant flowfield case)
 		 */
-		constructor( navmesh, pathRef ) {
+		constructor(flowField, finalDestPt, pathRef, epsilon = 1e-3, arrivalDist = 0, arrivalCallback=null) {
+			super();
+			this.flowField = flowField;
+			this.finalDestPt = finalDestPt;
+			this.epsilon = epsilon;
+			this.pathRef = pathRef;
+			this.arrivalSqDist = arrivalDist === 0 ? this.epsilon : arrivalDist;
+			this.arrivalSqDist *= this.arrivalSqDist;
+			this.arrivalCallback = arrivalCallback;
+		}
 
+		onAdded(vehicle) {
+			vehicle.agent = new FlowAgent();
+		}
+
+		onRemoved(vehicle) {
+			vehicle.agent = null;
+		}
+
+		calculate( vehicle, force /*, delta */ ) {
+			let agent = vehicle.agent;
+
+			desiredVelocity$3.x = 0;
+			desiredVelocity$3.z = 0;
+			let refPosition = vehicle.position;
+
+			if (agent.lane === false || agent.lane === true) {	// arrival routine
+				if (vehicle.position.squaredDistanceTo(this.finalDestPt) < this.arrivalSqDist) {
+					if (agent.lane === false) {
+						if (this.arrivalCallback !== null) this.arrivalCallback(vehicle);
+						agent.lane = true;
+					}
+				} else {
+					agent.calcDir(refPosition, desiredVelocity$3);
+				}
+				desiredVelocity$3.x *= vehicle.maxSpeed;
+				desiredVelocity$3.z *= vehicle.maxSpeed;
+				force.x = desiredVelocity$3.x - vehicle.velocity.x;
+				force.z = desiredVelocity$3.z - vehicle.velocity.z;
+				return force;
+			}
+
+			if (!agent.curRegion) {
+				this.setCurRegion(vehicle);
+				if (!agent.curRegion) {
+					force.x = -vehicle.velocity.x;
+					force.z = -vehicle.velocity.z;
+					return force;
+				}
+			} else {
+				let region;
+				if (agent.lane === null) {
+					region = agent.getCurRegion();
+					if (this.flowField.hasFlowFromRegion(region)) this.setCurRegion(vehicle, region);
+					else {
+						force.x = -vehicle.velocity.x;
+						force.z = -vehicle.velocity.z;
+						return force;
+					}
+				}
+				if (!agent.withinCurrentTriangleBounds(refPosition)) {
+					region = agent.getCurRegion();
+					if ((region.edge.next.next.next !== region.edge && agent.withinCurrentRegionBounds(vehicle.position)) && agent.withinFlowPlane(vehicle.position, this.epsilon) ) {
+						// update triangle from triangulation
+						agent.curRegion.updateLane(refPosition, agent);
+						//console.log("New lane:"+agent.lane);
+						agent.curRegion.updateFlowTriLaned(refPosition, agent, this.flowField.edgeFieldMap);
+					} else { // doesn't belong to current region
+						let lastRegion = agent.curRegion;
+
+
+						if (this.setCurRegion(vehicle) === false) {
+							// ARRIVED
+							//vehicle.velocity.x = 0;
+							//vehicle.velocity.y = 0;
+
+							agent.lane = false;
+							agent.calcDir(refPosition, desiredVelocity$3);
+							desiredVelocity$3.x *= vehicle.maxSpeed;
+							desiredVelocity$3.z *= vehicle.maxSpeed;
+
+							force.x = desiredVelocity$3.x - vehicle.velocity.x;
+							force.z = desiredVelocity$3.z - vehicle.velocity.z;
+
+							return force;
+						}
+
+						if (!agent.curRegion) {
+							refPosition = clampPointWithinRegion(region, refPosition);
+							agent.curRegion = lastRegion;
+							if (region.edge.next.next.next !== region.edge && lastRegion !== region) { // 2nd && case for FlowTriangulate
+								lastRegion.updateLane(refPosition, agent);
+								//console.log("New lane222:"+agent.lane);
+								lastRegion.updateFlowTriLaned(refPosition, agent, this.flowField.edgeFieldMap);
+							}
+						}
+					}
+				}
+			}
+
+			agent.calcDir(refPosition, desiredVelocity$3);
+
+			/*
+			if (isNaN(desiredVelocity.x)) {
+				console.log([agent.a, agent.b, agent.c, agent.curRegion])
+				throw new Error("NaN desired velocity calculated!"+agent.currentTriArea() + " :: "+agent.lane);
+			}
+			*/
+
+			// desiredVelocity.multiplyScalar( vehicle.maxSpeed );
+			desiredVelocity$3.x *= vehicle.maxSpeed;
+			desiredVelocity$3.z *= vehicle.maxSpeed;
+
+			// The steering force returned by this method is the force required,
+			// which when added to the agent’s current velocity vector gives the desired velocity.
+			// To achieve this you simply subtract the agent’s current velocity from the desired velocity.
+
+			//return force.subVectors( desiredVelocity, vehicle.velocity );
+			force.x = desiredVelocity$3.x - vehicle.velocity.x;
+			force.z = desiredVelocity$3.z - vehicle.velocity.z;
+			//force.x = desiredVelocity.x;
+			//force.z = desiredVelocity.z;
+			return force;
+		}
+
+		/**
+		 * Set current region based on vehicle's position to vehicle's agent
+		 * @param {Vehicle} vehicle The vehicle
+		 * @param {Polygon} forceSetRegion (Optional) A region to force a vehicle to be assosiated with, else attempt will search a suitable region on navmesh.
+		 *  Setting this parameter to a falsey value that isn't undefined (eg. null) will perform additional within bounds refPosition clamp check.
+		 *  WARNING: It is assumed this `forceSetRegion` will be able to reach final destination node
+		 * @return {Null|Number|Boolean}
+		 * Null if no region could be picked.
+		 * True if same region detected from last saved region
+		 * False if no flow path could be found due to reaching final destination.
+		 * Zero `0` if no flow path  ould be found at all to reach final destination.
+		 * One `1` if no flow path could be found (not yet reached final destination).
+		 */
+		setCurRegion(vehicle, forceSetRegion) {
+			let agent = vehicle.agent;
+			let flowField = this.flowField;
+			let lastRegion = !forceSetRegion ? agent.getCurRegion() : null;
+			let regionPicked = !forceSetRegion ? flowField.navMesh.getRegionForPoint(vehicle.position, this.epsilon) : forceSetRegion;
+			if (!regionPicked) {
+				agent.curRegion = null;
+				return null;
+			}
+
+			let refPosition = vehicle.position;
+
+			// ensure refPosition clamped is within forceSetRegion
+			if (forceSetRegion !== undefined && !FlowAgent.pointWithinRegion(refPosition, regionPicked)) {
+				refPosition = clampPointWithinRegion(regionPicked, refPosition);
+			}
+
+			if (regionPicked === lastRegion) {
+				if (agent.curRegion !== regionPicked) {
+					agent.curRegion.updateLane(refPosition, agent);
+					agent.curRegion.updateFlowTriLaned(refPosition, agent, flowField.edgeFieldMap);
+				}
+				return true;
+			}
+
+			let lastNodeIndex = lastRegion ? flowField.getFromNodeIndex(lastRegion, regionPicked, this.pathRef) : -1;
+			//console.log(lastNodeIndex + ">>>");
+
+			let edgeFlows = flowField.calcRegionFlow(lastNodeIndex, flowField.navMesh.getNodeIndex(regionPicked), this.pathRef, this.finalDestPt);
+			if (!edgeFlows) {
+				agent.curRegion = null;
+				console.log("setCurRegion:: Could not find flow path from current position");
+				return 0;
+			}
+
+			if (regionPicked.edge.next.next.next === regionPicked.edge) { // triangle
+				agent.curRegion = regionPicked;
+				if (edgeFlows.length ===0) {
+					//console.log("ARRIVED at last triangle region");
+					FlowTriangulate.updateNgonFinalTri(regionPicked, refPosition, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
+					return false;
+				}
+				agent.lane = 0;
+				FlowTriangulate.updateTriRegion(agent.curRegion, agent, flowField.edgeFieldMap);
+			} else { // non-tri zone
+				if (edgeFlows.length === 0) {
+					//console.log("ARRIVED at last non-tri region");
+					agent.curRegion = regionPicked;
+					FlowTriangulate.updateNgonFinalTri(regionPicked, refPosition, agent, flowField.edgeFieldMap, this.finalDestPt, this.epsilon);
+					return false;
+				}
+
+				/*
+				(lastNodeIndex >= 0 ?
+						regionPicked.getEdgeTo(flowField.navMesh.regions[lastNodeIndex]) :
+						flowField.triangulationMap.get(regionPicked)
+				*/
+				agent.curRegion = flowField.triangulationMap.get(edgeFlows[0]);
+
+
+				if (!agent.curRegion) {
+					agent.curRegion = flowField.setupTriangulation(null, edgeFlows[0], edgeFlows[0]);
+				}
+				agent.curRegion.updateLane(refPosition, agent);
+				agent.curRegion.updateFlowTriLaned(refPosition, agent, flowField.edgeFieldMap);
+			}
+			return 1;
 		}
 	}
 
@@ -20649,6 +22125,8 @@
 	exports.EvadeBehavior = EvadeBehavior;
 	exports.EventDispatcher = EventDispatcher;
 	exports.FleeBehavior = FleeBehavior;
+	exports.FlowAgent = FlowAgent;
+	exports.FlowVertex = FlowVertex;
 	exports.FollowPathBehavior = FollowPathBehavior;
 	exports.FuzzyAND = FuzzyAND;
 	exports.FuzzyCompositeTerm = FuzzyCompositeTerm;
@@ -20685,7 +22163,8 @@
 	exports.MovingEntity = MovingEntity;
 	exports.NavEdge = NavEdge;
 	exports.NavMesh = NavMesh;
-	exports.NavMeshFlowFieldBehaviour = NavMeshFlowFieldBehaviour;
+	exports.NavMeshFlowField = NavMeshFlowField;
+	exports.NavMeshFlowFieldBehavior = NavMeshFlowFieldBehavior;
 	exports.NavMeshLoader = NavMeshLoader;
 	exports.NavNode = NavNode;
 	exports.Node = Node;
