@@ -528,6 +528,7 @@ class NavMesh {
 				const entry = edgeList[ i ];
 
 				let candidate = entry.edge;
+				if (candidate.twin && this._mergePossible(candidate) === false) continue;
 
 				// cache current references for possible restore
 
@@ -604,6 +605,26 @@ class NavMesh {
 			} while ( edge !== region.edge );
 
 		}
+
+	}
+
+	_mergePossible( edge ) {
+
+		const polygon = edge.polygon;
+		let currentEdge = edge.twin;
+
+		do {
+
+			// we can only use an edge to merge two regions if the adjacent region does not have any edges
+			// apart from edge.twin already connected to the region.
+
+			if ( currentEdge !== edge.twin && currentEdge.twin && currentEdge.twin.polygon === polygon ) return false;
+
+			currentEdge = currentEdge.next;
+
+		} while ( edge.twin !== currentEdge );
+
+		return true;
 
 	}
 
