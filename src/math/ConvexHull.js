@@ -704,6 +704,7 @@ class ConvexHull extends Polyhedron {
 				const ccw = dot >= 0;
 
 				// infinite loop guard for now...
+				/*
 				let edge = polygon.edge;
 				let count = 0;
 				let safe = true;
@@ -718,8 +719,10 @@ class ConvexHull extends Polyhedron {
 					edge = edge.next;
 
 				} while ( edge !== polygon.edge );
+				*/
 
-				if (safe && polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
+				// safe &&
+				if (polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
 
 					// correct polygon reference of all edges
 
