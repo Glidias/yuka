@@ -678,6 +678,8 @@ class ConvexHull extends Polyhedron {
 
 			const entry = edges[ i ];
 
+			if ( this._mergePossible( entry ) === false ) continue;
+
 			let candidate = entry;
 
 			// cache current references for possible restore
@@ -748,6 +750,26 @@ class ConvexHull extends Polyhedron {
 		this.computeUniqueVertices();
 
 		return this;
+
+	}
+
+	_mergePossible( edge ) {
+
+		const polygon = edge.polygon;
+		let currentEdge = edge.twin;
+
+		do {
+
+			// we can only use an edge to merge two regions if the adjacent region does not have any edges
+			// apart from edge.twin already connected to the region.
+
+			if ( currentEdge !== edge.twin && currentEdge.twin.polygon === polygon ) return false;
+
+			currentEdge = currentEdge.next;
+
+		} while ( edge.twin !== currentEdge );
+
+		return true;
 
 	}
 
