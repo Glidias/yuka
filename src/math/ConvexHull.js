@@ -47,7 +47,6 @@ class ConvexHull extends Polyhedron {
 		// this array holds the new faces generated in a single iteration of the algorithm
 
 		this._newFaces = new Array();
-
 	}
 
 	/**
@@ -659,80 +658,100 @@ class ConvexHull extends Polyhedron {
 		const faces = this.faces;
 		const edges = this.edges;
 
-		const cache = {
-			leftPrev: null,
-			leftNext: null,
-			rightPrev: null,
-			rightNext: null
-		};
-
 		// gather unique edges and temporarily sort them
-
 		this.computeUniqueEdges();
 
-		edges.sort( ( a, b ) => b.length() - a.length() );
 
-		// process edges from longest to shortest
+		if (!this.skipMergeFaces) {
 
-		for ( let i = 0, l = edges.length; i < l; i ++ ) {
+			const cache = {
+				leftPrev: null,
+				leftNext: null,
+				rightPrev: null,
+				rightNext: null
+			};
 
-			const entry = edges[ i ];
+			edges.sort( ( a, b ) => b.length() - a.length() );
 
-			if ( this._mergePossible( entry ) === false ) continue;
+			// process edges from longest to shortest
 
-			let candidate = entry;
+			for ( let i = 0, l = edges.length; i < l; i ++ ) {
 
-			// cache current references for possible restore
+				const entry = edges[ i ];
 
-			cache.prev = candidate.prev;
-			cache.next = candidate.next;
-			cache.prevTwin = candidate.twin.prev;
-			cache.nextTwin = candidate.twin.next;
+				if (!this.skipMergePossible && this._mergePossible( entry ) === false ) continue;
 
-			// temporarily change the first polygon in order to represent both polygons
+				let candidate = entry;
 
-			candidate.prev.next = candidate.twin.next;
-			candidate.next.prev = candidate.twin.prev;
-			candidate.twin.prev.next = candidate.next;
-			candidate.twin.next.prev = candidate.prev;
+				// cache current references for possible restore
 
-			const polygon = candidate.polygon;
-			polygon.edge = candidate.prev;
+				cache.prev = candidate.prev;
+				cache.next = candidate.next;
+				cache.prevTwin = candidate.twin.prev;
+				cache.nextTwin = candidate.twin.next;
 
-			const ccw = polygon.plane.normal.dot( up ) >= 0;
+				// temporarily change the first polygon in order to represent both polygons
 
-			if ( polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
+				candidate.prev.next = candidate.twin.next;
+				candidate.next.prev = candidate.twin.prev;
+				candidate.twin.prev.next = candidate.next;
+				candidate.twin.next.prev = candidate.prev;
 
-				// correct polygon reference of all edges
+				const polygon = candidate.polygon;
+				polygon.edge = candidate.prev;
 
+				const dot =  polygon.plane.normal.dot( up );
+				const ccw = dot >= 0;
+
+				// infinite loop guard for now...
 				let edge = polygon.edge;
-
+				let count = 0;
+				let safe = true;
 				do {
-
-					edge.polygon = polygon;
-
+					if (count >= 32) {
+						safe = false;
+						console.warn("A possible infinite loop was detected. DOT:" + dot + " id?: "+this.id);
+						if (this.hangCallback) this.hangCallback(this);
+						break;
+					}
+					count++;
 					edge = edge.next;
 
 				} while ( edge !== polygon.edge );
 
-				// delete obsolete polygon
+				if (safe && polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
 
-				const index = faces.indexOf( entry.twin.polygon );
-				faces.splice( index, 1 );
+					// correct polygon reference of all edges
 
-			} else {
+					let edge = polygon.edge;
 
-				// restore
+					do {
 
-				cache.prev.next = candidate;
-				cache.next.prev = candidate;
-				cache.prevTwin.next = candidate.twin;
-				cache.nextTwin.prev = candidate.twin;
+						edge.polygon = polygon;
 
-				polygon.edge = candidate;
+						edge = edge.next;
+
+					} while ( edge !== polygon.edge );
+
+					// delete obsolete polygon
+
+					const index = faces.indexOf( entry.twin.polygon );
+					faces.splice( index, 1 );
+
+				} else {
+
+					// restore
+
+					cache.prev.next = candidate;
+					cache.next.prev = candidate;
+					cache.prevTwin.next = candidate.twin;
+					cache.nextTwin.prev = candidate.twin;
+
+					polygon.edge = candidate;
+
+				}
 
 			}
-
 		}
 
 		// recompute centroid of faces

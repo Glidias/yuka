@@ -15701,7 +15701,6 @@
 			// this array holds the new faces generated in a single iteration of the algorithm
 
 			this._newFaces = new Array();
-
 		}
 
 		/**
@@ -16313,78 +16312,100 @@
 			const faces = this.faces;
 			const edges = this.edges;
 
-			const cache = {
-				leftPrev: null,
-				leftNext: null,
-				rightPrev: null,
-				rightNext: null
-			};
-
 			// gather unique edges and temporarily sort them
-
 			this.computeUniqueEdges();
 
-			edges.sort( ( a, b ) => b.length() - a.length() );
 
-			// process edges from longest to shortest
+			if (!this.skipMergeFaces) {
 
-			for ( let i = 0, l = edges.length; i < l; i ++ ) {
+				const cache = {
+					leftPrev: null,
+					leftNext: null,
+					rightPrev: null,
+					rightNext: null
+				};
 
-				const entry = edges[ i ];
+				edges.sort( ( a, b ) => b.length() - a.length() );
 
-				let candidate = entry;
+				// process edges from longest to shortest
 
-				// cache current references for possible restore
+				for ( let i = 0, l = edges.length; i < l; i ++ ) {
 
-				cache.prev = candidate.prev;
-				cache.next = candidate.next;
-				cache.prevTwin = candidate.twin.prev;
-				cache.nextTwin = candidate.twin.next;
+					const entry = edges[ i ];
 
-				// temporarily change the first polygon in order to represent both polygons
+					if (!this.skipMergePossible && this._mergePossible( entry ) === false ) continue;
 
-				candidate.prev.next = candidate.twin.next;
-				candidate.next.prev = candidate.twin.prev;
-				candidate.twin.prev.next = candidate.next;
-				candidate.twin.next.prev = candidate.prev;
+					let candidate = entry;
 
-				const polygon = candidate.polygon;
-				polygon.edge = candidate.prev;
+					// cache current references for possible restore
 
-				const ccw = polygon.plane.normal.dot( up ) >= 0;
+					cache.prev = candidate.prev;
+					cache.next = candidate.next;
+					cache.prevTwin = candidate.twin.prev;
+					cache.nextTwin = candidate.twin.next;
 
-				if ( polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
+					// temporarily change the first polygon in order to represent both polygons
 
-					// correct polygon reference of all edges
+					candidate.prev.next = candidate.twin.next;
+					candidate.next.prev = candidate.twin.prev;
+					candidate.twin.prev.next = candidate.next;
+					candidate.twin.next.prev = candidate.prev;
 
+					const polygon = candidate.polygon;
+					polygon.edge = candidate.prev;
+
+					const dot =  polygon.plane.normal.dot( up );
+					const ccw = dot >= 0;
+
+					// infinite loop guard for now...
 					let edge = polygon.edge;
-
+					let count = 0;
+					let safe = true;
 					do {
-
-						edge.polygon = polygon;
-
+						if (count >= 32) {
+							safe = false;
+							console.warn("A possible infinite loop was detected. DOT:" + dot + " id?: "+this.id);
+							if (this.hangCallback) this.hangCallback(this);
+							break;
+						}
+						count++;
 						edge = edge.next;
 
 					} while ( edge !== polygon.edge );
 
-					// delete obsolete polygon
+					if (safe && polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
 
-					const index = faces.indexOf( entry.twin.polygon );
-					faces.splice( index, 1 );
+						// correct polygon reference of all edges
 
-				} else {
+						let edge = polygon.edge;
 
-					// restore
+						do {
 
-					cache.prev.next = candidate;
-					cache.next.prev = candidate;
-					cache.prevTwin.next = candidate.twin;
-					cache.nextTwin.prev = candidate.twin;
+							edge.polygon = polygon;
 
-					polygon.edge = candidate;
+							edge = edge.next;
+
+						} while ( edge !== polygon.edge );
+
+						// delete obsolete polygon
+
+						const index = faces.indexOf( entry.twin.polygon );
+						faces.splice( index, 1 );
+
+					} else {
+
+						// restore
+
+						cache.prev.next = candidate;
+						cache.next.prev = candidate;
+						cache.prevTwin.next = candidate.twin;
+						cache.nextTwin.prev = candidate.twin;
+
+						polygon.edge = candidate;
+
+					}
 
 				}
-
 			}
 
 			// recompute centroid of faces
@@ -16402,6 +16423,26 @@
 			this.computeUniqueVertices();
 
 			return this;
+
+		}
+
+		_mergePossible( edge ) {
+
+			const polygon = edge.polygon;
+			let currentEdge = edge.twin;
+
+			do {
+
+				// we can only use an edge to merge two regions if the adjacent region does not have any edges
+				// apart from edge.twin already connected to the region.
+
+				if ( currentEdge !== edge.twin && currentEdge.twin.polygon === polygon ) return false;
+
+				currentEdge = currentEdge.next;
+
+			} while ( edge.twin !== currentEdge );
+
+			return true;
 
 		}
 
@@ -18454,72 +18495,72 @@
 
 			const regions = this.regions;
 
-			const cache = {
-				leftPrev: null,
-				leftNext: null,
-				rightPrev: null,
-				rightNext: null
-			};
+			if (this.attemptMergePolies) {
 
-			// process edges from longest to shortest
+				const cache = {
+					leftPrev: null,
+					leftNext: null,
+					rightPrev: null,
+					rightNext: null
+				};
 
-			for ( let i = 0, l = edgeList.length; i < l; i ++ ) {
+				// process edges from longest to shortest
 
-				const entry = edgeList[ i ];
+				for ( let i = 0, l = edgeList.length; i < l; i ++ ) {
 
-				let candidate = entry.edge;
+					const entry = edgeList[ i ];
 
-				// cache current references for possible restore
+					let candidate = entry.edge;
 
-				cache.prev = candidate.prev;
-				cache.next = candidate.next;
-				cache.prevTwin = candidate.twin.prev;
-				cache.nextTwin = candidate.twin.next;
+					// cache current references for possible restore
 
-				// temporarily change the first polygon in order to represent both polygons
+					cache.prev = candidate.prev;
+					cache.next = candidate.next;
+					cache.prevTwin = candidate.twin.prev;
+					cache.nextTwin = candidate.twin.next;
 
-				candidate.prev.next = candidate.twin.next;
-				candidate.next.prev = candidate.twin.prev;
-				candidate.twin.prev.next = candidate.next;
-				candidate.twin.next.prev = candidate.prev;
+					// temporarily change the first polygon in order to represent both polygons
 
-				const polygon = candidate.polygon;
-				polygon.edge = candidate.prev;
+					candidate.prev.next = candidate.twin.next;
+					candidate.next.prev = candidate.twin.prev;
+					candidate.twin.prev.next = candidate.next;
+					candidate.twin.next.prev = candidate.prev;
 
-				let attemptMergePolies = this.attemptMergePolies;
+					const polygon = candidate.polygon;
+					polygon.edge = candidate.prev;
 
-				if ( attemptMergePolies && polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
+					if ( polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
 
-					// correct polygon reference of all edges
+						// correct polygon reference of all edges
 
-					let edge = polygon.edge;
+						let edge = polygon.edge;
 
-					do {
+						do {
 
-						edge.polygon = polygon;
+							edge.polygon = polygon;
 
-						edge = edge.next;
+							edge = edge.next;
 
-					} while ( edge !== polygon.edge );
+						} while ( edge !== polygon.edge );
 
-					// delete obsolete polygon
+						// delete obsolete polygon
 
-					const index = regions.indexOf( entry.edge.twin.polygon );
-					regions.splice( index, 1 );
+						const index = regions.indexOf( entry.edge.twin.polygon );
+						regions.splice( index, 1 );
 
-				} else {
+					} else {
 
-					// restore
+						// restore
 
-					cache.prev.next = candidate;
-					cache.next.prev = candidate;
-					cache.prevTwin.next = candidate.twin;
-					cache.nextTwin.prev = candidate.twin;
+						cache.prev.next = candidate;
+						cache.next.prev = candidate;
+						cache.prevTwin.next = candidate.twin;
+						cache.nextTwin.prev = candidate.twin;
 
-					polygon.edge = candidate;
+						polygon.edge = candidate;
 
+					}
 				}
-
 			}
 
 			// after the merging of convex regions, do some post-processing

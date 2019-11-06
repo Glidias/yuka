@@ -512,72 +512,72 @@ class NavMesh {
 
 		const regions = this.regions;
 
-		const cache = {
-			leftPrev: null,
-			leftNext: null,
-			rightPrev: null,
-			rightNext: null
-		};
+		if (this.attemptMergePolies) {
 
-		// process edges from longest to shortest
+			const cache = {
+				leftPrev: null,
+				leftNext: null,
+				rightPrev: null,
+				rightNext: null
+			};
 
-		for ( let i = 0, l = edgeList.length; i < l; i ++ ) {
+			// process edges from longest to shortest
 
-			const entry = edgeList[ i ];
+			for ( let i = 0, l = edgeList.length; i < l; i ++ ) {
 
-			let candidate = entry.edge;
+				const entry = edgeList[ i ];
 
-			// cache current references for possible restore
+				let candidate = entry.edge;
 
-			cache.prev = candidate.prev;
-			cache.next = candidate.next;
-			cache.prevTwin = candidate.twin.prev;
-			cache.nextTwin = candidate.twin.next;
+				// cache current references for possible restore
 
-			// temporarily change the first polygon in order to represent both polygons
+				cache.prev = candidate.prev;
+				cache.next = candidate.next;
+				cache.prevTwin = candidate.twin.prev;
+				cache.nextTwin = candidate.twin.next;
 
-			candidate.prev.next = candidate.twin.next;
-			candidate.next.prev = candidate.twin.prev;
-			candidate.twin.prev.next = candidate.next;
-			candidate.twin.next.prev = candidate.prev;
+				// temporarily change the first polygon in order to represent both polygons
 
-			const polygon = candidate.polygon;
-			polygon.edge = candidate.prev;
+				candidate.prev.next = candidate.twin.next;
+				candidate.next.prev = candidate.twin.prev;
+				candidate.twin.prev.next = candidate.next;
+				candidate.twin.next.prev = candidate.prev;
 
-			let attemptMergePolies = this.attemptMergePolies;
+				const polygon = candidate.polygon;
+				polygon.edge = candidate.prev;
 
-			if ( attemptMergePolies && polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
+				if ( polygon.convex() === true && polygon.coplanar( this.epsilonCoplanarTest ) === true ) {
 
-				// correct polygon reference of all edges
+					// correct polygon reference of all edges
 
-				let edge = polygon.edge;
+					let edge = polygon.edge;
 
-				do {
+					do {
 
-					edge.polygon = polygon;
+						edge.polygon = polygon;
 
-					edge = edge.next;
+						edge = edge.next;
 
-				} while ( edge !== polygon.edge );
+					} while ( edge !== polygon.edge );
 
-				// delete obsolete polygon
+					// delete obsolete polygon
 
-				const index = regions.indexOf( entry.edge.twin.polygon );
-				regions.splice( index, 1 );
+					const index = regions.indexOf( entry.edge.twin.polygon );
+					regions.splice( index, 1 );
 
-			} else {
+				} else {
 
-				// restore
+					// restore
 
-				cache.prev.next = candidate;
-				cache.next.prev = candidate;
-				cache.prevTwin.next = candidate.twin;
-				cache.nextTwin.prev = candidate.twin;
+					cache.prev.next = candidate;
+					cache.next.prev = candidate;
+					cache.prevTwin.next = candidate.twin;
+					cache.nextTwin.prev = candidate.twin;
 
-				polygon.edge = candidate;
+					polygon.edge = candidate;
 
+				}
 			}
-
 		}
 
 		// after the merging of convex regions, do some post-processing
