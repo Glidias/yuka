@@ -658,11 +658,10 @@ class ConvexHull extends Polyhedron {
 		const faces = this.faces;
 		const edges = this.edges;
 
-		// gather unique edges and temporarily sort them
-		this.computeUniqueEdges();
-
-
 		if (!this.skipMergeFaces) {
+
+			// gather unique edges and temporarily sort them
+			this.computeUniqueEdges();
 
 			const cache = {
 				leftPrev: null,
@@ -755,18 +754,17 @@ class ConvexHull extends Polyhedron {
 				}
 
 			}
-		}
 
-		// recompute centroid of faces
+			// recompute centroid of faces
 
-		for ( let i = 0, l = faces.length; i < l; i ++ ) {
+			for ( let i = 0, l = faces.length; i < l; i ++ ) {
 
-			faces[ i ].computeCentroid();
+				faces[ i ].computeCentroid();
 
+			}
 		}
 
 		// compute centroid of convex hull and the final edge and vertex list
-
 		this.computeCentroid();
 		this.computeUniqueEdges();
 		this.computeUniqueVertices();
