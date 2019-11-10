@@ -421,7 +421,7 @@ class FlowTriangulate {
 		}
 
 		// debug
-		if (lane != 0) console.log("Lane != 0 case detected:"+lane +" / "+ (lane < 0 ? this.leftEdgeDirs : this.rightEdgeDirs ).length);
+		//if (lane != 0) console.log("Lane != 0 case detected:"+lane +" / "+ (lane < 0 ? this.leftEdgeDirs : this.rightEdgeDirs ).length);
 
 		result.lane = lane;
 	}
