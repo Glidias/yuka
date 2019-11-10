@@ -389,7 +389,7 @@ class FlowTriangulate {
 				if (!result.lastSavedEdge) result.lastSavedEdge = result.prevEdge;
 				if (result.prevEdge === null) {
 					result.lastSavedEdge = null;
-					console.warn("Out of bounds detected for position..left");
+					//console.warn("Out of bounds detected for position..left");
 				}
 			}
 
@@ -413,7 +413,7 @@ class FlowTriangulate {
 				if (!result.lastSavedEdge) result.lastSavedEdge = result.prevEdge;
 				if (result.prevEdge === null) {
 					result.lastSavedEdge = null;
-					console.warn("Out of bounds detected for position..right");
+					//console.warn("Out of bounds detected for position..right");
 				}
 			}
 		} else {
