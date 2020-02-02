@@ -5,6 +5,7 @@ import { LineSegment } from "../math/LineSegment.js";
 import {Delaunay} from "d3-delaunay";
 
 import cdt2d from "cdt2d";
+import Shape from "clipper-js";
 //import cleanPSLG from "clean-pslg";
 import CSG from "csg2d";
 
@@ -18,6 +19,8 @@ import { NavEdge } from "../navigation/core/NavEdge.js";
 
 const lineSegment = new LineSegment();
 const pointOnLineSegment = new Vector3();
+
+const WALL_RADIUS = 1;
 
 const CITADEL_WARD_INDEX = -1;
 const PLAZA_WARD_INDEX = -2;
@@ -115,6 +118,10 @@ function pointInTriangle(px, py, c, b, a ) {
 	( ( p.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( p.z - b.z ) ) >= 0 &&
 	( ( p.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( p.z - c.z ) ) >= 0;
 	*/
+}
+
+function pointToShapePt(pt) {
+	return {X:pt[0], Y:pt[1]};
 }
 
 function withinVincityOfPointSet(pt, points, dist) {
@@ -954,10 +961,6 @@ class SVGCityReader {
 		if (this.selectorCitadel) {
 			this.selectorCitadel = map.children(this.selectorCitadel);
 			if (this.selectorCitadel.length) {
-				if (this.selectorCitadel.length >= 2) {
-					alert(this.selectorCitadel.length);
-				}
-
 				this.parseCitadel(this.selectorCitadel);
 			} else {
 				console.warn("JSelector Citadel not found!");
@@ -993,9 +996,11 @@ class SVGCityReader {
 
 			this.parseWards(this.selectorWards);
 
+			/*
 			this.rampedBuildings = new Map();
 			let testBuilding = this.wards[14].neighborhoodPts[0][0];
 			this.rampedBuildings.set(testBuilding, this.testSubdivideBuilding(testBuilding));
+			*/
 		}
 
 
@@ -1109,6 +1114,117 @@ class SVGCityReader {
 		return collector;
 	}
 
+	buildGroundNavmesh() {
+		// assumed only City wall and Buildings Blocks ground surface
+		if (!this.profileWardBuildings) {
+			alert('buildGroundNavmesh failed, please call getWardBuildingsGeometry() first!');
+			return;
+		}
+
+		const scaleXZ = 1; // this.exportScaleXZ;
+		var points = [
+			[-this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+			[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+			[this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ],
+			[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]
+		];
+		
+		var edges = [
+			[0,1], [1,2], [2,3], [3,0]
+		];
+		const pointsList = [];
+	
+
+		// assumed buildings are non-intersecting
+		
+		this.profileWardBuildings.forEach((ward)=> {
+			ward.forEach((b)=> {
+				let buildingPoints = [];
+				pointsList.push(buildingPoints);
+
+				let len = b.length;
+				let i = 0;
+				let bi = points.length;
+				points.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
+				buildingPoints.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
+				for (i=2; i<len; i+=2) {
+					edges.push([points.length - 1, points.length]);
+					points.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
+					buildingPoints.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
+				}
+				edges.push([points.length-1, bi]);
+			});
+		});
+		let bpLen = points.length;
+
+		/* // not needed. already done earlier
+		let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
+		let wallRadius = WALL_RADIUS;
+		let cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
+			true, {exterior:false},
+			(points, index)=>{
+				//points = points.slice(0).reverse();
+				points = points.concat().reverse();
+				return  index < lineSegments.length ? this.extrudePathOfPoints(points, wallRadius, true, true) : points;
+			});
+
+		this.cityWallCDTObj = {
+			vertices: cdtObj.vertices,
+			edges: cdtObj.edges	
+		};
+		*/
+		
+		points = points.concat(this.cityWallCDTObj.vertices);
+		let cityWallEdges = this.cityWallCDTObj.edges;
+		let cityWallVertices = this.cityWallCDTObj.vertices;
+
+		let curIsland;
+		let pointsListWall = [];
+		cityWallEdges.forEach((e, index, array)=> {
+			if (index === 0 || array[index-1][1] !== e[0]) {
+				curIsland = [];
+				pointsListWall.push(curIsland);
+				console.log("Creating new segment");
+			} 
+			curIsland.push(cityWallVertices[e[0]]);
+			
+			edges.push([e[0]+bpLen, e[1]+bpLen]);
+		});
+		console.log(pointsListWall);
+
+		/* // Shape library not working
+		let buildingsShape = new Shape(pointsList);
+		let wallsShape = new Shape(pointsListWall);
+		let obstacles = buildingsShape.union(wallsShape);
+		*/
+
+		var buildingsShape = CSG.fromPolygons(pointsList);
+		var wallsShape = CSG.fromPolygons(pointsListWall);
+		let obstacles = wallsShape; //buildingsShape.union(wallsShape);
+		
+		let obstacleVerts =[];
+		let obstacleEdges = [];
+		this.collectVerticesEdgesFromCSG(obstacleVerts, obstacleEdges, obstacles);
+		points = obstacleVerts;
+		edges = obstacleEdges;
+		
+		cleanPSLG(points, edges);
+		let cdt = cdt2d(points, edges, {interior:true, exterior:false});
+
+		let navmesh = new NavMesh();
+		navmesh.attemptBuildGraph = false;
+		
+		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(points, tri)}));
+
+		var svg = $(this.makeSVG("g", {}));
+			this.map.append(svg, {});
+			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+		//return {vertices:points, edges:edges, cdt:cdt};
+
+		return navmesh;
+	}
+
 
 	getWardBuildingsGeometry(buildingInset=0) {
 		let wardCollectors = [];
@@ -1122,6 +1238,8 @@ class SVGCityReader {
 		let upperLevel;
 		console.log(this.wards.length + ": Wards counted");
 		let totalVertices = 0;
+
+		this.profileWardBuildings = [];
 
 
 		const A = new Vector3();
@@ -1138,10 +1256,13 @@ class SVGCityReader {
 			wardCollectors.push(wardCollector);
 			wardRoofCollector = getNewGeometryCollector();
 			wardRoofCollectors.push(wardRoofCollector);
+			let profileBuildings;
+			this.profileWardBuildings.push(profileBuildings = []);
 			wardObj.neighborhoodPts.forEach((buildingsList)=> {
 				buildingsList.forEach((building)=>{
-
-						if (this.rampedBuildings.has(building)) {
+						let buildingProfile;
+						profileBuildings.push(buildingProfile = []);
+						if (this.rampedBuildings && this.rampedBuildings.has(building)) {
 							// 	console.log("Skiping ramped building")
 							return;
 						}
@@ -1304,6 +1425,7 @@ class SVGCityReader {
 							buildingTopIndices[bti++] =wv;
 
 							wardCollector.vertices.push(pt[0]*scaleXZ-ex , groundLevel, pt[1]*scaleXZ-ez);
+							buildingProfile.push(pt[0]*scaleXZ-ex,  pt[1]*scaleXZ-ez);
 							wardCollector.normals.push(nx, 0, nz);
 
 							ex = vertexNormals[(prevIndex*2)]*buildingInset;
@@ -1352,6 +1474,8 @@ class SVGCityReader {
 
 					});
 				});
+
+				//profileBuildings.reverse();
 			});
 
 		// later, consider varying base heights at different wards even from outside city wall, at number 2 districts from city wall should be lower altitude
@@ -1628,8 +1752,8 @@ class SVGCityReader {
 
 		var svg = $(this.makeSVG("g", {}));
 		this.map.append(svg, {});
-		svg.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
-		svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+		//svg.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 
 		return navmesh;
 	}
@@ -2411,7 +2535,7 @@ class SVGCityReader {
 			});
 
 			this.citadelWallSegments = getSegmentPointsFromSVGLinePath(jSelCitadelWall.children("path").attr("d"));
-
+			
 			let citadelEntranceLines = jSelCitadelWall.find(this.subSelectorEntranceLines);
 			if (citadelEntranceLines.length >=3) {
 				this.citadelWallEntrancePoint = getBBoxCenter(citadelEntranceLines[0].getBBox());
@@ -2436,8 +2560,8 @@ class SVGCityReader {
 
 
 			this.citadelWallSegmentsUpper = [explode2DArray(this.citadelWallSegments)]; // todo: break and rearrange from start/end citadel
-
-			///*
+	
+			/*
 			g.append(
 					this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
 						d: this.citadelWallSegments.map((pts)=>{
@@ -2446,7 +2570,7 @@ class SVGCityReader {
 							}).join("");
 						}).join(" Z ") + " Z" }
 				));
-			//*/
+			*/
 		}
 
 		this.cityWallPillarPoints.forEach((p)=>{g.append(this.makeSVG("circle", {r:0.5, fill:"yellow", cx:p.x, cy:p.z}))});
@@ -2479,14 +2603,16 @@ class SVGCityReader {
 				d: cdt.map((tri)=>{return triSVGString(this.cityWallCDTBoundary.vertices, tri)}).join(" ")})
 		);
 		*/
-
-		this.citadelWallCDTBoundary = this.getCDTObjFromPointsList(this.citadelWallSegments, true, {exterior:false});
+	
+		this.citadelWallCDTBoundary = this.getCDTObjFromPointsListUnion(this.citadelWallSegments, true, {exterior:false});
+		/*
 		g.append(
 			this.makeSVG("path", {"fill":"rgba(155,111,122,0.7)", "stroke-width":0.1, "stroke":"red",
 				d: this.citadelWallCDTBoundary.cdt.map((tri)=>{return triSVGString(this.citadelWallCDTBoundary.vertices, tri)}).join(" ")})
 		);
+		*/
 
-		let wallRadius = 1;
+		let wallRadius = WALL_RADIUS;
 		let verticesSoup = [];
 		verticesSoup.push([-this.svgWidth*.5, -this.svgHeight*.5]);
 		verticesSoup.push([this.svgWidth*.5, -this.svgHeight*.5]);
@@ -2511,8 +2637,9 @@ class SVGCityReader {
 		*/
 
 		let lineSegments = groundMode ? this.citadelWallSegments.concat(this.cityWallSegments) : this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
-
+		
 		//.concat(this.citadelWallPillars).concat(this.cityWallPillars);
+		
 		let cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
 			true, {exterior:false},
 			(points, index)=>{
@@ -2521,6 +2648,11 @@ class SVGCityReader {
 			});
 
 		cdt = cdtObj.cdt;
+
+		this.cityWallCDTObj = {
+			vertices: cdtObj.vertices,
+			edges: cdtObj.edges	
+		};
 		//cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
 
 
@@ -2546,7 +2678,10 @@ class SVGCityReader {
 		//navmesh.attemptBuildGraph = false;
 		//navmesh.fromPolygons(combinedRegions);
 
-		g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		// comm awa
+		//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+		
+		
 		//g.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 		/*
 		g.append(

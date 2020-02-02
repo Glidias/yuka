@@ -66,6 +66,7 @@
     "tui-jsdoc-template": "1.2.2"
   },
   "dependencies": {
+    "@doodle3d/clipper-js": "^1.0.10",
     "cdt2d": "^1.0.0",
     "clean-pslg": "^1.1.2",
     "csg2d": "^0.1.2",
