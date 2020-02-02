@@ -1180,33 +1180,48 @@ class SVGCityReader {
 
 		let curIsland;
 		let pointsListWall = [];
+		let segmentPoints = [];
+		pointsListWall.push(segmentPoints);
 		cityWallEdges.forEach((e, index, array)=> {
-			if (index === 0 || array[index-1][1] !== e[0]) {
-				curIsland = [];
-				pointsListWall.push(curIsland);
-				console.log("Creating new segment");
-			} 
-			curIsland.push(cityWallVertices[e[0]]);
-			
 			edges.push([e[0]+bpLen, e[1]+bpLen]);
 		});
-		console.log(pointsListWall);
+		/*
+		cityWallVertices.forEach((v)=> {
+			segmentPoints.push(v);
+		});
+		*/
 
 		/* // Shape library not working
 		let buildingsShape = new Shape(pointsList);
 		let wallsShape = new Shape(pointsListWall);
 		let obstacles = buildingsShape.union(wallsShape);
 		*/
+		pointsListWall.push([[1,0],[-1,0],[-1,1]]); // dummy test
+		let wallRadius = WALL_RADIUS;
+		let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
+		lineSegments = lineSegments.map((ls=> {
+			return this.extrudePathOfPoints(ls, wallRadius, true, true);
+		}));
 
 		var buildingsShape = CSG.fromPolygons(pointsList);
-		var wallsShape = CSG.fromPolygons(pointsListWall);
-		let obstacles = wallsShape; //buildingsShape.union(wallsShape);
+		var wallsShape = CSG.fromPolygons(lineSegments);
+		let obstacles = wallsShape; // buildingsShape.union(wallsShape);
 		
 		let obstacleVerts =[];
 		let obstacleEdges = [];
 		this.collectVerticesEdgesFromCSG(obstacleVerts, obstacleEdges, obstacles);
-		points = obstacleVerts;
-		edges = obstacleEdges;
+		points = points.concat(obstacleVerts);
+		for (let i=0; i<obstacleEdges.length; i++) {
+			obstacleEdges[i][0] += 4;
+			obstacleEdges[i][1] += 4;
+		}
+		edges = edges.concat(obstacleEdges);
+
+
+		if (true) { // testing only
+			points = obstacleVerts;
+			edges = obstacleEdges;
+		}
 		
 		cleanPSLG(points, edges);
 		let cdt = cdt2d(points, edges, {interior:true, exterior:false});
