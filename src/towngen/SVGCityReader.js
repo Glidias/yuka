@@ -1230,7 +1230,7 @@ class SVGCityReader {
 		var wallsShape = cityWallUnion;
 		let obstacles = wallsShape.union(buildingsShape);
 	
-		//if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
+		
 		//obstacles = canvasSubject.difference(obstacles);
 		// if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
 		/*
@@ -1520,7 +1520,7 @@ class SVGCityReader {
 						});
 
 						buildingTopIndices.length = bti;
-						buildingTopIndices.reverse();
+						//buildingTopIndices.reverse();
 						this.roofMethod(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset );
 
 					});
@@ -2357,7 +2357,7 @@ class SVGCityReader {
 		return el;
 	}
 	
-	collectVerticesEdgesFromShape(vertices, edges, shape) {
+collectVerticesEdgesFromShape(vertices, edges, shape) {
 		let paths = shape.paths;
 		// let mapVerts = new Map();
 		paths.forEach((points)=>{
@@ -2370,25 +2370,50 @@ class SVGCityReader {
 				if (index === points.length - 1) edges.push([count, baseCount]);
 				count++;
 				vertices.push([p.X, p.Y]);
-
-				// note caveat: non welded
-				/*
-				let key = p.X + "," + p[0].Y;
-				let key2 =  p[1].X + "," + p[1].Y;
-				if (!mapVerts.has(key)) {
-					vertices.push([seg[0].X, seg[0].Y]);
-					mapVerts.set(key, vi++);
-				}
-				if (!mapVerts.has(key2)) {
-					vertices.push(([seg[1].X, seg[1].Y]));
-					mapVerts.set(key2, vi++);
-				}
-				edges[ei++] = [mapVerts.get(key), mapVerts.get(key2)];
-				*/
 			});
 		});
 	}
 
+	/*
+		collectVerticesEdgesFromShape(vertices, edges, shape) {
+		let paths = shape.paths;
+		let mapVerts = new Map();
+		let vi = vertices.length;
+		let initVI = vi;
+
+		let ei = edges.length;
+		paths.forEach((points)=>{
+			points.forEach((p, index)=> {
+				let key = p.X + "," + p.Y;
+				if (!mapVerts.has(key)) {
+					vertices.push([p.X, p.Y]);
+					mapVerts.set(key, vi++);
+				}
+			});
+		});
+
+		
+		paths.forEach((points)=>{
+			
+		
+			points.forEach((p, index, array)=> {
+				
+				let key = p.X + "," + p.Y;
+				let key2;
+				if (index >= 1) {
+					key2 = array[index-1].X + "," + array[index-1].Y;
+					edges.push([mapVerts.get(key2), mapVerts.get(key)]);
+				}
+				else if (index === points.length - 1) {
+					key2 = array[0].X + "," + array[0].Y;
+					edges.push([mapVerts.get(key), mapVerts.get(key2)]);
+				} 
+
+	
+			});
+		});
+	}
+	*/
 	collectVerticesEdgesFromCSG(vertices, edges, csg) {
 		let segments = csg.segments;
 		let mapVerts = new Map();
@@ -2409,21 +2434,6 @@ class SVGCityReader {
 		});
 	}
 
-	getPointsListUnion(pointsList, processPointsMethod) {
-		let polygonsListCSG = [];
-		pointsList.forEach((points, index)=> {
-			if (processPointsMethod) points = processPointsMethod(points, index);
-			polygonsListCSG.push(CSG.fromPolygons([points]))
-		});
-
-		let csg = polygonsListCSG[0];
-		for (let i=1; i<polygonsListCSG.length; i++) {
-			csg = csg.union(polygonsListCSG[i]);
-		}
-
-		return csg;
-	}
-
 	getPointsListShape(pointsList, processPointsMethod) {
 		let polygonsListCSG = [];
 		pointsList.forEach((points, index)=> {
@@ -2433,6 +2443,32 @@ class SVGCityReader {
 		let csg = new Shape(polygonsListCSG);
 		return csg;
 	}
+
+		/*
+	getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
+		let polygonsListCSG = [];
+		pointsList.forEach((points, index)=> {
+			if (processPointsMethod) points = processPointsMethod(points, index);
+			polygonsListCSG.push(new Shape([points.map(pointToShapePt)]))
+		});
+
+		let csg = polygonsListCSG[0];
+		for (let i=1; i<polygonsListCSG.length; i++) {
+			csg = csg.union(polygonsListCSG[i]);
+		}
+
+		let vertices = params.vertices ? params.vertices.slice(0) : [];
+		let edges = params.edges ? params.edges.slice(0) : [];
+		this.collectVerticesEdgesFromShape(vertices, edges, csg);
+
+		if (cleanup) {
+			cleanPSLG(vertices, edges);
+		}
+
+		let cdt = cdt2d(vertices, edges, (params ? params : {exterior:true}));
+		return {vertices:vertices, edges:edges, cdt:cdt};
+	}
+	*/
 
 	getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
 		let polygonsListCSG = [];
@@ -2457,6 +2493,7 @@ class SVGCityReader {
 		let cdt = cdt2d(vertices, edges, (params ? params : {exterior:true}));
 		return {vertices:vertices, edges:edges, cdt:cdt};
 	}
+
 
 	//convertCSGPolygonsTo
 
