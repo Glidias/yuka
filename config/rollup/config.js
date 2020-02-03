@@ -1,5 +1,5 @@
-import resolve from 'rollup-plugin-node-resolve';
-import commonjs from 'rollup-plugin-commonjs';
+import resolve from '@rollup/plugin-node-resolve';
+import commonjs from '@rollup/plugin-commonjs';
 import builtins from 'rollup-plugin-node-builtins';
 const fs = require( 'fs' );
 const commenting = require( 'commenting' );
@@ -17,6 +17,7 @@ export default {
 		}
 	},
 	commonjs(),
+	builtins(),
 	globals({
 		process: false,
 		global: false,
@@ -25,7 +26,6 @@ export default {
 	    filename: false,
 		baseDir: false
 	}),
-	builtins(),
 	resolve()
 
 ],

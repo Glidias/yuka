@@ -8334,3928 +8334,6 @@
 
 	}
 
-	const v1$2 = new Vector3();
-	const v2 = new Vector3();
-	const d = new Vector3();
-
-	/**
-	* Class representing a plane in 3D space. The plane is specified in Hessian normal form.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class Plane {
-
-		/**
-		* Constructs a new plane with the given values.
-		*
-		* @param {Vector3} normal - The normal vector of the plane.
-		* @param {Number} constant - The distance of the plane from the origin.
-		*/
-		constructor( normal = new Vector3( 0, 0, 1 ), constant = 0 ) {
-
-			/**
-			* The normal vector of the plane.
-			* @type Vector3
-			*/
-			this.normal = normal;
-
-			/**
-			* The distance of the plane from the origin.
-			* @type Number
-			*/
-			this.constant = constant;
-
-		}
-
-		/**
-		* Sets the given values to this plane.
-		*
-		* @param {Vector3} normal - The normal vector of the plane.
-		* @param {Number} constant - The distance of the plane from the origin.
-		* @return {Plane} A reference to this plane.
-		*/
-		set( normal, constant ) {
-
-			this.normal = normal;
-			this.constant = constant;
-
-			return this;
-
-		}
-
-		/**
-		* Copies all values from the given plane to this plane.
-		*
-		* @param {Plane} plane - The plane to copy.
-		* @return {Plane} A reference to this plane.
-		*/
-		copy( plane ) {
-
-			this.normal.copy( plane.normal );
-			this.constant = plane.constant;
-
-			return this;
-
-		}
-
-		/**
-		* Creates a new plane and copies all values from this plane.
-		*
-		* @return {Plane} A new plane.
-		*/
-		clone() {
-
-			return new this.constructor().copy( this );
-
-		}
-
-		/**
-		* Computes the signed distance from the given 3D vector to this plane.
-		* The sign of the distance indicates the half-space in which the points lies.
-		* Zero means the point lies on the plane.
-		*
-		* @param {Vector3} point - A point in 3D space.
-		* @return {Number} The signed distance.
-		*/
-		distanceToPoint( point ) {
-
-			return this.normal.dot( point ) + this.constant;
-
-		}
-
-		/**
-		* Sets the values of the plane from the given normal vector and a coplanar point.
-		*
-		* @param {Vector3} normal - A normalized vector.
-		* @param {Vector3} point - A coplanar point.
-		* @return {Plane} A reference to this plane.
-		*/
-		fromNormalAndCoplanarPoint( normal, point ) {
-
-			this.normal.copy( normal );
-			this.constant = - point.dot( this.normal );
-
-			return this;
-
-		}
-
-		/**
-		* Sets the values of the plane from three given coplanar points.
-		*
-		* @param {Vector3} a - A coplanar point.
-		* @param {Vector3} b - A coplanar point.
-		* @param {Vector3} c - A coplanar point.
-		* @return {Plane} A reference to this plane.
-		*/
-		fromCoplanarPoints( a, b, c ) {
-
-			v1$2.subVectors( c, b ).cross( v2.subVectors( a, b ) ).normalize();
-
-			this.fromNormalAndCoplanarPoint( v1$2, a );
-
-			return this;
-
-		}
-
-		/**
-		* Performs a plane/plane intersection test and stores the intersection point
-		* to the given 3D vector. If no intersection is detected, *null* is returned.
-		*
-		* Reference: Intersection of Two Planes in Real-Time Collision Detection
-		* by Christer Ericson (chapter 5.4.4)
-		*
-		* @param {Plane} plane - The plane to test.
-		* @param {Vector3} result - The result vector.
-		* @return {Vector3} The result vector.
-		*/
-		intersectPlane( plane, result ) {
-
-			// compute direction of intersection line
-
-			d.crossVectors( this.normal, plane.normal );
-
-			// if d is zero, the planes are parallel (and separated)
-			// or coincident, so they’re not considered intersecting
-
-			const denom = d.dot( d );
-
-			if ( denom === 0 ) return null;
-
-			// compute point on intersection line
-
-			v1$2.copy( plane.normal ).multiplyScalar( this.constant );
-			v2.copy( this.normal ).multiplyScalar( plane.constant );
-
-			result.crossVectors( v1$2.sub( v2 ), d ).divideScalar( denom );
-
-			return result;
-
-		}
-
-		/**
-		* Returns true if the given plane intersects this plane.
-		*
-		* @param {Plane} plane - The plane to test.
-		* @return {Boolean} The result of the intersection test.
-		*/
-		intersectsPlane( plane ) {
-
-			const d = this.normal.dot( plane.normal );
-
-			return ( Math.abs( d ) !== 1 );
-
-		}
-
-		/**
-		* Projects the given point onto the plane. The result is written
-		* to the given vector.
-		*
-		* @param {Vector3} point - The point to project onto the plane.
-		* @param {Vector3} result - The projected point.
-		* @return {Vector3} The projected point.
-		*/
-		projectPoint( point, result ) {
-
-			v1$2.copy( this.normal ).multiplyScalar( this.distanceToPoint( point ) );
-
-			result.subVectors( point, v1$2 );
-
-			return result;
-
-		}
-
-		/**
-		* Returns true if the given plane is deep equal with this plane.
-		*
-		* @param {Plane} plane - The plane to test.
-		* @return {Boolean} The result of the equality test.
-		*/
-		equals( plane ) {
-
-			return plane.normal.equals( this.normal ) && plane.constant === this.constant;
-
-		}
-
-	}
-
-	const boundingSphere$1 = new BoundingSphere();
-	const triangle = { a: new Vector3(), b: new Vector3(), c: new Vector3() };
-	const rayLocal = new Ray();
-	const plane = new Plane();
-	const inverseMatrix = new Matrix4();
-	const closestIntersectionPoint = new Vector3();
-	const closestTriangle = { a: new Vector3(), b: new Vector3(), c: new Vector3() };
-
-	/**
-	* Class for representing a polygon mesh. The faces consist of triangles.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class MeshGeometry {
-
-		/**
-		* Constructs a new mesh geometry.
-		*
-		* @param {TypedArray} vertices - The vertex buffer (Float32Array).
-		* @param {TypedArray} indices - The index buffer (Uint16Array/Uint32Array).
-		*/
-		constructor( vertices = new Float32Array(), indices = null ) {
-
-			this.vertices = vertices;
-			this.indices = indices;
-
-			this.backfaceCulling = true;
-
-			this.aabb = new AABB();
-			this.boundingSphere = new BoundingSphere();
-
-			this.computeBoundingVolume();
-
-		}
-
-		/**
-		* Computes the internal bounding volumes of this mesh geometry.
-		*
-		* @return {MeshGeometry} A reference to this mesh geometry.
-		*/
-		computeBoundingVolume() {
-
-			const vertices = this.vertices;
-			const vertex = new Vector3();
-
-			const aabb = this.aabb;
-			const boundingSphere = this.boundingSphere;
-
-			// compute AABB
-
-			aabb.min.set( Infinity, Infinity, Infinity );
-			aabb.max.set( - Infinity, - Infinity, - Infinity );
-
-			for ( let i = 0, l = vertices.length; i < l; i += 3 ) {
-
-				vertex.x = vertices[ i ];
-				vertex.y = vertices[ i + 1 ];
-				vertex.z = vertices[ i + 2 ];
-
-				aabb.expand( vertex );
-
-			}
-
-			// compute bounding sphere
-
-			aabb.getCenter( boundingSphere.center );
-			boundingSphere.radius = boundingSphere.center.distanceTo( aabb.max );
-
-			return this;
-
-		}
-
-		/**
-		 * Performs a ray intersection test with the geometry of the obstacle and stores
-		 * the intersection point in the given result vector. If no intersection is detected,
-		 * *null* is returned.
-		 *
-		 * @param {Ray} ray - The ray to test.
-		 * @param {Matrix4} worldMatrix - The matrix that transforms the geometry to world space.
-		 * @param {Boolean} closest - Whether the closest intersection point should be computed or not.
-		 * @param {Vector3} intersectionPoint - The intersection point.
-		 * @param {Vector3} normal - The normal vector of the respective triangle.
-		 * @return {Vector3} The result vector.
-		 */
-		intersectRay( ray, worldMatrix, closest, intersectionPoint, normal = null ) {
-
-			// check bounding sphere first in world space
-
-			boundingSphere$1.copy( this.boundingSphere ).applyMatrix4( worldMatrix );
-
-			if ( ray.intersectsBoundingSphere( boundingSphere$1 ) ) {
-
-				// transform the ray into the local space of the obstacle
-
-				worldMatrix.getInverse( inverseMatrix );
-				rayLocal.copy( ray ).applyMatrix4( inverseMatrix );
-
-				// check AABB in local space since its more expensive to convert an AABB to world space than a bounding sphere
-
-				if ( rayLocal.intersectsAABB( this.aabb ) ) {
-
-					// now perform more expensive test with all triangles of the geometry
-
-					const vertices = this.vertices;
-					const indices = this.indices;
-
-					let minDistance = Infinity;
-					let found = false;
-
-					if ( indices === null ) {
-
-						// non-indexed geometry
-
-						for ( let i = 0, l = vertices.length; i < l; i += 9 ) {
-
-							triangle.a.set( vertices[ i ], vertices[ i + 1 ], vertices[ i + 2 ] );
-							triangle.b.set( vertices[ i + 3 ], vertices[ i + 4 ], vertices[ i + 5 ] );
-							triangle.c.set( vertices[ i + 6 ], vertices[ i + 7 ], vertices[ i + 8 ] );
-
-							if ( rayLocal.intersectTriangle( triangle, this.backfaceCulling, intersectionPoint ) !== null ) {
-
-								if ( closest ) {
-
-									const distance = intersectionPoint.squaredDistanceTo( rayLocal.origin );
-
-									if ( distance < minDistance ) {
-
-										minDistance = distance;
-
-										closestIntersectionPoint.copy( intersectionPoint );
-										closestTriangle.a.copy( triangle.a );
-										closestTriangle.b.copy( triangle.b );
-										closestTriangle.c.copy( triangle.c );
-										found = true;
-
-									}
-
-								} else {
-
-									found = true;
-									break;
-
-								}
-
-							}
-
-						}
-
-					} else {
-
-						// indexed geometry
-
-						for ( let i = 0, l = indices.length; i < l; i += 3 ) {
-
-							const a = indices[ i ];
-							const b = indices[ i + 1 ];
-							const c = indices[ i + 2 ];
-
-							const stride = 3;
-
-							triangle.a.set( vertices[ ( a * stride ) ], vertices[ ( a * stride ) + 1 ], vertices[ ( a * stride ) + 2 ] );
-							triangle.b.set( vertices[ ( b * stride ) ], vertices[ ( b * stride ) + 1 ], vertices[ ( b * stride ) + 2 ] );
-							triangle.c.set( vertices[ ( c * stride ) ], vertices[ ( c * stride ) + 1 ], vertices[ ( c * stride ) + 2 ] );
-
-							if ( rayLocal.intersectTriangle( triangle, this.backfaceCulling, intersectionPoint ) !== null ) {
-
-								if ( closest ) {
-
-									const distance = intersectionPoint.squaredDistanceTo( rayLocal.origin );
-
-									if ( distance < minDistance ) {
-
-										minDistance = distance;
-
-										closestIntersectionPoint.copy( intersectionPoint );
-										closestTriangle.a.copy( triangle.a );
-										closestTriangle.b.copy( triangle.b );
-										closestTriangle.c.copy( triangle.c );
-										found = true;
-
-									}
-
-								} else {
-
-									found = true;
-									break;
-
-								}
-
-							}
-
-						}
-
-					}
-
-					// intersection was found
-
-					if ( found ) {
-
-						if ( closest ) {
-
-							// restore closest intersection point and triangle
-
-							intersectionPoint.copy( closestIntersectionPoint );
-							triangle.a.copy( closestTriangle.a );
-							triangle.b.copy( closestTriangle.b );
-							triangle.c.copy( closestTriangle.c );
-
-						}
-
-						// transform intersection point back to world space
-
-						intersectionPoint.applyMatrix4( worldMatrix );
-
-						// compute normal of triangle in world space if necessary
-
-						if ( normal !== null ) {
-
-							plane.fromCoplanarPoints( triangle.a, triangle.b, triangle.c );
-							normal.copy( plane.normal );
-							normal.transformDirection( worldMatrix );
-
-						}
-
-						return intersectionPoint;
-
-					}
-
-				}
-
-			}
-
-			return null;
-
-		}
-
-		/**
-		 * Returns a new geometry without containing indices.
-		 *
-		 * @return {MeshGeometry} The new geometry.
-		 */
-		toTriangleSoup() {
-
-			const indices = this.indices;
-			const vertices = this.vertices;
-			let newVertices;
-
-			if ( indices ) {
-
-				newVertices = new Float32Array( indices.length * 3 );
-
-				for ( let i = 0, l = indices.length; i < l; i ++ ) {
-
-					const a = indices[ i ];
-					const stride = 3;
-
-					newVertices[ i * stride ] = vertices[ a * stride ];
-					newVertices[ ( i * stride ) + 1 ] = vertices[ ( a * stride ) + 1 ];
-					newVertices[ ( i * stride ) + 2 ] = vertices[ ( a * stride ) + 2 ];
-
-				}
-
-			} else {
-
-				newVertices = new Float32Array( vertices );
-
-			}
-
-			return new MeshGeometry( newVertices );
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = {
-				type: this.constructor.name
-			};
-
-			json.indices = {
-				type: this.indices ? this.indices.constructor.name : 'null',
-				data: this.indices ? Array.from( this.indices ) : null
-			};
-
-			json.vertices = Array.from( this.vertices );
-			json.backfaceCulling = this.backfaceCulling;
-			json.aabb = this.aabb.toJSON();
-			json.boundingSphere = this.boundingSphere.toJSON();
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {MeshGeometry} A reference to this mesh geometry.
-		*/
-		fromJSON( json ) {
-
-			this.aabb = new AABB().fromJSON( json.aabb );
-			this.boundingSphere = new BoundingSphere().fromJSON( json.boundingSphere );
-			this.backfaceCulling = json.backfaceCulling;
-
-			this.vertices = new Float32Array( json.vertices );
-
-			switch ( json.indices.type ) {
-
-				case 'Uint16Array':
-					this.indices = new Uint16Array( json.indices.data );
-					break;
-
-				case 'Uint32Array':
-					this.indices = new Uint32Array( json.indices.data );
-					break;
-
-				case 'null':
-					this.indices = null;
-					break;
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a timer.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class Time {
-
-		/**
-		* Constructs a new time object.
-		*/
-		constructor() {
-
-			/**
-			* The start time of this timer.
-			* @type Number
-			* @default 0
-			*/
-			this.startTime = 0;
-
-			/**
-			* The time stamp of the last simulation step.
-			* @type Number
-			* @default 0
-			*/
-			this.previousTime = 0;
-
-			/**
-			* The time stamp of the current simulation step.
-			* @type Number
-			*/
-			this.currentTime = this.now();
-
-			/**
-			* Whether the Page Visibility API should be used to avoid large time
-			* delta values produced via inactivity or not. This setting is
-			* ignored if the browser does not support the API.
-			* @type Boolean
-			* @default true
-			*/
-			this.detectPageVisibility = true;
-
-			//
-
-			if ( typeof document !== 'undefined' && document.hidden !== undefined ) {
-
-				this._pageVisibilityHandler = handleVisibilityChange.bind( this );
-
-				document.addEventListener( 'visibilitychange', this._pageVisibilityHandler, false );
-
-			}
-
-		}
-
-		/**
-		* Returns the delta time in seconds for the current simulation step.
-		*
-		* @return {Number} The delta time in seconds.
-		*/
-		getDelta() {
-
-			return ( this.currentTime - this.previousTime ) / 1000;
-
-		}
-
-		/**
-		* Returns the elapsed time in seconds of this timer.
-		*
-		* @return {Number} The elapsed time in seconds.
-		*/
-		getElapsed() {
-
-			return ( this.currentTime - this.startTime ) / 1000;
-
-		}
-
-		/**
-		* Updates the internal state of this timer.
-		*
-		* @return {Time} A reference to this timer.
-		*/
-		update() {
-
-			this.previousTime = this.currentTime;
-			this.currentTime = this.now();
-
-			return this;
-
-		}
-
-		/**
-		* Returns a current time value in milliseconds.
-		*
-		* @return {Number} A current time value in milliseconds.
-		*/
-		now() {
-
-			return ( typeof performance === 'undefined' ? Date : performance ).now();
-
-		}
-
-	}
-
-	//
-
-	function handleVisibilityChange() {
-
-		if ( this.detectPageVisibility === true && document.hidden === false ) {
-
-			// reset the current time when the app was inactive (window minimized or tab switched)
-
-			this.currentTime = this.now();
-
-		}
-
-	}
-
-	/**
-	* Not all components of an AI system need to be updated in each simulation step.
-	* This class can be used to control the update process by defining how many updates
-	* should be executed per second.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class Regulator {
-
-		/**
-		* Constructs a new regulator.
-		*
-		* @param {Number} updateFrequency - The amount of updates per second.
-		*/
-		constructor( updateFrequency = 0 ) {
-
-			/**
-			* The amount of updates per second.
-			* @type Number
-			* @default 0
-			*/
-			this.updateFrequency = updateFrequency;
-
-			this._time = new Time();
-			this._nextUpdateTime = 0;
-
-		}
-
-		/**
-		* Returns true if it is time to allow the next update.
-		*
-		* @return {Boolean} Whether an update is allowed or not.
-		*/
-		ready() {
-
-			this._time.update();
-
-			if ( this._time.currentTime >= this._nextUpdateTime ) {
-
-				this._nextUpdateTime = this._time.currentTime + ( 1000 / this.updateFrequency );
-
-				return true;
-
-			}
-
-			return false;
-
-		}
-
-	}
-
-	/**
-	* Base class for representing a state in context of State-driven agent design.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class State {
-
-		/**
-		* This method is called once during a state transition when the {@link StateMachine} makes
-		* this state active.
-		*
-		* @param {GameEntity} owner - The game entity that represents the execution context of this state.
-		*/
-		enter( /* owner */ ) {}
-
-		/**
-		* This method is called per simulation step if this state is active.
-		*
-		* @param {GameEntity} owner - The game entity that represents the execution context of this state.
-		*/
-		execute( /* owner */ ) {}
-
-		/**
-		* This method is called once during a state transition when the {@link StateMachine} makes
-		* this state inactive.
-		*
-		* @param {GameEntity} owner - The game entity that represents the execution context of this state.
-		*/
-		exit( /* owner */ ) {}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {State} A reference to this state.
-		*/
-		fromJSON( /* json */ ) {}
-
-		/**
-		* Restores UUIDs with references to GameEntity objects.
-		*
-		* @param {Map} entities - Maps game entities to UUIDs.
-		* @return {State} A reference to this state.
-		*/
-		resolveReferences( /* entities */ ) {}
-
-		/**
-		* This method is called when messaging between game entities occurs.
-		*
-		* @param {GameEntity} owner - The game entity that represents the execution context of this state.
-		* @param {Telegram} telegram - A data structure containing the actual message.
-		* @return {Boolean} Whether the message was processed or not.
-		*/
-		onMessage( /* owner, telegram */ ) {
-
-			return false;
-
-		}
-
-	}
-
-	/**
-	* Finite state machine (FSM) for implementing State-driven agent design.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class StateMachine {
-
-		/**
-		* Constructs a new state machine with the given values.
-		*
-		* @param {GameEntity} owner - The owner of this state machine.
-		*/
-		constructor( owner = null ) {
-
-			/**
-			* The game entity that owns this state machine.
-			* @type GameEntity
-			*/
-			this.owner = owner;
-
-			/**
-			* The current state of the game entity.
-			* @type State
-			*/
-			this.currentState = null;
-
-			/**
-			* The previous state of the game entity.
-			* @type State
-			*/
-			this.previousState = null; // a reference to the last state the agent was in
-
-			/**
-			* This state logic is called every time the state machine is updated.
-			* @type State
-			*/
-			this.globalState = null;
-
-			/**
-			* A map with all states of the state machine.
-			* @type Map
-			*/
-			this.states = new Map();
-
-			//
-
-			this._typesMap = new Map();
-
-		}
-
-		/**
-		* Updates the internal state of the FSM. Usually called by {@link GameEntity#update}.
-		*
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		update() {
-
-			if ( this.globalState !== null ) {
-
-				this.globalState.execute( this.owner );
-
-			}
-
-			if ( this.currentState !== null ) {
-
-				this.currentState.execute( this.owner );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Adds a new state with the given ID to the state machine.
-		*
-		* @param {String} id - The ID of the state.
-		* @param {State} state - The state.
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		add( id, state ) {
-
-			if ( state instanceof State ) {
-
-				this.states.set( id, state );
-
-			} else {
-
-				Logger.warn( 'YUKA.StateMachine: .add() needs a parameter of type "YUKA.State".' );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Removes a state via its ID from the state machine.
-		*
-		* @param {String} id - The ID of the state.
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		remove( id ) {
-
-			this.states.delete( id );
-
-			return this;
-
-		}
-
-		/**
-		* Returns the state for the given ID.
-		*
-		* @param {String} id - The ID of the state.
-		* @return {State} The state for the given ID.
-		*/
-		get( id ) {
-
-			return this.states.get( id );
-
-		}
-
-		/**
-		* Performs a state change to the state defined by its ID.
-		*
-		* @param {String} id - The ID of the state.
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		changeTo( id ) {
-
-			const state = this.get( id );
-
-			this._change( state );
-
-			return this;
-
-		}
-
-		/**
-		* Returns to the previous state.
-		*
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		revert() {
-
-			this._change( this.previousState );
-
-			return this;
-
-		}
-
-		/**
-		* Returns true if this FSM is in the given state.
-		*
-		* @return {Boolean} Whether this FSM is in the given state or not.
-		*/
-		in( id ) {
-
-			const state = this.get( id );
-
-			return ( state === this.currentState );
-
-		}
-
-		/**
-		* Tries to dispatch the massage to the current or global state and returns true
-		* if the message was processed successfully.
-		*
-		* @param {Telegram} telegram - The telegram with the message data.
-		* @return {Boolean} Whether the message was processed or not.
-		*/
-		handleMessage( telegram ) {
-
-			// first see, if the current state is valid and that it can handle the message
-
-			if ( this.currentState !== null && this.currentState.onMessage( this.owner, telegram ) === true ) {
-
-				return true;
-
-			}
-
-			// if not, and if a global state has been implemented, send the message to the global state
-
-			if ( this.globalState !== null && this.globalState.onMessage( this.owner, telegram ) === true ) {
-
-				return true;
-
-			}
-
-			return false;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = {
-				owner: this.owner.uuid,
-				currentState: null,
-				previousState: null,
-				globalState: null,
-				states: new Array()
-			};
-
-			const statesMap = new Map();
-
-			// states
-
-			for ( let [ id, state ] of this.states ) {
-
-				json.states.push( {
-					type: state.constructor.name,
-					id: id,
-					state: state.toJSON()
-				} );
-
-				statesMap.set( state, id );
-
-			}
-
-			json.currentState = statesMap.get( this.currentState ) || null;
-			json.previousState = statesMap.get( this.previousState ) || null;
-			json.globalState = statesMap.get( this.globalState ) || null;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		fromJSON( json ) {
-
-			this.owner = json.owner;
-
-			//
-
-			const statesJSON = json.states;
-
-			for ( let i = 0, l = statesJSON.length; i < l; i ++ ) {
-
-				const stateJSON = statesJSON[ i ];
-				const type = stateJSON.type;
-
-				const ctor = this._typesMap.get( type );
-
-				if ( ctor !== undefined ) {
-
-					const id = stateJSON.id;
-					const state = new ctor().fromJSON( stateJSON.state );
-
-					this.add( id, state );
-
-				} else {
-
-					Logger.warn( 'YUKA.StateMachine: Unsupported state type:', type );
-					continue;
-
-				}
-
-			}
-
-			//
-
-			this.currentState = ( json.currentState !== null ) ? ( this.get( json.currentState ) || null ) : null;
-			this.previousState = ( json.previousState !== null ) ? ( this.get( json.previousState ) || null ) : null;
-			this.globalState = ( json.globalState !== null ) ? ( this.get( json.globalState ) || null ) : null;
-
-			return this;
-
-		}
-
-		/**
-		* Restores UUIDs with references to GameEntity objects.
-		*
-		* @param {Map} entities - Maps game entities to UUIDs.
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		resolveReferences( entities ) {
-
-			this.owner = entities.get( this.owner ) || null;
-
-			for ( let state of this.states.values() ) {
-
-				state.resolveReferences( entities );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Registers a custom type for deserialization. When calling {@link StateMachine#fromJSON}
-		* the state machine is able to pick the correct constructor in order to create custom states.
-		*
-		* @param {String} type - The name of the state type.
-		* @param {Function} constructor - The constructor function.
-		* @return {StateMachine} A reference to this state machine.
-		*/
-		registerType( type, constructor ) {
-
-			this._typesMap.set( type, constructor );
-
-			return this;
-
-		}
-
-		//
-
-		_change( state ) {
-
-			this.previousState = this.currentState;
-
-			this.currentState.exit( this.owner );
-
-			this.currentState = state;
-
-			this.currentState.enter( this.owner );
-
-		}
-
-	}
-
-	/**
-	* Base class for representing a term in a {@link FuzzyRule}.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class FuzzyTerm {
-
-		/**
-		* Clears the degree of membership value.
-		*
-		* @return {FuzzyTerm} A reference to this term.
-		*/
-		clearDegreeOfMembership() {}
-
-		/**
-		* Returns the degree of membership.
-		*
-		* @return {Number} Degree of membership.
-		*/
-		getDegreeOfMembership() {}
-
-		/**
-		* Updates the degree of membership by the given value. This method is used when
-		* the term is part of a fuzzy rule's consequent.
-		*
-		* @param {Number} value - The value used to update the degree of membership.
-		* @return {FuzzyTerm} A reference to this term.
-		*/
-		updateDegreeOfMembership( /* value */ ) {}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			return {
-				type: this.constructor.name
-			};
-
-		}
-
-	}
-
-	/**
-	* Base class for representing more complex fuzzy terms based on the
-	* composite design pattern.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzyTerm
-	*/
-	class FuzzyCompositeTerm extends FuzzyTerm {
-
-		/**
-		* Constructs a new fuzzy composite term with the given values.
-		*
-		* @param {Array} terms - An arbitrary amount of fuzzy terms.
-		*/
-		constructor( terms = new Array() ) {
-
-			super();
-
-			/**
-			* List of fuzzy terms.
-			* @type Array
-			*/
-			this.terms = terms;
-
-		}
-
-		/**
-		* Clears the degree of membership value.
-		*
-		* @return {FuzzyCompositeTerm} A reference to this term.
-		*/
-		clearDegreeOfMembership() {
-
-			const terms = this.terms;
-
-			for ( let i = 0, l = terms.length; i < l; i ++ ) {
-
-				terms[ i ].clearDegreeOfMembership();
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Updates the degree of membership by the given value. This method is used when
-		* the term is part of a fuzzy rule's consequent.
-		*
-		* @param {Number} value - The value used to update the degree of membership.
-		* @return {FuzzyCompositeTerm} A reference to this term.
-		*/
-		updateDegreeOfMembership( value ) {
-
-			const terms = this.terms;
-
-			for ( let i = 0, l = terms.length; i < l; i ++ ) {
-
-				terms[ i ].updateDegreeOfMembership( value );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.terms = new Array();
-
-			for ( let i = 0, l = this.terms.length; i < l; i ++ ) {
-
-				const term = this.terms[ i ];
-
-				if ( term instanceof FuzzyCompositeTerm ) {
-
-					json.terms.push( term.toJSON() );
-
-				} else {
-
-					json.terms.push( term.uuid );
-
-				}
-
-			}
-
-			return json;
-
-		}
-
-	}
-
-	/**
-	* Class for representing an AND operator. Can be used to construct
-	* fuzzy rules.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzyCompositeTerm
-	*/
-	class FuzzyAND extends FuzzyCompositeTerm {
-
-		/**
-		* Constructs a new fuzzy AND operator with the given values. The constructor
-		* accepts and arbitrary amount of fuzzy terms.
-		*/
-		constructor() {
-
-			const terms = Array.from( arguments );
-
-			super( terms );
-
-		}
-
-		/**
-		* Returns the degree of membership. The AND operator returns the minimum
-		* degree of membership of the sets it is operating on.
-		*
-		* @return {Number} Degree of membership.
-		*/
-		getDegreeOfMembership() {
-
-			const terms = this.terms;
-			let minDOM = Infinity;
-
-			for ( let i = 0, l = terms.length; i < l; i ++ ) {
-
-				const term = terms[ i ];
-				const currentDOM = term.getDegreeOfMembership();
-
-				if ( currentDOM < minDOM ) minDOM = currentDOM;
-
-			}
-
-			return minDOM;
-
-		}
-
-	}
-
-	/**
-	* Hedges are special unary operators that can be employed to modify the meaning
-	* of a fuzzy set. The FAIRLY fuzzy hedge widens the membership function.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzyCompositeTerm
-	*/
-	class FuzzyFAIRLY extends FuzzyCompositeTerm {
-
-		/**
-		* Constructs a new fuzzy FAIRLY hedge with the given values.
-		*
-		* @param {FuzzyTerm} fuzzyTerm - The fuzzy term this hedge is working on.
-		*/
-		constructor( fuzzyTerm = null ) {
-
-			const terms = ( fuzzyTerm !== null ) ? [ fuzzyTerm ] : new Array();
-
-			super( terms );
-
-		}
-
-		// FuzzyTerm API
-
-		/**
-		* Clears the degree of membership value.
-		*
-		* @return {FuzzyFAIRLY} A reference to this fuzzy hedge.
-		*/
-		clearDegreeOfMembership() {
-
-			const fuzzyTerm = this.terms[ 0 ];
-			fuzzyTerm.clearDegreeOfMembership();
-
-			return this;
-
-		}
-
-		/**
-		* Returns the degree of membership.
-		*
-		* @return {Number} Degree of membership.
-		*/
-		getDegreeOfMembership() {
-
-			const fuzzyTerm = this.terms[ 0 ];
-			const dom = fuzzyTerm.getDegreeOfMembership();
-
-			return Math.sqrt( dom );
-
-		}
-
-		/**
-		* Updates the degree of membership by the given value.
-		*
-		* @return {FuzzyFAIRLY} A reference to this fuzzy hedge.
-		*/
-		updateDegreeOfMembership( value ) {
-
-			const fuzzyTerm = this.terms[ 0 ];
-			fuzzyTerm.updateDegreeOfMembership( Math.sqrt( value ) );
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing an OR operator. Can be used to construct
-	* fuzzy rules.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzyCompositeTerm
-	*/
-	class FuzzyOR extends FuzzyCompositeTerm {
-
-		/**
-		* Constructs a new fuzzy AND operator with the given values. The constructor
-		* accepts and arbitrary amount of fuzzy terms.
-		*/
-		constructor() {
-
-			const terms = Array.from( arguments );
-
-			super( terms );
-
-		}
-
-		/**
-		* Returns the degree of membership. The AND operator returns the maximum
-		* degree of membership of the sets it is operating on.
-		*
-		* @return {Number} Degree of membership.
-		*/
-		getDegreeOfMembership() {
-
-			const terms = this.terms;
-			let maxDOM = - Infinity;
-
-			for ( let i = 0, l = terms.length; i < l; i ++ ) {
-
-				const term = terms[ i ];
-				const currentDOM = term.getDegreeOfMembership();
-
-				if ( currentDOM > maxDOM ) maxDOM = currentDOM;
-
-			}
-
-			return maxDOM;
-
-		}
-
-	}
-
-	/**
-	* Hedges are special unary operators that can be employed to modify the meaning
-	* of a fuzzy set. The FAIRLY fuzzy hedge widens the membership function.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzyCompositeTerm
-	*/
-	class FuzzyVERY extends FuzzyCompositeTerm {
-
-		/**
-		* Constructs a new fuzzy VERY hedge with the given values.
-		*
-		* @param {FuzzyTerm} fuzzyTerm - The fuzzy term this hedge is working on.
-		*/
-		constructor( fuzzyTerm = null ) {
-
-			const terms = ( fuzzyTerm !== null ) ? [ fuzzyTerm ] : new Array();
-
-			super( terms );
-
-		}
-
-		// FuzzyTerm API
-
-		/**
-		* Clears the degree of membership value.
-		*
-		* @return {FuzzyVERY} A reference to this fuzzy hedge.
-		*/
-		clearDegreeOfMembership() {
-
-			const fuzzyTerm = this.terms[ 0 ];
-			fuzzyTerm.clearDegreeOfMembership();
-
-			return this;
-
-		}
-
-		/**
-		* Returns the degree of membership.
-		*
-		* @return {Number} Degree of membership.
-		*/
-		getDegreeOfMembership() {
-
-			const fuzzyTerm = this.terms[ 0 ];
-			const dom = fuzzyTerm.getDegreeOfMembership();
-
-			return dom * dom;
-
-		}
-
-		/**
-		* Updates the degree of membership by the given value.
-		*
-		* @return {FuzzyVERY} A reference to this fuzzy hedge.
-		*/
-		updateDegreeOfMembership( value ) {
-
-			const fuzzyTerm = this.terms[ 0 ];
-			fuzzyTerm.updateDegreeOfMembership( value * value );
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Base class for fuzzy sets. This type of sets are defined by a membership function
-	* which can be any arbitrary shape but are typically triangular or trapezoidal. They define
-	* a gradual transition from regions completely outside the set to regions completely
-	* within the set, thereby enabling a value to have partial membership to a set.
-	*
-	* This class is derived from {@link FuzzyTerm} so it can be directly used in fuzzy rules.
-	* According to the composite design pattern, a fuzzy set can be considered as an atomic fuzzy term.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzyTerm
-	*/
-	class FuzzySet extends FuzzyTerm {
-
-		/**
-		* Constructs a new fuzzy set with the given values.
-		*
-		* @param {Number} representativeValue - The maximum of the set's membership function.
-		*/
-		constructor( representativeValue = 0 ) {
-
-			super();
-
-			/**
-			* Represents the degree of membership to this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.degreeOfMembership = 0;
-
-			/**
-			* The maximum of the set's membership function. For instance, if
-			* the set is triangular then this will be the peak point of the triangular.
-			* If the set has a plateau then this value will be the mid point of the
-			* plateau. Used to avoid runtime calculations.
-			* @type Number
-			* @default 0
-			*/
-			this.representativeValue = representativeValue;
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = 0;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = 0;
-
-			//
-
-			this._uuid = null;
-
-		}
-
-		get uuid() {
-
-			if ( this._uuid === null ) {
-
-				this._uuid = MathUtils.generateUUID();
-
-			}
-
-			return this._uuid;
-
-		}
-
-		set uuid( uuid ) {
-
-			this._uuid = uuid;
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value. Notice that this method
-		* does not set {@link FuzzySet#degreeOfMembership} since other classes use it in
-		* order to calculate intermediate degree of membership values. This method be
-		* implemented by all concrete fuzzy set classes.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( /* value */ ) {}
-
-		// FuzzyTerm API
-
-		/**
-		* Clears the degree of membership value.
-		*
-		* @return {FuzzySet} A reference to this fuzzy set.
-		*/
-		clearDegreeOfMembership() {
-
-			this.degreeOfMembership = 0;
-
-			return this;
-
-		}
-
-		/**
-		* Returns the degree of membership.
-		*
-		* @return {Number} Degree of membership.
-		*/
-		getDegreeOfMembership() {
-
-			return this.degreeOfMembership;
-
-		}
-
-		/**
-		* Updates the degree of membership by the given value. This method is used when
-		* the set is part of a fuzzy rule's consequent.
-		*
-		* @return {FuzzySet} A reference to this fuzzy set.
-		*/
-		updateDegreeOfMembership( value ) {
-
-			// update the degree of membership if the given value is greater than the
-			// existing one
-
-			if ( value > this.degreeOfMembership ) this.degreeOfMembership = value;
-
-			return this;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.degreeOfMembership = this.degreeOfMembership;
-			json.representativeValue = this.representativeValue;
-			json.left = this.left;
-			json.right = this.right;
-			json.uuid = this.uuid;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {FuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			this.degreeOfMembership = json.degreeOfMembership;
-			this.representativeValue = json.representativeValue;
-			this.left = json.left;
-			this.right = json.right;
-			this.uuid = json.uuid;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy set that has a s-shape membership function with
-	* values from highest to lowest.
-	*
-	* @author {@link https://github.com/robp94|robp94}
-	* @augments FuzzySet
-	*/
-	class LeftSCurveFuzzySet extends FuzzySet {
-
-		/**
-		* Constructs a new S-curve fuzzy set with the given values.
-		*
-		* @param {Number} left - Represents the left border of this fuzzy set.
-		* @param {Number} midpoint - Represents the peak value of this fuzzy set.
-		* @param {Number} right - Represents the right border of this fuzzy set.
-		*/
-		constructor( left = 0, midpoint = 0, right = 0 ) {
-
-			// the representative value is the midpoint of the plateau of the shoulder
-
-			const representativeValue = ( midpoint + left ) / 2;
-
-			super( representativeValue );
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = left;
-
-			/**
-			* Represents the peak value of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.midpoint = midpoint;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = right;
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( value ) {
-
-			const midpoint = this.midpoint;
-			const left = this.left;
-			const right = this.right;
-
-			// find DOM if the given value is left of the center or equal to the center
-
-			if ( ( value >= left ) && ( value <= midpoint ) ) {
-
-				return 1;
-
-			}
-
-			// find DOM if the given value is right of the midpoint
-
-			if ( ( value > midpoint ) && ( value <= right ) ) {
-
-				if ( value >= ( ( midpoint + right ) / 2 ) ) {
-
-					return 2 * ( Math.pow( ( value - right ) / ( midpoint - right ), 2 ) );
-
-				} else { //todo test
-
-					return 1 - ( 2 * ( Math.pow( ( value - midpoint ) / ( midpoint - right ), 2 ) ) );
-
-				}
-
-			}
-
-			// out of range
-
-			return 0;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.midpoint = this.midpoint;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {LeftSCurveFuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.midpoint = json.midpoint;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy set that has a left shoulder shape. The range between
-	* the midpoint and left border point represents the same DOM.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzySet
-	*/
-	class LeftShoulderFuzzySet extends FuzzySet {
-
-		/**
-		* Constructs a new left shoulder fuzzy set with the given values.
-		*
-		* @param {Number} left - Represents the left border of this fuzzy set.
-		* @param {Number} midpoint - Represents the peak value of this fuzzy set.
-		* @param {Number} right - Represents the right border of this fuzzy set.
-		*/
-		constructor( left = 0, midpoint = 0, right = 0 ) {
-
-			// the representative value is the midpoint of the plateau of the shoulder
-
-			const representativeValue = ( midpoint + left ) / 2;
-
-			super( representativeValue );
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = left;
-
-			/**
-			* Represents the peak value of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.midpoint = midpoint;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = right;
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( value ) {
-
-			const midpoint = this.midpoint;
-			const left = this.left;
-			const right = this.right;
-
-			// find DOM if the given value is left of the center or equal to the center
-
-			if ( ( value >= left ) && ( value <= midpoint ) ) {
-
-				return 1;
-
-			}
-
-			// find DOM if the given value is right of the midpoint
-
-			if ( ( value > midpoint ) && ( value <= right ) ) {
-
-				const grad = 1 / ( right - midpoint );
-
-				return grad * ( right - value );
-
-			}
-
-			// out of range
-
-			return 0;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.midpoint = this.midpoint;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {LeftShoulderFuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.midpoint = json.midpoint;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy set that has a normal distribution shape. It can be defined
-	* by the mean and standard deviation.
-	*
-	* @author {@link https://github.com/robp94|robp94}
-	* @augments FuzzySet
-	*/
-	class NormalDistFuzzySet extends FuzzySet {
-
-		/**
-		* Constructs a new triangular fuzzy set with the given values.
-		*
-		* @param {Number} left - Represents the left border of this fuzzy set.
-		* @param {Number} midpoint - Mean or expectation of the normal distribution.
-		* @param {Number} right - Represents the right border of this fuzzy set.
-		* @param {Number} standardDeviation - Standard deviation of the normal distribution.
-		*/
-		constructor( left = 0, midpoint = 0, right = 0, standardDeviation = 0 ) {
-
-			super( midpoint );
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = left;
-
-			/**
-			* Represents the peak value of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.midpoint = midpoint;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = right;
-
-			/**
-			* Represents the standard deviation of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.standardDeviation = standardDeviation;
-
-			//
-
-			this._cache = {};
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( value ) {
-
-			this._updateCache();
-
-			if ( value >= this.right || value <= this.left ) return 0;
-
-			return probabilityDensity( value, this.midpoint, this._cache.variance ) / this._cache.normalizationFactor;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.midpoint = this.midpoint;
-			json.standardDeviation = this.standardDeviation;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {NormalDistFuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.midpoint = json.midpoint;
-			this.standardDeviation = json.standardDeviation;
-
-			return this;
-
-		}
-
-		//
-
-		_updateCache() {
-
-			const cache =	this._cache;
-			const midpoint = this.midpoint;
-			const standardDeviation = this.standardDeviation;
-
-			if ( midpoint !== cache.midpoint || standardDeviation !== cache.standardDeviation ) {
-
-				const variance = standardDeviation * standardDeviation;
-
-				cache.midpoint = midpoint;
-				cache.standardDeviation = standardDeviation;
-				cache.variance = variance;
-
-				// this value is used to ensure the DOM lies in the range of [0,1]
-
-				cache.normalizationFactor = probabilityDensity( midpoint, midpoint, variance );
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	//
-
-	function probabilityDensity( x, mean, variance ) {
-
-		return ( 1 / Math.sqrt( 2 * Math.PI * variance ) ) * Math.exp( - ( Math.pow( ( x - mean ), 2 ) ) / ( 2 * variance ) );
-
-	}
-
-	/**
-	* Class for representing a fuzzy set that has a s-shape membership function with
-	* values from lowest to highest.
-	*
-	* @author {@link https://github.com/robp94|robp94}
-	* @augments FuzzySet
-	*/
-	class RightSCurveFuzzySet extends FuzzySet {
-
-		/**
-		* Constructs a new S-curve fuzzy set with the given values.
-		*
-		* @param {Number} left - Represents the left border of this fuzzy set.
-		* @param {Number} midpoint - Represents the peak value of this fuzzy set.
-		* @param {Number} right - Represents the right border of this fuzzy set.
-		*/
-		constructor( left = 0, midpoint = 0, right = 0 ) {
-
-			// the representative value is the midpoint of the plateau of the shoulder
-
-			const representativeValue = ( midpoint + right ) / 2;
-
-			super( representativeValue );
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = left;
-
-			/**
-			* Represents the peak value of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.midpoint = midpoint;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = right;
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( value ) {
-
-			const midpoint = this.midpoint;
-			const left = this.left;
-			const right = this.right;
-
-			// find DOM if the given value is left of the center or equal to the center
-
-			if ( ( value >= left ) && ( value <= midpoint ) ) {
-
-				if ( value <= ( ( left + midpoint ) / 2 ) ) {
-
-					return 2 * ( Math.pow( ( value - left ) / ( midpoint - left ), 2 ) );
-
-				} else {
-
-					return 1 - ( 2 * ( Math.pow( ( value - midpoint ) / ( midpoint - left ), 2 ) ) );
-
-				}
-
-
-			}
-
-			// find DOM if the given value is right of the midpoint
-
-			if ( ( value > midpoint ) && ( value <= right ) ) {
-
-				return 1;
-
-			}
-
-			// out of range
-
-			return 0;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.midpoint = this.midpoint;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {RightSCurveFuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.midpoint = json.midpoint;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy set that has a right shoulder shape. The range between
-	* the midpoint and right border point represents the same DOM.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzySet
-	*/
-	class RightShoulderFuzzySet extends FuzzySet {
-
-		/**
-		* Constructs a new right shoulder fuzzy set with the given values.
-		*
-		* @param {Number} left - Represents the left border of this fuzzy set.
-		* @param {Number} midpoint - Represents the peak value of this fuzzy set.
-		* @param {Number} right - Represents the right border of this fuzzy set.
-		*/
-		constructor( left = 0, midpoint = 0, right = 0 ) {
-
-			// the representative value is the midpoint of the plateau of the shoulder
-
-			const representativeValue = ( midpoint + right ) / 2;
-
-			super( representativeValue );
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = left;
-
-			/**
-			* Represents the peak value of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.midpoint = midpoint;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = right;
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( value ) {
-
-			const midpoint = this.midpoint;
-			const left = this.left;
-			const right = this.right;
-
-			// find DOM if the given value is left of the center or equal to the center
-
-			if ( ( value >= left ) && ( value <= midpoint ) ) {
-
-				const grad = 1 / ( midpoint - left );
-
-				return grad * ( value - left );
-
-			}
-
-			// find DOM if the given value is right of the midpoint
-
-			if ( ( value > midpoint ) && ( value <= right ) ) {
-
-				return 1;
-
-			}
-
-			// out of range
-
-			return 0;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.midpoint = this.midpoint;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {RightShoulderFuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.midpoint = json.midpoint;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy set that is a singleton. In its range, the degree of
-	* membership is always one.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzySet
-	*/
-	class SingletonFuzzySet extends FuzzySet {
-
-		/**
-		* Constructs a new singleton fuzzy set with the given values.
-		*
-		* @param {Number} left - Represents the left border of this fuzzy set.
-		* @param {Number} midpoint - Represents the peak value of this fuzzy set.
-		* @param {Number} right - Represents the right border of this fuzzy set.
-		*/
-		constructor( left = 0, midpoint = 0, right = 0 ) {
-
-			super( midpoint );
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = left;
-
-			/**
-			* Represents the peak value of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.midpoint = midpoint;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = right;
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( value ) {
-
-			const left = this.left;
-			const right = this.right;
-
-			return ( value >= left && value <= right ) ? 1 : 0;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.midpoint = this.midpoint;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {SingletonFuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.midpoint = json.midpoint;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy set that has a triangular shape. It can be defined
-	* by a left point, a midpoint (peak) and a right point.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments FuzzySet
-	*/
-	class TriangularFuzzySet extends FuzzySet {
-
-		/**
-		* Constructs a new triangular fuzzy set with the given values.
-		*
-		* @param {Number} left - Represents the left border of this fuzzy set.
-		* @param {Number} midpoint - Represents the peak value of this fuzzy set.
-		* @param {Number} right - Represents the right border of this fuzzy set.
-		*/
-		constructor( left = 0, midpoint = 0, right = 0 ) {
-
-			super( midpoint );
-
-			/**
-			* Represents the left border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.left = left;
-
-			/**
-			* Represents the peak value of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.midpoint = midpoint;
-
-			/**
-			* Represents the right border of this fuzzy set.
-			* @type Number
-			* @default 0
-			*/
-			this.right = right;
-
-		}
-
-		/**
-		* Computes the degree of membership for the given value.
-		*
-		* @param {Number} value - The value used to calculate the degree of membership.
-		* @return {Number} The degree of membership.
-		*/
-		computeDegreeOfMembership( value ) {
-
-			const midpoint = this.midpoint;
-			const left = this.left;
-			const right = this.right;
-
-			// find DOM if the given value is left of the center or equal to the center
-
-			if ( ( value >= left ) && ( value <= midpoint ) ) {
-
-				const grad = 1 / ( midpoint - left );
-
-				return grad * ( value - left );
-
-			}
-
-			// find DOM if the given value is right of the center
-
-			if ( ( value > midpoint ) && ( value <= right ) ) {
-
-				const grad = 1 / ( right - midpoint );
-
-				return grad * ( right - value );
-
-			}
-
-			// out of range
-
-			return 0;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.midpoint = this.midpoint;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {TriangularFuzzySet} A reference to this fuzzy set.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.midpoint = json.midpoint;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy rule. Fuzzy rules are comprised of an antecedent and
-	* a consequent in the form: IF antecedent THEN consequent.
-	*
-	* Compared to ordinary if/else statements with discrete values, the consequent term
-	* of a fuzzy rule can fire to a matter of degree.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class FuzzyRule {
-
-		/**
-		* Constructs a new fuzzy rule with the given values.
-		*
-		* @param {FuzzyTerm} antecedent - Represents the condition of the rule.
-		* @param {FuzzyTerm} consequence - Describes the consequence if the condition is satisfied.
-		*/
-		constructor( antecedent = null, consequence = null ) {
-
-			/**
-			* Represents the condition of the rule.
-			* @type FuzzyTerm
-			* @default null
-			*/
-			this.antecedent = antecedent;
-
-			/**
-			* Describes the consequence if the condition is satisfied.
-			* @type FuzzyTerm
-			* @default null
-			*/
-			this.consequence = consequence;
-
-		}
-
-		/**
-		* Initializes the consequent term of this fuzzy rule.
-		*
-		* @return {FuzzyRule} A reference to this fuzzy rule.
-		*/
-		initConsequence() {
-
-			this.consequence.clearDegreeOfMembership();
-
-			return this;
-
-		}
-
-		/**
-		* Evaluates the rule and updates the degree of membership of the consequent term with
-		* the degree of membership of the antecedent term.
-		*
-		* @return {FuzzyRule} A reference to this fuzzy rule.
-		*/
-		evaluate() {
-
-			this.consequence.updateDegreeOfMembership( this.antecedent.getDegreeOfMembership() );
-
-			return this;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = {};
-
-			const antecedent = this.antecedent;
-			const consequence = this.consequence;
-
-			json.type = this.constructor.name;
-			json.antecedent = ( antecedent instanceof FuzzyCompositeTerm ) ? antecedent.toJSON() : antecedent.uuid;
-			json.consequence = ( consequence instanceof FuzzyCompositeTerm ) ? consequence.toJSON() : consequence.uuid;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @param {Map} fuzzySets - Maps fuzzy sets to UUIDs.
-		* @return {FuzzyRule} A reference to this fuzzy rule.
-		*/
-		fromJSON( json, fuzzySets ) {
-
-			function parseTerm( termJSON ) {
-
-				if ( typeof termJSON === 'string' ) {
-
-					// atomic term -> FuzzySet
-
-					const uuid = termJSON;
-					return fuzzySets.get( uuid ) || null;
-
-				} else {
-
-					// composite term
-
-					const type = termJSON.type;
-
-					let term;
-
-					switch ( type ) {
-
-						case 'FuzzyAND':
-							term = new FuzzyAND();
-							break;
-
-						case 'FuzzyOR':
-							term = new FuzzyOR();
-							break;
-
-						case 'FuzzyVERY':
-							term = new FuzzyVERY();
-							break;
-
-						case 'FuzzyFAIRLY':
-							term = new FuzzyFAIRLY();
-							break;
-
-						default:
-							Logger.error( 'YUKA.FuzzyRule: Unsupported operator type:', type );
-							return;
-
-					}
-
-					const termsJSON = termJSON.terms;
-
-					for ( let i = 0, l = termsJSON.length; i < l; i ++ ) {
-
-						// recursively parse all subordinate terms
-
-						term.terms.push( parseTerm( termsJSON[ i ] ) );
-
-					}
-
-					return term;
-
-				}
-
-			}
-
-			this.antecedent = parseTerm( json.antecedent );
-			this.consequence = parseTerm( json.consequence );
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy linguistic variable (FLV). A FLV is the
-	* composition of one or more fuzzy sets to represent a concept or domain
-	* qualitatively. For example fuzzs sets "Dumb", "Average", and "Clever"
-	* are members of the fuzzy linguistic variable "IQ".
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class FuzzyVariable {
-
-		/**
-		* Constructs a new fuzzy linguistic variable.
-		*/
-		constructor() {
-
-			/**
-			* An array of the fuzzy sets that comprise this FLV.
-			* @type Array
-			*/
-			this.fuzzySets = new Array();
-
-			/**
-			* The minimum value range of this FLV. This value is
-			* automatically updated when adding/removing fuzzy sets.
-			* @type Number
-			* @default Infinity
-			*/
-			this.minRange = Infinity;
-
-			/**
-			* The maximum value range of this FLV. This value is
-			* automatically updated when adding/removing fuzzy sets.
-			* @type Number
-			* @default - Infinity
-			*/
-			this.maxRange = - Infinity;
-
-		}
-
-		/**
-		* Adds the given fuzzy set to this FLV.
-		*
-		* @param {FuzzySet} fuzzySet - The fuzzy set to add.
-		* @return {FuzzyVariable} A reference to this FLV.
-		*/
-		add( fuzzySet ) {
-
-			this.fuzzySets.push( fuzzySet );
-
-			// adjust range
-
-			if ( fuzzySet.left < this.minRange ) this.minRange = fuzzySet.left;
-			if ( fuzzySet.right > this.maxRange ) this.maxRange = fuzzySet.right;
-
-			return this;
-
-		}
-
-		/**
-		* Removes the given fuzzy set from this FLV.
-		*
-		* @param {FuzzySet} fuzzySet - The fuzzy set to remove.
-		* @return {FuzzyVariable} A reference to this FLV.
-		*/
-		remove( fuzzySet ) {
-
-			const fuzzySets = this.fuzzySets;
-
-			const index = fuzzySets.indexOf( fuzzySet );
-			fuzzySets.splice( index, 1 );
-
-			// iterate over all fuzzy sets to recalculate the min/max range
-
-			this.minRange = Infinity;
-			this.maxRange = - Infinity;
-
-			for ( let i = 0, l = fuzzySets.length; i < l; i ++ ) {
-
-				const fuzzySet = fuzzySets[ i ];
-
-				if ( fuzzySet.left < this.minRange ) this.minRange = fuzzySet.left;
-				if ( fuzzySet.right > this.maxRange ) this.maxRange = fuzzySet.right;
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Fuzzifies a value by calculating its degree of membership in each of
-		* this variable's fuzzy sets.
-		*
-		* @param {Number} value - The crips value to fuzzify.
-		* @return {FuzzyVariable} A reference to this FLV.
-		*/
-		fuzzify( value ) {
-
-			if ( value < this.minRange || value > this.maxRange ) {
-
-				Logger.warn( 'YUKA.FuzzyVariable: Value for fuzzification out of range.' );
-				return;
-
-			}
-
-			const fuzzySets = this.fuzzySets;
-
-			for ( let i = 0, l = fuzzySets.length; i < l; i ++ ) {
-
-				const fuzzySet = fuzzySets[ i ];
-
-				fuzzySet.degreeOfMembership = fuzzySet.computeDegreeOfMembership( value );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Defuzzifies the FLV using the "Average of Maxima" (MaxAv) method.
-		*
-		* @return {Number} The defuzzified, crips value.
-		*/
-		defuzzifyMaxAv() {
-
-			// the average of maxima (MaxAv for short) defuzzification method scales the
-			// representative value of each fuzzy set by its DOM and takes the average
-
-			const fuzzySets = this.fuzzySets;
-
-			let bottom = 0;
-			let top = 0;
-
-			for ( let i = 0, l = fuzzySets.length; i < l; i ++ ) {
-
-				const fuzzySet = fuzzySets[ i ];
-
-				bottom += fuzzySet.degreeOfMembership;
-				top += fuzzySet.representativeValue * fuzzySet.degreeOfMembership;
-
-			}
-
-			return ( bottom === 0 ) ? 0 : ( top / bottom );
-
-		}
-
-		/**
-		* Defuzzifies the FLV using the "Centroid" method.
-		*
-		* @param {Number} samples - The amount of samples used for defuzzification.
-		* @return {Number} The defuzzified, crips value.
-		*/
-		defuzzifyCentroid( samples = 10 ) {
-
-			const fuzzySets = this.fuzzySets;
-
-			const stepSize = ( this.maxRange - this.minRange ) / samples;
-
-			let totalArea = 0;
-			let sumOfMoments = 0;
-
-			for ( let s = 1; s <= samples; s ++ ) {
-
-				const sample = this.minRange + ( s * stepSize );
-
-				for ( let i = 0, l = fuzzySets.length; i < l; i ++ ) {
-
-					const fuzzySet = fuzzySets[ i ];
-
-					const contribution = Math.min( fuzzySet.degreeOfMembership, fuzzySet.computeDegreeOfMembership( sample ) );
-
-					totalArea += contribution;
-
-					sumOfMoments += ( sample * contribution );
-
-				}
-
-			}
-
-			return ( totalArea === 0 ) ? 0 : ( sumOfMoments / totalArea );
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = {
-				type: this.constructor.name,
-				fuzzySets: new Array(),
-				minRange: this.minRange.toString(),
-				maxRange: this.maxRange.toString(),
-			};
-
-			for ( let i = 0, l = this.fuzzySets.length; i < l; i ++ ) {
-
-				const fuzzySet = this.fuzzySets[ i ];
-				json.fuzzySets.push( fuzzySet.toJSON() );
-
-			}
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {FuzzyVariable} A reference to this fuzzy variable.
-		*/
-		fromJSON( json ) {
-
-			this.minRange = parseFloat( json.minRange );
-			this.maxRange = parseFloat( json.maxRange );
-
-			for ( let i = 0, l = json.fuzzySets.length; i < l; i ++ ) {
-
-				const fuzzySetJson = json.fuzzySets[ i ];
-
-				let type = fuzzySetJson.type;
-
-				switch ( type ) {
-
-					case 'LeftShoulderFuzzySet':
-						this.fuzzySets.push( new LeftShoulderFuzzySet().fromJSON( fuzzySetJson ) );
-						break;
-
-					case 'RightShoulderFuzzySet':
-						this.fuzzySets.push( new RightShoulderFuzzySet().fromJSON( fuzzySetJson ) );
-						break;
-
-					case 'SingletonFuzzySet':
-						this.fuzzySets.push( new SingletonFuzzySet().fromJSON( fuzzySetJson ) );
-						break;
-
-					case 'TriangularFuzzySet':
-						this.fuzzySets.push( new TriangularFuzzySet().fromJSON( fuzzySetJson ) );
-						break;
-
-					default:
-						Logger.error( 'YUKA.FuzzyVariable: Unsupported fuzzy set type:', fuzzySetJson.type );
-
-				}
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing a fuzzy module. Instances of this class are used by
-	* game entities for fuzzy inference. A fuzzy module is a collection of fuzzy variables
-	* and the rules that operate on them.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class FuzzyModule {
-
-		/**
-		* Constructs a new fuzzy module.
-		*/
-		constructor() {
-
-			/**
-			* An array of the fuzzy rules.
-			* @type Array
-			*/
-			this.rules = new Array();
-
-			/**
-			* A map of FLVs.
-			* @type Map
-			*/
-			this.flvs = new Map();
-
-		}
-
-		/**
-		* Adds the given FLV under the given name to this fuzzy module.
-		*
-		* @param {String} name - The name of the FLV.
-		* @param {FuzzyVariable} flv - The FLV to add.
-		* @return {FuzzyModule} A reference to this fuzzy module.
-		*/
-		addFLV( name, flv ) {
-
-			this.flvs.set( name, flv );
-
-			return this;
-
-		}
-
-		/**
-		* Remove the FLV under the given name from this fuzzy module.
-		*
-		* @param {String} name - The name of the FLV to remove.
-		* @return {FuzzyModule} A reference to this fuzzy module.
-		*/
-		removeFLV( name ) {
-
-			this.flvs.delete( name );
-
-			return this;
-
-		}
-
-		/**
-		* Adds the given fuzzy rule to this fuzzy module.
-		*
-		* @param {FuzzyRule} rule - The fuzzy rule to add.
-		* @return {FuzzyModule} A reference to this fuzzy module.
-		*/
-		addRule( rule ) {
-
-			this.rules.push( rule );
-
-			return this;
-
-		}
-
-		/**
-		* Removes the given fuzzy rule from this fuzzy module.
-		*
-		* @param {FuzzyRule} rule - The fuzzy rule to remove.
-		* @return {FuzzyModule} A reference to this fuzzy module.
-		*/
-		removeRule( rule ) {
-
-			const rules = this.rules;
-
-			const index = rules.indexOf( rule );
-			rules.splice( index, 1 );
-
-			return this;
-
-		}
-
-		/**
-		* Calls the fuzzify method of the defined FLV with the given value.
-		*
-		* @param {String} name - The name of the FLV
-		* @param {Number} value - The crips value to fuzzify.
-		* @return {FuzzyModule} A reference to this fuzzy module.
-		*/
-		fuzzify( name, value ) {
-
-			const flv = this.flvs.get( name );
-
-			flv.fuzzify( value );
-
-			return this;
-
-		}
-
-		/**
-		* Given a fuzzy variable and a defuzzification method this returns a crisp value.
-		*
-		* @param {String} name - The name of the FLV
-		* @param {String} type - The type of defuzzification.
-		* @return {Number} The defuzzified, crips value.
-		*/
-		defuzzify( name, type = FuzzyModule.DEFUZ_TYPE.MAXAV ) {
-
-			const flvs = this.flvs;
-			const rules = this.rules;
-
-			this._initConsequences();
-
-			for ( let i = 0, l = rules.length; i < l; i ++ ) {
-
-				const rule = rules[ i ];
-
-				rule.evaluate();
-
-			}
-
-			const flv = flvs.get( name );
-
-			let value;
-
-			switch ( type ) {
-
-				case FuzzyModule.DEFUZ_TYPE.MAXAV:
-					value = flv.defuzzifyMaxAv();
-					break;
-
-				case FuzzyModule.DEFUZ_TYPE.CENTROID:
-					value = flv.defuzzifyCentroid();
-					break;
-
-				default:
-					Logger.warn( 'YUKA.FuzzyModule: Unknown defuzzification method:', type );
-					value = flv.defuzzifyMaxAv(); // use MaxAv as fallback
-
-			}
-
-			return value;
-
-		}
-
-		_initConsequences() {
-
-			const rules = this.rules;
-
-			// initializes the consequences of all rules.
-
-			for ( let i = 0, l = rules.length; i < l; i ++ ) {
-
-				const rule = rules[ i ];
-
-				rule.initConsequence();
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = {
-				rules: new Array(),
-				flvs: new Array()
-			};
-
-			// rules
-
-			const rules = this.rules;
-
-			for ( let i = 0, l = rules.length; i < l; i ++ ) {
-
-				json.rules.push( rules[ i ].toJSON() );
-
-			}
-
-			// flvs
-
-			const flvs = this.flvs;
-
-			for ( let [ name, flv ] of flvs ) {
-
-				json.flvs.push( { name: name, flv: flv.toJSON() } );
-
-			}
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {FuzzyModule} A reference to this fuzzy module.
-		*/
-		fromJSON( json ) {
-
-			const fuzzySets = new Map(); // used for rules
-
-			// flvs
-
-			const flvsJSON = json.flvs;
-
-			for ( let i = 0, l = flvsJSON.length; i < l; i ++ ) {
-
-				const flvJSON = flvsJSON[ i ];
-				const name = flvJSON.name;
-				const flv = new FuzzyVariable().fromJSON( flvJSON.flv );
-
-				this.addFLV( name, flv );
-
-				for ( let fuzzySet of flv.fuzzySets ) {
-
-					fuzzySets.set( fuzzySet.uuid, fuzzySet );
-
-				}
-
-			}
-
-			// rules
-
-			const rulesJSON = json.rules;
-
-			for ( let i = 0, l = rulesJSON.length; i < l; i ++ ) {
-
-				const ruleJSON = rulesJSON[ i ];
-				const rule = new FuzzyRule().fromJSON( ruleJSON, fuzzySets );
-
-				this.addRule( rule );
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	FuzzyModule.DEFUZ_TYPE = Object.freeze( {
-		MAXAV: 0,
-		CENTROID: 1
-	} );
-
-	/**
-	* Base class for representing a goal in context of Goal-driven agent design.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class Goal {
-
-		/**
-		* Constructs a new goal.
-		*
-		* @param {GameEntity} owner - The owner of this goal.
-		*/
-		constructor( owner = null ) {
-
-			/**
-			* The owner of this goal.
-			* @type GameEntity
-			*/
-			this.owner = owner;
-
-			/**
-			* The status of this goal.
-			* @type Status
-			* @default INACTIVE
-			*/
-			this.status = Goal.STATUS.INACTIVE;
-
-		}
-
-		/**
-		* Executed when this goal is activated.
-		*/
-		activate() {}
-
-		/**
-		* Executed in each simulation step.
-		*/
-		execute() {}
-
-		/**
-		* Executed when this goal is satisfied.
-		*/
-		terminate() {}
-
-		/**
-		* Goals can handle messages. Many don't though, so this defines a default behavior
-		*
-		* @param {Telegram} telegram - The telegram with the message data.
-		* @return {Boolean} Whether the message was processed or not.
-		*/
-		handleMessage( /* telegram */ ) {
-
-			return false;
-
-		}
-
-		/**
-		* Returns true if the status of this goal is *ACTIVE*.
-		*
-		* @return {Boolean} Whether the goal is active or not.
-		*/
-		active() {
-
-			return this.status === Goal.STATUS.ACTIVE;
-
-		}
-
-		/**
-		* Returns true if the status of this goal is *INACTIVE*.
-		*
-		* @return {Boolean} Whether the goal is inactive or not.
-		*/
-		inactive() {
-
-			return this.status === Goal.STATUS.INACTIVE;
-
-		}
-
-		/**
-		* Returns true if the status of this goal is *COMPLETED*.
-		*
-		* @return {Boolean} Whether the goal is completed or not.
-		*/
-		completed() {
-
-			return this.status === Goal.STATUS.COMPLETED;
-
-		}
-
-		/**
-		* Returns true if the status of this goal is *FAILED*.
-		*
-		* @return {Boolean} Whether the goal is failed or not.
-		*/
-		failed() {
-
-			return this.status === Goal.STATUS.FAILED;
-
-		}
-
-		/**
-		* Ensures the goal is replanned if it has failed.
-		*
-		* @return {Goal} A reference to this goal.
-		*/
-		replanIfFailed() {
-
-			if ( this.failed() === true ) {
-
-				this.status = Goal.STATUS.INACTIVE;
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Ensures the goal is activated if it is inactive.
-		*
-		* @return {Goal} A reference to this goal.
-		*/
-		activateIfInactive() {
-
-			if ( this.inactive() === true ) {
-
-				this.status = Goal.STATUS.ACTIVE;
-
-				this.activate();
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			return {
-				type: this.constructor.name,
-				owner: this.owner.uuid,
-				status: this.status
-			};
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {Goal} A reference to this goal.
-		*/
-		fromJSON( json ) {
-
-			this.owner = json.owner; // uuid
-			this.status = json.status;
-
-			return this;
-
-		}
-
-		/**
-		* Restores UUIDs with references to GameEntity objects.
-		*
-		* @param {Map} entities - Maps game entities to UUIDs.
-		* @return {Goal} A reference to this goal.
-		*/
-		resolveReferences( entities ) {
-
-			this.owner = entities.get( this.owner ) || null;
-
-			return this;
-
-		}
-
-	}
-
-	Goal.STATUS = Object.freeze( {
-		ACTIVE: 'active', // the goal has been activated and will be processed each update step
-		INACTIVE: 'inactive', // the goal is waiting to be activated
-		COMPLETED: 'completed', // the goal has completed and will be removed on the next update
-		FAILED: 'failed' // the goal has failed and will either replan or be removed on the next update
-	} );
-
-	/**
-	* Class representing a composite goal. Essentially it's a goal which consists of subgoals.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments Goal
-	*/
-	class CompositeGoal extends Goal {
-
-		/**
-		* Constructs a new composite goal.
-		*
-		* @param {GameEntity} owner - The owner of this composite goal.
-		*/
-		constructor( owner = null ) {
-
-			super( owner );
-
-			/**
-			* A list of subgoals.
-			* @type Array
-			*/
-			this.subgoals = new Array();
-
-		}
-
-		/**
-		* Adds a goal as a subgoal to this instance.
-		*
-		* @param {Goal} goal - The subgoal to add.
-		* @return {Goal} A reference to this goal.
-		*/
-		addSubgoal( goal ) {
-
-			this.subgoals.unshift( goal );
-
-			return this;
-
-		}
-
-		/**
-		* Removes a subgoal from this instance.
-		*
-		* @param {Goal} goal - The subgoal to remove.
-		* @return {Goal} A reference to this goal.
-		*/
-		removeSubgoal( goal ) {
-
-			const index = this.subgoals.indexOf( goal );
-			this.subgoals.splice( index, 1 );
-
-			return this;
-
-		}
-
-		/**
-		* Removes all subgoals and ensures {@link Goal#terminate} is called
-		* for each subgoal.
-		*
-		* @return {Goal} A reference to this goal.
-		*/
-		clearSubgoals() {
-
-			const subgoals = this.subgoals;
-
-			for ( let i = 0, l = subgoals.length; i < l; i ++ ) {
-
-				const subgoal = subgoals[ i ];
-
-				subgoal.terminate();
-
-			}
-
-			subgoals.length = 0;
-
-			return this;
-
-		}
-
-		/**
-		* Returns the current subgoal. If no subgoals are defined, *null* is returned.
-		*
-		* @return {Goal} The current subgoal.
-		*/
-		currentSubgoal() {
-
-			const length = this.subgoals.length;
-
-			if ( length > 0 ) {
-
-				return this.subgoals[ length - 1 ];
-
-			} else {
-
-				return null;
-
-			}
-
-		}
-
-		/**
-		* Executes the current subgoal of this composite goal.
-		*
-		* @return {Status} The status of this composite subgoal.
-		*/
-		executeSubgoals() {
-
-			const subgoals = this.subgoals;
-
-			// remove all completed and failed goals from the back of the subgoal list
-
-			for ( let i = subgoals.length - 1; i >= 0; i -- ) {
-
-				const subgoal = subgoals[ i ];
-
-				if ( ( subgoal.completed() === true ) || ( subgoal.failed() === true ) ) {
-
-					// if the current subgoal is a composite goal, terminate its subgoals too
-
-					if ( subgoal instanceof CompositeGoal ) {
-
-						subgoal.clearSubgoals();
-
-					}
-
-					// terminate the subgoal itself
-
-					subgoal.terminate();
-					subgoals.pop();
-
-				} else {
-
-					break;
-
-				}
-
-			}
-
-			// if any subgoals remain, process the one at the back of the list
-
-			const subgoal = this.currentSubgoal();
-
-			if ( subgoal !== null ) {
-
-				subgoal.activateIfInactive();
-
-				subgoal.execute();
-
-				// if subgoal is completed but more subgoals are in the list, return 'ACTIVE'
-				// status in order to keep processing the list of subgoals
-
-				if ( ( subgoal.completed() === true ) && ( subgoals.length > 1 ) ) {
-
-					return Goal.STATUS.ACTIVE;
-
-				} else {
-
-					return subgoal.status;
-
-				}
-
-			} else {
-
-				return Goal.STATUS.COMPLETED;
-
-			}
-
-		}
-
-		/**
-		* Returns true if this composite goal has subgoals.
-		*
-		* @return {Boolean} Whether the composite goal has subgoals or not.
-		*/
-		hasSubgoals() {
-
-			return this.subgoals.length > 0;
-
-		}
-
-		/**
-		* Returns true if the given message was processed by the current subgoal.
-		*
-		* @return {Boolean} Whether the message was processed or not.
-		*/
-		handleMessage( telegram ) {
-
-			const subgoal = this.currentSubgoal();
-
-			if ( subgoal !== null ) {
-
-				return subgoal.handleMessage( telegram );
-
-			}
-
-			return false;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.subgoals = new Array();
-
-			for ( let i = 0, l = this.subgoals.length; i < l; i ++ ) {
-
-				const subgoal = this.subgoals[ i ];
-				json.subgoals.push( subgoal.toJSON() );
-
-			}
-
-			return json;
-
-		}
-
-		/**
-		* Restores UUIDs with references to GameEntity objects.
-		*
-		* @param {Map} entities - Maps game entities to UUIDs.
-		* @return {CompositeGoal} A reference to this composite goal.
-		*/
-		resolveReferences( entities ) {
-
-			super.resolveReferences( entities );
-
-			for ( let i = 0, l = this.subgoals.length; i < l; i ++ ) {
-
-				const subgoal = this.subgoals[ i ];
-				subgoal.resolveReferences( entities );
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Base class for representing a goal evaluator in context of Goal-driven agent design.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class GoalEvaluator {
-
-		/**
-		* Constructs a new goal evaluator.
-		*
-		* @param {Number} characterBias - Can be used to adjust the preferences of agents.
-		*/
-		constructor( characterBias = 1 ) {
-
-			/**
-			* Can be used to adjust the preferences of agents. When the desirability score
-			* for a goal has been evaluated, it is multiplied by this value.
-			* @type Number
-			* @default 1
-			*/
-			this.characterBias = characterBias;
-
-		}
-
-		/**
-		* Calculates the desirability. It's a score between 0 and 1 representing the desirability
-		* of a goal. This goal is considered as a top level strategy of the agent like *Explore* or
-		* *AttackTarget*. Must be implemented by all concrete goal evaluators.
-		*
-		* @param {GameEntity} owner - The owner of this goal evaluator.
-		* @return {Number} The desirability.
-		*/
-		calculateDesirability( /* owner */ ) {
-
-			return 0;
-
-		}
-
-		/**
-		* Executed if this goal evaluator produces the highest desirability. Must be implemented
-		* by all concrete goal evaluators.
-		*
-		* @param {GameEntity} owner - The owner of this goal evaluator.
-		*/
-		setGoal( /* owner */ ) {}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			return {
-				type: this.constructor.name,
-				characterBias: this.characterBias
-			};
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {GoalEvaluator} A reference to this goal evaluator.
-		*/
-		fromJSON( json ) {
-
-			this.characterBias = json.characterBias;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing the brain of a game entity.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments CompositeGoal
-	*/
-	class Think extends CompositeGoal {
-
-		/**
-		* Constructs a new *Think* object.
-		*
-		* @param {GameEntity} owner - The owner of this instance.
-		*/
-		constructor( owner = null ) {
-
-			super( owner );
-
-			/**
-			* A list of goal evaluators.
-			* @type Array
-			*/
-			this.evaluators = new Array();
-
-			//
-
-			this._typesMap = new Map();
-
-		}
-
-		/**
-		* Executed when this goal is activated.
-		*/
-		activate() {
-
-			this.arbitrate();
-
-		}
-
-		/**
-		* Executed in each simulation step.
-		*/
-		execute() {
-
-			this.activateIfInactive();
-
-			const subgoalStatus = this.executeSubgoals();
-
-			if ( subgoalStatus === Goal.STATUS.COMPLETED || subgoalStatus === Goal.STATUS.FAILED ) {
-
-				this.status = Goal.STATUS.INACTIVE;
-
-			}
-
-		}
-
-		/**
-		* Executed when this goal is satisfied.
-		*/
-		terminate() {
-
-			this.clearSubgoals();
-
-		}
-
-		/**
-		* Adds the given goal evaluator to this instance.
-		*
-		* @param {GoalEvaluator} evaluator - The goal evaluator to add.
-		* @return {Think} A reference to this instance.
-		*/
-		addEvaluator( evaluator ) {
-
-			this.evaluators.push( evaluator );
-
-			return this;
-
-		}
-
-		/**
-		* Removes the given goal evaluator from this instance.
-		*
-		* @param {GoalEvaluator} evaluator - The goal evaluator to remove.
-		* @return {Think} A reference to this instance.
-		*/
-		removeEvaluator( evaluator ) {
-
-			const index = this.evaluators.indexOf( evaluator );
-			this.evaluators.splice( index, 1 );
-
-			return this;
-
-		}
-
-		/**
-		* This method represents the top level decision process of an agent.
-		* It iterates through each goal evaluator and selects the one that
-		* has the highest score as the current goal.
-		*
-		* @return {Think} A reference to this instance.
-		*/
-		arbitrate() {
-
-			const evaluators = this.evaluators;
-
-			let bestDesirability = - 1;
-			let bestEvaluator = null;
-
-			// try to find the best top-level goal/strategy for the entity
-
-			for ( let i = 0, l = evaluators.length; i < l; i ++ ) {
-
-				const evaluator = evaluators[ i ];
-
-				let desirability = evaluator.calculateDesirability( this.owner );
-				desirability *= evaluator.characterBias;
-
-				if ( desirability >= bestDesirability ) {
-
-					bestDesirability = desirability;
-					bestEvaluator = evaluator;
-
-				}
-
-			}
-
-			// use the evaluator to set the respective goal
-
-			if ( bestEvaluator !== null ) {
-
-				bestEvaluator.setGoal( this.owner );
-
-			} else {
-
-				Logger.error( 'YUKA.Think: Unable to determine goal evaluator for game entity:', this.owner );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.evaluators = new Array();
-
-			for ( let i = 0, l = this.evaluators.length; i < l; i ++ ) {
-
-				const evaluator = this.evaluators[ i ];
-				json.evaluators.push( evaluator.toJSON() );
-
-			}
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {Think} A reference to this instance.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			const typesMap = this._typesMap;
-
-			this.evaluators.length = 0;
-			this.terminate();
-
-			// evaluators
-
-			for ( let i = 0, l = json.evaluators.length; i < l; i ++ ) {
-
-				const evaluatorJSON = json.evaluators[ i ];
-				const type = evaluatorJSON.type;
-
-				const ctor = typesMap.get( type );
-
-				if ( ctor !== undefined ) {
-
-					const evaluator = new ctor().fromJSON( evaluatorJSON );
-					this.evaluators.push( evaluator );
-
-				} else {
-
-					Logger.warn( 'YUKA.Think: Unsupported goal evaluator type:', type );
-					continue;
-
-				}
-
-			}
-
-			// goals
-
-			function parseGoal( goalJSON ) {
-
-				const type = goalJSON.type;
-
-				const ctor = typesMap.get( type );
-
-				if ( ctor !== undefined ) {
-
-					const goal = new ctor().fromJSON( goalJSON );
-
-					const subgoalsJSON = goalJSON.subgoals;
-
-					if ( subgoalsJSON !== undefined ) {
-
-						// composite goal
-
-						for ( let i = 0, l = subgoalsJSON.length; i < l; i ++ ) {
-
-							const subgoal = parseGoal( subgoalsJSON[ i ] );
-
-							if ( subgoal ) goal.subgoals.push( subgoal );
-
-						}
-
-					}
-
-					return goal;
-
-				} else {
-
-					Logger.warn( 'YUKA.Think: Unsupported goal evaluator type:', type );
-					return;
-
-				}
-
-			}
-
-			for ( let i = 0, l = json.subgoals.length; i < l; i ++ ) {
-
-				const subgoal = parseGoal( json.subgoals[ i ] );
-
-				if ( subgoal ) this.subgoals.push( subgoal );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Registers a custom type for deserialization. When calling {@link Think#fromJSON}
-		* this instance is able to pick the correct constructor in order to create custom
-		* goals or goal evaluators.
-		*
-		* @param {String} type - The name of the goal or goal evaluator.
-		* @param {Function} constructor - The constructor function.
-		* @return {Think} A reference to this instance.
-		*/
-		registerType( type, constructor ) {
-
-			this._typesMap.set( type, constructor );
-
-			return this;
-
-		}
-
-	}
-
 	/**
 	* Base class for graph edges.
 	*
@@ -12839,115 +8917,6 @@
 	}
 
 	/**
-	* Class for representing a heuristic for graph search algorithms based
-	* on the euclidean distance. The heuristic assumes that the node have
-	* a *position* property of type {@link Vector3}.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class HeuristicPolicyEuclid {
-
-		/**
-		* Calculates the euclidean distance between two nodes.
-		*
-		* @param {Graph} graph - The graph.
-		* @param {Number} source - The index of the source node.
-		* @param {Number} target - The index of the target node.
-		* @return {Number} The euclidean distance between both nodes.
-		*/
-		static calculate( graph, source, target ) {
-
-			const sourceNode = graph.getNode( source );
-			const targetNode = graph.getNode( target );
-
-			return sourceNode.position.distanceTo( targetNode.position );
-
-		}
-
-	}
-
-	/**
-	* Class for representing a heuristic for graph search algorithms based
-	* on the squared euclidean distance. The heuristic assumes that the node
-	* have a *position* property of type {@link Vector3}.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class HeuristicPolicyEuclidSquared {
-
-		/**
-		* Calculates the squared euclidean distance between two nodes.
-		*
-		* @param {Graph} graph - The graph.
-		* @param {Number} source - The index of the source node.
-		* @param {Number} target - The index of the target node.
-		* @return {Number} The squared euclidean distance between both nodes.
-		*/
-		static calculate( graph, source, target ) {
-
-			const sourceNode = graph.getNode( source );
-			const targetNode = graph.getNode( target );
-
-			return sourceNode.position.squaredDistanceTo( targetNode.position );
-
-		}
-
-	}
-
-	/**
-	* Class for representing a heuristic for graph search algorithms based
-	* on the manhattan distance. The heuristic assumes that the node
-	* have a *position* property of type {@link Vector3}.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class HeuristicPolicyManhattan {
-
-		/**
-		* Calculates the manhattan distance between two nodes.
-		*
-		* @param {Graph} graph - The graph.
-		* @param {Number} source - The index of the source node.
-		* @param {Number} target - The index of the target node.
-		* @return {Number} The manhattan distance between both nodes.
-		*/
-		static calculate( graph, source, target ) {
-
-			const sourceNode = graph.getNode( source );
-			const targetNode = graph.getNode( target );
-
-			return sourceNode.position.manhattanDistanceTo( targetNode.position );
-
-		}
-
-	}
-
-	/**
-	* Class for representing a heuristic for graph search algorithms based
-	* on Dijkstra's algorithm.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class HeuristicPolicyDijkstra {
-
-		/**
-		* This heuristic always returns *0*. The {@link AStar} algorithm
-		* behaves with this heuristic exactly like {@link Dijkstra}
-		*
-		* @param {Graph} graph - The graph.
-		* @param {Number} source - The index of the source node.
-		* @param {Number} target - The index of the target node.
-		* @return {Number} The manhattan distance between both nodes.
-		*/
-		static calculate( /* graph, source, target */ ) {
-
-			return 0;
-
-		}
-
-	}
-
-	/**
 	 * Class for representing a binary heap priority queue that enables
 	 * more efficient sorting of arrays. The implementation is based on
 	 * {@link https://github.com/mourner/tinyqueue tinyqueue}.
@@ -13094,6 +9063,34 @@
 	function defaultCompare( a, b ) {
 
 		return ( a < b ) ? - 1 : ( a > b ) ? 1 : 0;
+
+	}
+
+	/**
+	* Class for representing a heuristic for graph search algorithms based
+	* on the euclidean distance. The heuristic assumes that the node have
+	* a *position* property of type {@link Vector3}.
+	*
+	* @author {@link https://github.com/Mugen87|Mugen87}
+	*/
+	class HeuristicPolicyEuclid {
+
+		/**
+		* Calculates the euclidean distance between two nodes.
+		*
+		* @param {Graph} graph - The graph.
+		* @param {Number} source - The index of the source node.
+		* @param {Number} target - The index of the target node.
+		* @return {Number} The euclidean distance between both nodes.
+		*/
+		static calculate( graph, source, target ) {
+
+			const sourceNode = graph.getNode( source );
+			const targetNode = graph.getNode( target );
+
+			return sourceNode.position.distanceTo( targetNode.position );
+
+		}
 
 	}
 
@@ -13931,655 +9928,695 @@
 
 	}
 
-	const v1$3 = new Vector3();
-	const v2$1 = new Vector3();
-	const v3 = new Vector3();
-
-	const xAxis = new Vector3( 1, 0, 0 );
-	const yAxis = new Vector3( 0, 1, 0 );
-	const zAxis = new Vector3( 0, 0, 1 );
-
-	const triangle$1 = { a: new Vector3(), b: new Vector3(), c: new Vector3() };
-	const intersection = new Vector3();
-	const intersections = new Array();
-
 	/**
-	* Class representing a bounding volume hierarchy. The current implementation
-	* represents single BVH nodes as AABBs. It accepts arbitrary branching factors
-	* and can subdivide the given geometry until a defined hierarchy depth has been reached.
-	* Besides, the hierarchy construction is performed top-down and the algorithm only
-	* performs splits along the cardinal axes.
+	* Implementation of a half-edge data structure, also known as
+	* {@link https://en.wikipedia.org/wiki/Doubly_connected_edge_list Doubly connected edge list}.
 	*
-	* Reference: Bounding Volume Hierarchies in Real-Time Collision Detection
-	* by Christer Ericson (chapter 6).
-	*
-	* @author {@link https://github.com/robp94|robp94}
 	* @author {@link https://github.com/Mugen87|Mugen87}
 	*/
-	class BVH {
+	class HalfEdge {
 
 		/**
-		* Constructs a new BVH.
+		* Constructs a new half-edge.
 		*
-		* @param {Number} branchingFactor - The branching factor.
-		* @param {Number} depth - The maximum hierarchical depth.
-		* @param {Number} primitivesPerNode - The minimum amount of primitives per BVH node.
+		* @param {Vector3} vertex - The (origin) vertex of this half-edge.
 		*/
-		constructor( branchingFactor = 2, primitivesPerNode = 1, depth = 10 ) {
+		constructor( vertex = new Vector3() ) {
 
 			/**
-			* The branching factor (how many nodes per level).
-			* @type Number
-			* @default 2
+			* The (origin) vertex of this half-edge.
+			* @type Vector3
 			*/
-			this.branchingFactor = branchingFactor;
+			this.vertex = vertex;
 
 			/**
-			* The minimum amount of primitives per BVH node.
-			* @type Number
-			* @default 10
+			* A reference to the next half-edge.
+			* @type HalfEdge
 			*/
-			this.primitivesPerNode = primitivesPerNode;
+			this.next = null;
 
 			/**
-			* The maximum hierarchical depth.
-			* @type Number
-			* @default 10
+			* A reference to the previous half-edge.
+			* @type HalfEdge
 			*/
-			this.depth = depth;
+			this.prev = null;
 
 			/**
-			* The root BVH node.
-			* @type BVHNode
-			* @default null
+			* A reference to the opponent half-edge.
+			* @type HalfEdge
 			*/
-			this.root = null;
+			this.twin = null;
+
+			/**
+			* A reference to its polygon/face.
+			* @type Polygon
+			*/
+			this.polygon = null;
 
 		}
 
 		/**
-		* Computes a BVH for the given mesh geometry.
+		* Returns the tail of this half-edge. That's a reference to the previous
+		* half-edge vertex.
 		*
-		* @param {MeshGeometry} geometry - The mesh geometry.
-		* @return {BVH} A reference to this BVH.
+		* @return {Vector3} The tail vertex.
 		*/
-		fromMeshGeometry( geometry ) {
+		tail() {
 
-			this.root = new BVHNode();
+			return this.prev ? this.prev.vertex : null;
 
-			// primitives
+		}
 
-			const nonIndexedGeometry = geometry.toTriangleSoup();
-			const vertices = nonIndexedGeometry.vertices;
-			this.root.primitives.push( ...vertices );
+		/**
+		* Returns the head of this half-edge. That's a reference to the own vertex.
+		*
+		* @return {Vector3} The head vertex.
+		*/
+		head() {
 
-			// centroids
+			return this.vertex;
 
-			const primitives = this.root.primitives;
+		}
 
-			for ( let i = 0, l = primitives.length; i < l; i += 9 ) {
+		/**
+		* Computes the length of this half-edge.
+		*
+		* @return {Number} The length of this half-edge.
+		*/
+		length() {
 
-				v1$3.fromArray( primitives, i );
-				v2$1.fromArray( primitives, i + 3 );
-				v3.fromArray( primitives, i + 6 );
+			const tail = this.tail();
+			const head = this.head();
 
-				v1$3.add( v2$1 ).add( v3 ).divideScalar( 3 );
+			if ( tail !== null ) {
 
-				this.root.centroids.push( v1$3.x, v1$3.y, v1$3.z );
+				return tail.distanceTo( head );
 
 			}
 
-			// build
+			return - 1;
 
-			this.root.build( this.branchingFactor, this.primitivesPerNode, this.depth, 1 );
+		}
+
+		/**
+		* Computes the squared length of this half-edge.
+		*
+		* @return {Number} The squared length of this half-edge.
+		*/
+		squaredLength() {
+
+			const tail = this.tail();
+			const head = this.head();
+
+			if ( tail !== null ) {
+
+				return tail.squaredDistanceTo( head );
+
+			}
+
+			return - 1;
+
+		}
+
+		/**
+		* Links the given opponent half edge with this one.
+		*
+		* @param {HalfEdge} edge - The opponent edge to link.
+		* @return {HalfEdge} A reference to this half edge.
+		*/
+		linkOpponent( edge ) {
+
+			this.twin = edge;
+			edge.twin = this;
 
 			return this;
 
 		}
 
 		/**
-		* Executes the given callback for each node of the BVH.
+		* Computes the direction of this half edge. The method assumes the half edge
+		* has a valid reference to a previous half edge.
 		*
-		* @param {Function} callback - The callback to execute.
-		* @return {BVH} A reference to this BVH.
+		* @param {Vector3} result - The result vector.
+		* @return {Vector3} The result vector.
 		*/
-		traverse( callback ) {
+		getDirection( result ) {
 
-			this.root.traverse( callback );
+			return result.subVectors( this.vertex, this.prev.vertex ).normalize();
+
+		}
+
+	}
+
+	const v1$2 = new Vector3();
+	const v2 = new Vector3();
+	const d = new Vector3();
+
+	/**
+	* Class representing a plane in 3D space. The plane is specified in Hessian normal form.
+	*
+	* @author {@link https://github.com/Mugen87|Mugen87}
+	*/
+	class Plane {
+
+		/**
+		* Constructs a new plane with the given values.
+		*
+		* @param {Vector3} normal - The normal vector of the plane.
+		* @param {Number} constant - The distance of the plane from the origin.
+		*/
+		constructor( normal = new Vector3( 0, 0, 1 ), constant = 0 ) {
+
+			/**
+			* The normal vector of the plane.
+			* @type Vector3
+			*/
+			this.normal = normal;
+
+			/**
+			* The distance of the plane from the origin.
+			* @type Number
+			*/
+			this.constant = constant;
+
+		}
+
+		/**
+		* Sets the given values to this plane.
+		*
+		* @param {Vector3} normal - The normal vector of the plane.
+		* @param {Number} constant - The distance of the plane from the origin.
+		* @return {Plane} A reference to this plane.
+		*/
+		set( normal, constant ) {
+
+			this.normal = normal;
+			this.constant = constant;
 
 			return this;
+
+		}
+
+		/**
+		* Copies all values from the given plane to this plane.
+		*
+		* @param {Plane} plane - The plane to copy.
+		* @return {Plane} A reference to this plane.
+		*/
+		copy( plane ) {
+
+			this.normal.copy( plane.normal );
+			this.constant = plane.constant;
+
+			return this;
+
+		}
+
+		/**
+		* Creates a new plane and copies all values from this plane.
+		*
+		* @return {Plane} A new plane.
+		*/
+		clone() {
+
+			return new this.constructor().copy( this );
+
+		}
+
+		/**
+		* Computes the signed distance from the given 3D vector to this plane.
+		* The sign of the distance indicates the half-space in which the points lies.
+		* Zero means the point lies on the plane.
+		*
+		* @param {Vector3} point - A point in 3D space.
+		* @return {Number} The signed distance.
+		*/
+		distanceToPoint( point ) {
+
+			return this.normal.dot( point ) + this.constant;
+
+		}
+
+		/**
+		* Sets the values of the plane from the given normal vector and a coplanar point.
+		*
+		* @param {Vector3} normal - A normalized vector.
+		* @param {Vector3} point - A coplanar point.
+		* @return {Plane} A reference to this plane.
+		*/
+		fromNormalAndCoplanarPoint( normal, point ) {
+
+			this.normal.copy( normal );
+			this.constant = - point.dot( this.normal );
+
+			return this;
+
+		}
+
+		/**
+		* Sets the values of the plane from three given coplanar points.
+		*
+		* @param {Vector3} a - A coplanar point.
+		* @param {Vector3} b - A coplanar point.
+		* @param {Vector3} c - A coplanar point.
+		* @return {Plane} A reference to this plane.
+		*/
+		fromCoplanarPoints( a, b, c ) {
+
+			v1$2.subVectors( c, b ).cross( v2.subVectors( a, b ) ).normalize();
+
+			this.fromNormalAndCoplanarPoint( v1$2, a );
+
+			return this;
+
+		}
+
+		/**
+		* Performs a plane/plane intersection test and stores the intersection point
+		* to the given 3D vector. If no intersection is detected, *null* is returned.
+		*
+		* Reference: Intersection of Two Planes in Real-Time Collision Detection
+		* by Christer Ericson (chapter 5.4.4)
+		*
+		* @param {Plane} plane - The plane to test.
+		* @param {Vector3} result - The result vector.
+		* @return {Vector3} The result vector.
+		*/
+		intersectPlane( plane, result ) {
+
+			// compute direction of intersection line
+
+			d.crossVectors( this.normal, plane.normal );
+
+			// if d is zero, the planes are parallel (and separated)
+			// or coincident, so they’re not considered intersecting
+
+			const denom = d.dot( d );
+
+			if ( denom === 0 ) return null;
+
+			// compute point on intersection line
+
+			v1$2.copy( plane.normal ).multiplyScalar( this.constant );
+			v2.copy( this.normal ).multiplyScalar( plane.constant );
+
+			result.crossVectors( v1$2.sub( v2 ), d ).divideScalar( denom );
+
+			return result;
+
+		}
+
+		/**
+		* Returns true if the given plane intersects this plane.
+		*
+		* @param {Plane} plane - The plane to test.
+		* @return {Boolean} The result of the intersection test.
+		*/
+		intersectsPlane( plane ) {
+
+			const d = this.normal.dot( plane.normal );
+
+			return ( Math.abs( d ) !== 1 );
+
+		}
+
+		/**
+		* Projects the given point onto the plane. The result is written
+		* to the given vector.
+		*
+		* @param {Vector3} point - The point to project onto the plane.
+		* @param {Vector3} result - The projected point.
+		* @return {Vector3} The projected point.
+		*/
+		projectPoint( point, result ) {
+
+			v1$2.copy( this.normal ).multiplyScalar( this.distanceToPoint( point ) );
+
+			result.subVectors( point, v1$2 );
+
+			return result;
+
+		}
+
+		/**
+		* Returns true if the given plane is deep equal with this plane.
+		*
+		* @param {Plane} plane - The plane to test.
+		* @return {Boolean} The result of the equality test.
+		*/
+		equals( plane ) {
+
+			return plane.normal.equals( this.normal ) && plane.constant === this.constant;
 
 		}
 
 	}
 
 	/**
-	* A single node in a bounding volume hierarchy (BVH).
+	* Class for representing a planar polygon with an arbitrary amount of edges.
 	*
-	* @author {@link https://github.com/robp94|robp94}
 	* @author {@link https://github.com/Mugen87|Mugen87}
+	* @author {@link https://github.com/robp94|robp94}
 	*/
-	class BVHNode {
+	class Polygon {
 
 		/**
-		* Constructs a BVH node.
+		* Constructs a new polygon.
 		*/
 		constructor() {
 
 			/**
-			* The parent BVH node.
-			* @type BVHNode
-			* @default null
+			* The centroid of this polygon.
+			* @type Vector3
 			*/
-			this.parent = null;
+			this.centroid = new Vector3();
 
 			/**
-			* The child BVH nodes.
-			* @type Array
+			* A reference to the first half-edge of this polygon.
+			* @type HalfEdge
 			*/
-			this.children = new Array();
+			this.edge = null;
 
 			/**
-			* The bounding volume of this BVH node.
-			* @type AABB
+			* A plane abstraction of this polygon.
+			* @type Plane
 			*/
-			this.boundingVolume = new AABB();
-
-			/**
-			* The primitives (triangles) of this BVH node.
-			* Only filled for leaf nodes.
-			* @type Array
-			*/
-			this.primitives = new Array();
-
-			/**
-			* The centroids of the node's triangles.
-			* Only filled for leaf nodes.
-			* @type Array
-			*/
-			this.centroids = new Array();
+			this.plane = new Plane();
 
 		}
 
 		/**
-		* Returns true if this BVH node is a root node.
+		* Creates the polygon based on the given array of points in 3D space.
+		* The method assumes the contour (the sequence of points) is defined
+		* in CCW order.
 		*
-		* @return {Boolean} Whether this BVH node is a root node or not.
+		* @param {Array} points - The array of points.
+		* @return {Polygon} A reference to this polygon.
 		*/
-		root() {
+		fromContour( points ) {
 
-			return this.parent === null;
+			const edges = new Array();
 
-		}
+			if ( points.length < 3 ) {
 
-		/**
-		* Returns true if this BVH node is a leaf node.
-		*
-		* @return {Boolean} Whether this BVH node is a leaf node or not.
-		*/
-		leaf() {
-
-			return this.children.length === 0;
-
-		}
-
-		/**
-		* Returns the depth of this BVH node in its hierarchy.
-		*
-		* @return {Number} The hierarchical depth of this BVH node.
-		*/
-		getDepth() {
-
-			let depth = 0;
-
-			let parent = this.parent;
-
-			while ( parent !== null ) {
-
-				parent = parent.parent;
-				depth ++;
+				Logger.error( 'YUKA.Polygon: Unable to create polygon from contour. It needs at least three points.' );
+				return this;
 
 			}
 
-			return depth;
+			for ( let i = 0, l = points.length; i < l; i ++ ) {
 
-		}
-
-		/**
-		* Executes the given callback for this BVH node and its ancestors.
-		*
-		* @param {Function} callback - The callback to execute.
-		* @return {BVHNode} A reference to this BVH node.
-		*/
-		traverse( callback ) {
-
-			callback( this );
-
-			for ( let i = 0, l = this.children.length; i < l; i ++ ) {
-
-				 this.children[ i ].traverse( callback );
+				const edge = new HalfEdge( points[ i ] );
+				edges.push( edge );
 
 			}
 
-			return this;
+			// link edges
 
-		}
+			for ( let i = 0, l = edges.length; i < l; i ++ ) {
 
-		/**
-		* Builds this BVH node. That means the respective bounding volume
-		* is computed and the node's primitives are distributed under new child nodes.
-		* This only happens if the maximum hierarchical depth is not yet reached and
-		* the node does contain enough primitives required for a split.
-		*
-		* @param {Number} branchingFactor - The branching factor.
-		* @param {Number} primitivesPerNode - The minimum amount of primitives per BVH node.
-		* @param {Number} maxDepth - The maximum  hierarchical depth.
-		* @param {Number} currentDepth - The current hierarchical depth.
-		* @return {BVHNode} A reference to this BVH node.
-		*/
-		build( branchingFactor, primitivesPerNode, maxDepth, currentDepth ) {
+				let current, prev, next;
 
-			this.computeBoundingVolume();
+				if ( i === 0 ) {
 
-			// check depth and primitive count
+					current = edges[ i ];
+					prev = edges[ l - 1 ];
+				 	next = edges[ i + 1 ];
 
-			const primitiveCount = this.primitives.length / 9;
-			const newPrimitiveCount = Math.floor( primitiveCount / branchingFactor );
+				} else if ( i === ( l - 1 ) ) {
 
-			if ( ( currentDepth <= maxDepth ) && ( newPrimitiveCount >= primitivesPerNode ) ) {
-
-				// split (distribute primitives on new child BVH nodes)
-
-				this.split( branchingFactor );
-
-				// proceed with build on the next hierarchy level
-
-				for ( let i = 0; i < branchingFactor; i ++ ) {
-
-					this.children[ i ].build( branchingFactor, primitivesPerNode, maxDepth, currentDepth + 1 );
-
-				}
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Computes the AABB for this BVH node.
-		*
-		* @return {BVHNode} A reference to this BVH node.
-		*/
-		computeBoundingVolume() {
-
-			const primitives = this.primitives;
-
-			const aabb = this.boundingVolume;
-
-			// compute AABB
-
-			aabb.min.set( Infinity, Infinity, Infinity );
-			aabb.max.set( - Infinity, - Infinity, - Infinity );
-
-			for ( let i = 0, l = primitives.length; i < l; i += 3 ) {
-
-				v1$3.x = primitives[ i ];
-				v1$3.y = primitives[ i + 1 ];
-				v1$3.z = primitives[ i + 2 ];
-
-				aabb.expand( v1$3 );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Computes the split axis. Right now, only the cardinal axes
-		* are potential split axes.
-		*
-		* @return {Vector3} The split axis.
-		*/
-		computeSplitAxis() {
-
-			let maxX, maxY, maxZ = maxY = maxX = - Infinity;
-			let minX, minY, minZ = minY = minX = Infinity;
-
-			const centroids = this.centroids;
-
-			for ( let i = 0, l = centroids.length; i < l; i += 3 ) {
-
-				const x = centroids[ i ];
-				const y = centroids[ i + 1 ];
-				const z = centroids[ i + 2 ];
-
-				if ( x > maxX ) {
-
-					maxX = x;
-
-				}
-
-				if ( y > maxY ) {
-
-					maxY = y;
-
-				}
-
-				if ( z > maxZ ) {
-
-					maxZ = z;
-
-				}
-
-				if ( x < minX ) {
-
-					minX = x;
-
-				}
-
-				if ( y < minY ) {
-
-					minY = y;
-
-				}
-
-				if ( z < minZ ) {
-
-					minZ = z;
-
-				}
-
-			}
-
-			const rangeX = maxX - minX;
-			const rangeY = maxY - minY;
-			const rangeZ = maxZ - minZ;
-
-			if ( rangeX > rangeY && rangeX > rangeZ ) {
-
-				return xAxis;
-
-			} else if ( rangeY > rangeZ ) {
-
-				return yAxis;
-
-			} else {
-
-				return zAxis;
-
-			}
-
-		}
-
-		/**
-		* Splits the node and distributes node's primitives over new child nodes.
-		*
-		* @param {Number} branchingFactor - The branching factor.
-		* @return {BVHNode} A reference to this BVH node.
-		*/
-		split( branchingFactor ) {
-
-			const centroids = this.centroids;
-			const primitives = this.primitives;
-
-			// create (empty) child BVH nodes
-
-			for ( let i = 0; i < branchingFactor; i ++ ) {
-
-				this.children[ i ] = new BVHNode();
-				this.children[ i ].parent = this;
-
-			}
-
-			// sort primitives along split axis
-
-			const axis = this.computeSplitAxis();
-			const sortedPrimitiveIndices = new Array();
-
-			for ( let i = 0, l = centroids.length; i < l; i += 3 ) {
-
-				v1$3.fromArray( centroids, i );
-
-				// the result from the dot product is our sort criterion.
-				// it represents the projection of the centroid on the split axis
-
-				const p = v1$3.dot( axis );
-				const primitiveIndex = i / 3;
-
-				sortedPrimitiveIndices.push( { index: primitiveIndex, p: p } );
-
-			}
-
-			sortedPrimitiveIndices.sort( sortPrimitives );
-
-			// distribute data
-
-			const primitveCount = sortedPrimitiveIndices.length;
-			const primitivesPerChild = Math.floor( primitveCount / branchingFactor );
-
-			var childIndex = 0;
-			var primitivesIndex = 0;
-
-			for ( let i = 0; i < primitveCount; i ++ ) {
-
-				// selected child
-
-				primitivesIndex ++;
-
-				// check if we try to add more primitives to a child than "primitivesPerChild" defines.
-				// move primitives to the next child
-
-				if ( primitivesIndex > primitivesPerChild ) {
-
-					// ensure "childIndex" does not overflow (meaning the last child takes all remaining primitives)
-
-					if ( childIndex < ( branchingFactor - 1 ) ) {
-
-						primitivesIndex = 1; // reset primitive index
-						childIndex ++; // raise child index
-
-					}
-
-				}
-
-				const child = this.children[ childIndex ];
-
-				// move data to the next level
-
-				// 1. primitives
-
-				const primitiveIndex = sortedPrimitiveIndices[ i ].index;
-				const stride = primitiveIndex * 9; // remember the "primitives" array holds raw vertex data defining triangles
-
-				v1$3.fromArray( primitives, stride );
-				v2$1.fromArray( primitives, stride + 3 );
-				v3.fromArray( primitives, stride + 6 );
-
-				child.primitives.push( v1$3.x, v1$3.y, v1$3.z );
-				child.primitives.push( v2$1.x, v2$1.y, v2$1.z );
-				child.primitives.push( v3.x, v3.y, v3.z );
-
-				// 2. centroid
-
-				v1$3.fromArray( centroids, primitiveIndex * 3 );
-
-				child.centroids.push( v1$3.x, v1$3.y, v1$3.z );
-
-			}
-
-			// remove centroids/primitives after split from this node
-
-			this.centroids.length = 0;
-			this.primitives.length = 0;
-
-			return this;
-
-		}
-
-		/**
-		* Performs a ray/BVH node intersection test and stores the closest intersection point
-		* to the given 3D vector. If no intersection is detected, *null* is returned.
-		*
-		* @param {Ray} ray - The ray.
-		* @param {Vector3} result - The result vector.
-		* @return {Vector3} The result vector.
-		*/
-		intersectRay( ray, result ) {
-
-			// gather all intersection points along the hierarchy
-
-			if ( ray.intersectAABB( this.boundingVolume, result ) !== null ) {
-
-				if ( this.leaf() === true ) {
-
-					const vertices = this.primitives;
-
-					for ( let i = 0, l = vertices.length; i < l; i += 9 ) {
-
-						// remember: we assume primitives are triangles
-
-						triangle$1.a.fromArray( vertices, i );
-						triangle$1.b.fromArray( vertices, i + 3 );
-						triangle$1.c.fromArray( vertices, i + 6 );
-
-						if ( ray.intersectTriangle( triangle$1, true, result ) !== null ) {
-
-							intersections.push( result.clone() );
-
-						}
-
-					}
+					current = edges[ i ];
+				 	prev = edges[ i - 1 ];
+					next = edges[ 0 ];
 
 				} else {
 
-					// process childs
-
-					for ( let i = 0, l = this.children.length; i < l; i ++ ) {
-
-						this.children[ i ].intersectRay( ray, result );
-
-					}
+				 	current = edges[ i ];
+					prev = edges[ i - 1 ];
+					next = edges[ i + 1 ];
 
 				}
 
-			}
-
-			// determine the closest intersection point in the root node (so after
-			// the hierarchy was processed)
-
-			if ( this.root() === true ) {
-
-				if ( intersections.length > 0 ) {
-
-					let minDistance = Infinity;
-
-					for ( let i = 0, l = intersections.length; i < l; i ++ ) {
-
-						const squaredDistance = ray.origin.squaredDistanceTo( intersections[ i ] );
-
-						if ( squaredDistance < minDistance ) {
-
-							minDistance = squaredDistance;
-							result.copy( intersections[ i ] );
-
-						}
-
-					}
-
-					// reset array
-
-					intersections.length = 0;
-
-					// return closest intersection point
-
-					return result;
-
-				} else {
-
-					// no intersection detected
-
-					return null;
-
-				}
-
-			} else {
-
-				// always return null for non-root nodes
-
-				return null;
+				current.prev = prev;
+				current.next = next;
+				current.polygon = this;
 
 			}
+
+			//
+
+			this.edge = edges[ 0 ];
+
+			//
+
+			this.plane.fromCoplanarPoints( points[ 0 ], points[ 1 ], points[ 2 ] );
+
+			return this;
 
 		}
 
 		/**
-		* Performs a ray/BVH node intersection test. Returns either true or false if
-		* there is a intersection or not.
+		* Computes the centroid for this polygon.
 		*
-		* @param {Ray} ray - The ray.
-		* @return {boolean} Whether there is an intersection or not.
+		* @return {Polygon} A reference to this polygon.
 		*/
-		intersectsRay( ray ) {
+		computeCentroid() {
 
-			if ( ray.intersectAABB( this.boundingVolume, intersection ) !== null ) {
+			const centroid = this.centroid;
+			let edge = this.edge;
+			let count = 0;
 
-				if ( this.leaf() === true ) {
+			centroid.set( 0, 0, 0 );
 
-					const vertices = this.primitives;
+			do {
 
-					for ( let i = 0, l = vertices.length; i < l; i += 9 ) {
+				centroid.add( edge.vertex );
 
-						// remember: we assume primitives are triangles
+				count ++;
 
-						triangle$1.a.fromArray( vertices, i );
-						triangle$1.b.fromArray( vertices, i + 3 );
-						triangle$1.c.fromArray( vertices, i + 6 );
+				edge = edge.next;
 
-						if ( ray.intersectTriangle( triangle$1, true, intersection ) !== null ) {
+			} while ( edge !== this.edge );
 
-							return true;
+			centroid.divideScalar( count );
 
-						}
+			return this;
 
-					}
+		}
 
-					return false;
+		/**
+		* Returns true if the polygon contains the given point.
+		*
+		* @param {Vector3} point - The point to test.
+		* @param {Number} epsilon - A tolerance value.
+		* @return {Boolean} Whether this polygon contain the given point or not.
+		*/
+		contains( point, epsilon = 1e-3 ) {
 
-				} else {
+			const plane = this.plane;
+			let edge = this.edge;
 
-					// process child BVH nodes
+			// convex test
 
-					for ( let i = 0, l = this.children.length; i < l; i ++ ) {
+			do {
 
-						if ( this.children[ i ].intersectsRay( ray ) === true ) {
+				const v1 = edge.tail();
+				const v2 = edge.head();
 
-							return true;
-
-						}
-
-					}
+				if ( leftOn( v1, v2, point ) === false ) {
 
 					return false;
 
 				}
 
-			} else {
+				edge = edge.next;
+
+			} while ( edge !== this.edge );
+
+			// ensure the given point lies within a defined tolerance range
+
+			const distance = plane.distanceToPoint( point );
+
+			if ( Math.abs( distance ) > epsilon ) {
 
 				return false;
 
 			}
 
+			return true;
+
+		}
+
+		/**
+		* Returns true if the polygon is convex.
+		*
+		* @param {Boolean} ccw - Whether the winding order is CCW or not.
+		* @return {Boolean} Whether this polygon is convex or not.
+		*/
+		convex( ccw = true ) {
+
+			let edge = this.edge;
+
+			do {
+
+				const v1 = edge.tail();
+				const v2 = edge.head();
+				const v3 = edge.next.head();
+
+				if ( ccw ) {
+
+					if ( leftOn( v1, v2, v3 ) === false )	return false;
+
+				} else {
+
+					if ( leftOn( v3, v2, v1 ) === false ) return false;
+
+				}
+
+				edge = edge.next;
+
+			} while ( edge !== this.edge );
+
+			return true;
+
+		}
+
+		/**
+		* Returns true if the polygon is coplanar.
+		*
+		* @param {Number} epsilon - A tolerance value.
+		* @return {Boolean} Whether this polygon is coplanar or not.
+		*/
+		coplanar( epsilon = 1e-3 ) {
+
+			const plane = this.plane;
+			let edge = this.edge;
+
+			do {
+
+				const distance = plane.distanceToPoint( edge.vertex );
+
+				if ( Math.abs( distance ) > epsilon ) {
+
+					return false;
+
+				}
+
+				edge = edge.next;
+
+			} while ( edge !== this.edge );
+
+			return true;
+
+		}
+
+		/**
+		* Computes the signed distance from the given 3D vector to this polygon. The method
+		* uses the polygon's plane abstraction in order to compute this value.
+		*
+		* @param {Vector3} point - A point in 3D space.
+		* @return {Number} The signed distance from the given point to this polygon.
+		*/
+		distanceToPoint( point ) {
+
+			return this.plane.distanceToPoint( point );
+
+		}
+
+		/**
+		* Determines the contour (sequence of points) of this polygon and
+		* stores the result in the given array.
+		*
+		* @param {Array} result - The result array.
+		* @return {Array} The result array.
+		*/
+		getContour( result ) {
+
+			let edge = this.edge;
+
+			result.length = 0;
+
+			do {
+
+				result.push( edge.vertex );
+
+				edge = edge.next;
+
+			} while ( edge !== this.edge );
+
+			return result;
+
+		}
+
+		/**
+		* Get the edge that can be used to reach the
+		* given polygon over its twin reference.
+		*
+		* @param {Polygon} polygon - The polygon to reach.
+		* @return {HalfEdge} The edge.
+		*/
+		getEdgeTo( polygon ) {
+			let edge = this.edge;
+			do {
+				if ( edge.twin !== null ) {
+					if ( edge.twin.polygon === polygon ) {
+						return edge;
+					}
+				}
+				edge = edge.next;
+
+			} while ( edge !== this.edge );
+			return null;
+		}
+
+
+		/**
+		* Determines the portal edge that can be used to reach the
+		* given polygon over its twin reference. The result is stored
+		* in the given portal edge data structure. If the given polygon
+		* is no direct neighbor, the references of the portal edge data
+		* structure are set to null.
+		*
+		* @param {Polygon} polygon - The polygon to reach.
+		* @param {Object} portalEdge - The portal edge.
+		* @return {Object} The portal edge.
+		*/
+		getPortalEdgeTo( polygon, portalEdge ) {
+
+			let edge = this.edge;
+
+			do {
+
+				if ( edge.twin !== null ) {
+
+					if ( edge.twin.polygon === polygon ) {
+
+						portalEdge.left = edge.prev.vertex;
+						portalEdge.right = edge.vertex;
+						return portalEdge;
+
+					}
+
+				}
+
+				edge = edge.next;
+
+			} while ( edge !== this.edge );
+
+			portalEdge.left = null;
+			portalEdge.right = null;
+
+			return portalEdge;
+
 		}
 
 	}
 
-	//
+	// from the book "Computational Geometry in C, Joseph O'Rourke"
 
-	function sortPrimitives( a, b ) {
+	function leftOn( a, b, c ) {
 
-		return a.p - b.p;
+		return MathUtils.area( a, b, c ) >= 0;
 
 	}
 
@@ -14945,494 +10982,6 @@
 	}
 
 	/**
-	* Implementation of a half-edge data structure, also known as
-	* {@link https://en.wikipedia.org/wiki/Doubly_connected_edge_list Doubly connected edge list}.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class HalfEdge {
-
-		/**
-		* Constructs a new half-edge.
-		*
-		* @param {Vector3} vertex - The (origin) vertex of this half-edge.
-		*/
-		constructor( vertex = new Vector3() ) {
-
-			/**
-			* The (origin) vertex of this half-edge.
-			* @type Vector3
-			*/
-			this.vertex = vertex;
-
-			/**
-			* A reference to the next half-edge.
-			* @type HalfEdge
-			*/
-			this.next = null;
-
-			/**
-			* A reference to the previous half-edge.
-			* @type HalfEdge
-			*/
-			this.prev = null;
-
-			/**
-			* A reference to the opponent half-edge.
-			* @type HalfEdge
-			*/
-			this.twin = null;
-
-			/**
-			* A reference to its polygon/face.
-			* @type Polygon
-			*/
-			this.polygon = null;
-
-		}
-
-		/**
-		* Returns the tail of this half-edge. That's a reference to the previous
-		* half-edge vertex.
-		*
-		* @return {Vector3} The tail vertex.
-		*/
-		tail() {
-
-			return this.prev ? this.prev.vertex : null;
-
-		}
-
-		/**
-		* Returns the head of this half-edge. That's a reference to the own vertex.
-		*
-		* @return {Vector3} The head vertex.
-		*/
-		head() {
-
-			return this.vertex;
-
-		}
-
-		/**
-		* Computes the length of this half-edge.
-		*
-		* @return {Number} The length of this half-edge.
-		*/
-		length() {
-
-			const tail = this.tail();
-			const head = this.head();
-
-			if ( tail !== null ) {
-
-				return tail.distanceTo( head );
-
-			}
-
-			return - 1;
-
-		}
-
-		/**
-		* Computes the squared length of this half-edge.
-		*
-		* @return {Number} The squared length of this half-edge.
-		*/
-		squaredLength() {
-
-			const tail = this.tail();
-			const head = this.head();
-
-			if ( tail !== null ) {
-
-				return tail.squaredDistanceTo( head );
-
-			}
-
-			return - 1;
-
-		}
-
-		/**
-		* Links the given opponent half edge with this one.
-		*
-		* @param {HalfEdge} edge - The opponent edge to link.
-		* @return {HalfEdge} A reference to this half edge.
-		*/
-		linkOpponent( edge ) {
-
-			this.twin = edge;
-			edge.twin = this;
-
-			return this;
-
-		}
-
-		/**
-		* Computes the direction of this half edge. The method assumes the half edge
-		* has a valid reference to a previous half edge.
-		*
-		* @param {Vector3} result - The result vector.
-		* @return {Vector3} The result vector.
-		*/
-		getDirection( result ) {
-
-			return result.subVectors( this.vertex, this.prev.vertex ).normalize();
-
-		}
-
-	}
-
-	/**
-	* Class for representing a planar polygon with an arbitrary amount of edges.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @author {@link https://github.com/robp94|robp94}
-	*/
-	class Polygon {
-
-		/**
-		* Constructs a new polygon.
-		*/
-		constructor() {
-
-			/**
-			* The centroid of this polygon.
-			* @type Vector3
-			*/
-			this.centroid = new Vector3();
-
-			/**
-			* A reference to the first half-edge of this polygon.
-			* @type HalfEdge
-			*/
-			this.edge = null;
-
-			/**
-			* A plane abstraction of this polygon.
-			* @type Plane
-			*/
-			this.plane = new Plane();
-
-		}
-
-		/**
-		* Creates the polygon based on the given array of points in 3D space.
-		* The method assumes the contour (the sequence of points) is defined
-		* in CCW order.
-		*
-		* @param {Array} points - The array of points.
-		* @return {Polygon} A reference to this polygon.
-		*/
-		fromContour( points ) {
-
-			const edges = new Array();
-
-			if ( points.length < 3 ) {
-
-				Logger.error( 'YUKA.Polygon: Unable to create polygon from contour. It needs at least three points.' );
-				return this;
-
-			}
-
-			for ( let i = 0, l = points.length; i < l; i ++ ) {
-
-				const edge = new HalfEdge( points[ i ] );
-				edges.push( edge );
-
-			}
-
-			// link edges
-
-			for ( let i = 0, l = edges.length; i < l; i ++ ) {
-
-				let current, prev, next;
-
-				if ( i === 0 ) {
-
-					current = edges[ i ];
-					prev = edges[ l - 1 ];
-				 	next = edges[ i + 1 ];
-
-				} else if ( i === ( l - 1 ) ) {
-
-					current = edges[ i ];
-				 	prev = edges[ i - 1 ];
-					next = edges[ 0 ];
-
-				} else {
-
-				 	current = edges[ i ];
-					prev = edges[ i - 1 ];
-					next = edges[ i + 1 ];
-
-				}
-
-				current.prev = prev;
-				current.next = next;
-				current.polygon = this;
-
-			}
-
-			//
-
-			this.edge = edges[ 0 ];
-
-			//
-
-			this.plane.fromCoplanarPoints( points[ 0 ], points[ 1 ], points[ 2 ] );
-
-			return this;
-
-		}
-
-		/**
-		* Computes the centroid for this polygon.
-		*
-		* @return {Polygon} A reference to this polygon.
-		*/
-		computeCentroid() {
-
-			const centroid = this.centroid;
-			let edge = this.edge;
-			let count = 0;
-
-			centroid.set( 0, 0, 0 );
-
-			do {
-
-				centroid.add( edge.vertex );
-
-				count ++;
-
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-
-			centroid.divideScalar( count );
-
-			return this;
-
-		}
-
-		/**
-		* Returns true if the polygon contains the given point.
-		*
-		* @param {Vector3} point - The point to test.
-		* @param {Number} epsilon - A tolerance value.
-		* @return {Boolean} Whether this polygon contain the given point or not.
-		*/
-		contains( point, epsilon = 1e-3 ) {
-
-			const plane = this.plane;
-			let edge = this.edge;
-
-			// convex test
-
-			do {
-
-				const v1 = edge.tail();
-				const v2 = edge.head();
-
-				if ( leftOn( v1, v2, point ) === false ) {
-
-					return false;
-
-				}
-
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-
-			// ensure the given point lies within a defined tolerance range
-
-			const distance = plane.distanceToPoint( point );
-
-			if ( Math.abs( distance ) > epsilon ) {
-
-				return false;
-
-			}
-
-			return true;
-
-		}
-
-		/**
-		* Returns true if the polygon is convex.
-		*
-		* @param {Boolean} ccw - Whether the winding order is CCW or not.
-		* @return {Boolean} Whether this polygon is convex or not.
-		*/
-		convex( ccw = true ) {
-
-			let edge = this.edge;
-
-			do {
-
-				const v1 = edge.tail();
-				const v2 = edge.head();
-				const v3 = edge.next.head();
-
-				if ( ccw ) {
-
-					if ( leftOn( v1, v2, v3 ) === false )	return false;
-
-				} else {
-
-					if ( leftOn( v3, v2, v1 ) === false ) return false;
-
-				}
-
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-
-			return true;
-
-		}
-
-		/**
-		* Returns true if the polygon is coplanar.
-		*
-		* @param {Number} epsilon - A tolerance value.
-		* @return {Boolean} Whether this polygon is coplanar or not.
-		*/
-		coplanar( epsilon = 1e-3 ) {
-
-			const plane = this.plane;
-			let edge = this.edge;
-
-			do {
-
-				const distance = plane.distanceToPoint( edge.vertex );
-
-				if ( Math.abs( distance ) > epsilon ) {
-
-					return false;
-
-				}
-
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-
-			return true;
-
-		}
-
-		/**
-		* Computes the signed distance from the given 3D vector to this polygon. The method
-		* uses the polygon's plane abstraction in order to compute this value.
-		*
-		* @param {Vector3} point - A point in 3D space.
-		* @return {Number} The signed distance from the given point to this polygon.
-		*/
-		distanceToPoint( point ) {
-
-			return this.plane.distanceToPoint( point );
-
-		}
-
-		/**
-		* Determines the contour (sequence of points) of this polygon and
-		* stores the result in the given array.
-		*
-		* @param {Array} result - The result array.
-		* @return {Array} The result array.
-		*/
-		getContour( result ) {
-
-			let edge = this.edge;
-
-			result.length = 0;
-
-			do {
-
-				result.push( edge.vertex );
-
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-
-			return result;
-
-		}
-
-		/**
-		* Get the edge that can be used to reach the
-		* given polygon over its twin reference.
-		*
-		* @param {Polygon} polygon - The polygon to reach.
-		* @return {HalfEdge} The edge.
-		*/
-		getEdgeTo( polygon ) {
-			let edge = this.edge;
-			do {
-				if ( edge.twin !== null ) {
-					if ( edge.twin.polygon === polygon ) {
-						return edge;
-					}
-				}
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-			return null;
-		}
-
-
-		/**
-		* Determines the portal edge that can be used to reach the
-		* given polygon over its twin reference. The result is stored
-		* in the given portal edge data structure. If the given polygon
-		* is no direct neighbor, the references of the portal edge data
-		* structure are set to null.
-		*
-		* @param {Polygon} polygon - The polygon to reach.
-		* @param {Object} portalEdge - The portal edge.
-		* @return {Object} The portal edge.
-		*/
-		getPortalEdgeTo( polygon, portalEdge ) {
-
-			let edge = this.edge;
-
-			do {
-
-				if ( edge.twin !== null ) {
-
-					if ( edge.twin.polygon === polygon ) {
-
-						portalEdge.left = edge.prev.vertex;
-						portalEdge.right = edge.vertex;
-						return portalEdge;
-
-					}
-
-				}
-
-				edge = edge.next;
-
-			} while ( edge !== this.edge );
-
-			portalEdge.left = null;
-			portalEdge.right = null;
-
-			return portalEdge;
-
-		}
-
-	}
-
-	// from the book "Computational Geometry in C, Joseph O'Rourke"
-
-	function leftOn( a, b, c ) {
-
-		return MathUtils.area( a, b, c ) >= 0;
-
-	}
-
-	/**
 	* Base class for polyhedra. It is primarily designed for the internal usage in Yuka.
 	* Objects of this class are always build up from faces. The edges, vertices and
 	* the polyhedron's centroid have to be derived from a valid face definition with the
@@ -15696,7 +11245,7 @@
 	}
 
 	const line = new LineSegment();
-	const plane$1 = new Plane();
+	const plane = new Plane();
 	const closestPoint = new Vector3();
 	const up = new Vector3( 0, 1, 0 );
 	const sat = new SAT();
@@ -16048,7 +11597,7 @@
 			// 3. The next vertex 'v3' is the one farthest to the plane 'v0', 'v1', 'v2'
 
 			maxDistance = - Infinity;
-			plane$1.fromCoplanarPoints( v0.point, v1.point, v2.point );
+			plane.fromCoplanarPoints( v0.point, v1.point, v2.point );
 
 			for ( let i = 0, l = vertices.length; i < l; i ++ ) {
 
@@ -16056,7 +11605,7 @@
 
 				if ( vertex !== v0 && vertex !== v1 && vertex !== v2 ) {
 
-					distance = Math.abs( plane$1.distanceToPoint( vertex.point ) );
+					distance = Math.abs( plane.distanceToPoint( vertex.point ) );
 
 					if ( distance > maxDistance ) {
 
@@ -16071,7 +11620,7 @@
 
 			// handle case where all points lie in one plane
 
-			if ( plane$1.distanceToPoint( v3.point ) === 0 ) {
+			if ( plane.distanceToPoint( v3.point ) === 0 ) {
 
 				throw 'ERROR: YUKA.ConvexHull: All extreme points lie in a single plane. Unable to compute convex hull.';
 
@@ -16081,7 +11630,7 @@
 
 			const faces = this.faces;
 
-			if ( plane$1.distanceToPoint( v3.point ) < 0 ) {
+			if ( plane.distanceToPoint( v3.point ) < 0 ) {
 
 				// the face is not able to see the point so 'plane.normal' is pointing outside the tetrahedron
 
@@ -16866,10 +12415,10 @@
 	const AbsR = [[], [], []];
 	const t = [];
 
-	const xAxis$1 = new Vector3();
-	const yAxis$1 = new Vector3();
-	const zAxis$1 = new Vector3();
-	const v1$4 = new Vector3();
+	const xAxis = new Vector3();
+	const yAxis = new Vector3();
+	const zAxis = new Vector3();
+	const v1$3 = new Vector3();
 	const closestPoint$1 = new Vector3();
 
 	/**
@@ -16985,8 +12534,8 @@
 
 			const halfSizes = this.halfSizes;
 
-			v1$4.subVectors( point, this.center );
-			this.rotation.extractBasis( xAxis$1, yAxis$1, zAxis$1 );
+			v1$3.subVectors( point, this.center );
+			this.rotation.extractBasis( xAxis, yAxis, zAxis );
 
 			// start at the center position of the OBB
 
@@ -16994,14 +12543,14 @@
 
 			// project the target onto the OBB axes and walk towards that point
 
-			const x = MathUtils.clamp( v1$4.dot( xAxis$1 ), - halfSizes.x, halfSizes.x );
-			result.add( xAxis$1.multiplyScalar( x ) );
+			const x = MathUtils.clamp( v1$3.dot( xAxis ), - halfSizes.x, halfSizes.x );
+			result.add( xAxis.multiplyScalar( x ) );
 
-			const y = MathUtils.clamp( v1$4.dot( yAxis$1 ), - halfSizes.y, halfSizes.y );
-			result.add( yAxis$1.multiplyScalar( y ) );
+			const y = MathUtils.clamp( v1$3.dot( yAxis ), - halfSizes.y, halfSizes.y );
+			result.add( yAxis.multiplyScalar( y ) );
 
-			const z = MathUtils.clamp( v1$4.dot( zAxis$1 ), - halfSizes.z, halfSizes.z );
-			result.add( zAxis$1.multiplyScalar( z ) );
+			const z = MathUtils.clamp( v1$3.dot( zAxis ), - halfSizes.z, halfSizes.z );
+			result.add( zAxis.multiplyScalar( z ) );
 
 			return result;
 
@@ -17015,14 +12564,14 @@
 		*/
 		containsPoint( point ) {
 
-			v1$4.subVectors( point, this.center );
-			this.rotation.extractBasis( xAxis$1, yAxis$1, zAxis$1 );
+			v1$3.subVectors( point, this.center );
+			this.rotation.extractBasis( xAxis, yAxis, zAxis );
 
 			// project v1 onto each axis and check if these points lie inside the OBB
 
-			return Math.abs( v1$4.dot( xAxis$1 ) ) <= this.halfSizes.x &&
-					Math.abs( v1$4.dot( yAxis$1 ) ) <= this.halfSizes.y &&
-					Math.abs( v1$4.dot( zAxis$1 ) ) <= this.halfSizes.z;
+			return Math.abs( v1$3.dot( xAxis ) ) <= this.halfSizes.x &&
+					Math.abs( v1$3.dot( yAxis ) ) <= this.halfSizes.y &&
+					Math.abs( v1$3.dot( zAxis ) ) <= this.halfSizes.z;
 
 		}
 
@@ -17096,13 +12645,13 @@
 
 			// compute translation vector
 
-			v1$4.subVectors( b.c, a.c );
+			v1$3.subVectors( b.c, a.c );
 
 			// bring translation into a’s coordinate frame
 
-			t[ 0 ] = v1$4.dot( a.u[ 0 ] );
-			t[ 1 ] = v1$4.dot( a.u[ 1 ] );
-			t[ 2 ] = v1$4.dot( a.u[ 2 ] );
+			t[ 0 ] = v1$3.dot( a.u[ 0 ] );
+			t[ 1 ] = v1$3.dot( a.u[ 1 ] );
+			t[ 2 ] = v1$3.dot( a.u[ 2 ] );
 
 			// compute common subexpressions. Add in an epsilon term to
 			// counteract arithmetic errors when two edges are parallel and
@@ -17212,13 +12761,13 @@
 		*/
 		intersectsPlane( plane ) {
 
-			this.rotation.extractBasis( xAxis$1, yAxis$1, zAxis$1 );
+			this.rotation.extractBasis( xAxis, yAxis, zAxis );
 
 			// compute the projection interval radius of this OBB onto L(t) = this->center + t * p.normal;
 
-			const r = this.halfSizes.x * Math.abs( plane.normal.dot( xAxis$1 ) ) +
-					this.halfSizes.y * Math.abs( plane.normal.dot( yAxis$1 ) ) +
-					this.halfSizes.z * Math.abs( plane.normal.dot( zAxis$1 ) );
+			const r = this.halfSizes.x * Math.abs( plane.normal.dot( xAxis ) ) +
+					this.halfSizes.y * Math.abs( plane.normal.dot( yAxis ) ) +
+					this.halfSizes.z * Math.abs( plane.normal.dot( zAxis ) );
 
 			// compute distance of the OBB's center from the plane
 
@@ -17489,29 +13038,6 @@
 	const obb = new OBB();
 
 	/**
-	* Class for representing navigation edges.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments Edge
-	*/
-	class NavEdge extends Edge {
-
-		/**
-		* Constructs a navigation edge.
-		*
-		* @param {Number} from - The index of the from node.
-		* @param {Number} to - The index of the to node.
-		* @param {Number} cost - The cost of this edge.
-		*/
-		constructor( from = - 1, to = - 1, cost = 0 ) {
-
-			super( from, to, cost );
-
-		}
-
-	}
-
-	/**
 	* Class for representing navigation nodes.
 	*
 	* @author {@link https://github.com/Mugen87|Mugen87}
@@ -17547,87 +13073,23 @@
 	}
 
 	/**
-	* Class with graph helpers.
+	* Class for representing navigation edges.
 	*
 	* @author {@link https://github.com/Mugen87|Mugen87}
+	* @augments Edge
 	*/
-	class GraphUtils {
+	class NavEdge extends Edge {
 
 		/**
-		* Generates a navigation graph with a planar grid layout based on the given parameters.
+		* Constructs a navigation edge.
 		*
-		* @param {Number} size - The size (width and depth) in x and z direction
-		* @param {Number} segments - The amount of segments in x and z direction.
-		* @return {Graph} The new graph.
+		* @param {Number} from - The index of the from node.
+		* @param {Number} to - The index of the to node.
+		* @param {Number} cost - The cost of this edge.
 		*/
-		static createGridLayout( size, segments ) {
+		constructor( from = - 1, to = - 1, cost = 0 ) {
 
-			const graph = new Graph();
-			graph.digraph = true;
-
-			const halfSize = size / 2;
-			const segmentSize = size / segments;
-
-			// nodes
-
-			let index = 0;
-
-			for ( let i = 0; i <= segments; i ++ ) {
-
-				const z = ( i * segmentSize ) - halfSize;
-
-				for ( let j = 0; j <= segments; j ++ ) {
-
-					const x = ( j * segmentSize ) - halfSize;
-
-					const position = new Vector3( x, 0, z );
-
-					const node = new NavNode( index, position );
-
-					graph.addNode( node );
-
-					index ++;
-
-				}
-
-			}
-
-			// edges
-
-			const count = graph.getNodeCount();
-			const range = Math.pow( segmentSize + ( segmentSize / 2 ), 2 );
-
-			for ( let i = 0; i < count; i ++ ) {
-
-				const node = graph.getNode( i );
-
-				// check distance to all other nodes
-
-				for ( let j = 0; j < count; j ++ ) {
-
-					if ( i !== j ) {
-
-						const neighbor = graph.getNode( j );
-
-						const distanceSquared = neighbor.position.squaredDistanceTo( node.position );
-
-						if ( distanceSquared <= range ) {
-
-							const distance = Math.sqrt( distanceSquared );
-
-							const edge = new NavEdge( i, j, distance );
-
-							graph.addEdge( edge );
-
-						}
-
-					}
-
-				}
-
-			}
-
-			return graph;
+			super( from, to, cost );
 
 		}
 
@@ -17795,191 +13257,6 @@
 			return path;
 
 		}
-
-	}
-
-	/**
-	* A lookup table representing the cost associated from traveling from one
-	* node to every other node in the navgiation mesh's graph.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class CostTable {
-
-		/**
-		* Creates a new cost table.
-		*/
-		constructor() {
-
-			this._nodeMap = new Map();
-
-		}
-
-		/**
-		* Inits the cost table for the given navigation mesh.
-		*
-		* @param {NavMesh} navMesh - The navigation mesh.
-		* @return {CostTable} A reference to this cost table.
-		*/
-		init( navMesh ) {
-
-			const graph = navMesh.graph;
-			const nodes = new Array();
-
-			this.clear();
-
-			// iterate over all nodes
-
-			graph.getNodes( nodes );
-
-			for ( let i = 0, il = nodes.length; i < il; i ++ ) {
-
-				const from = nodes[ i ];
-
-				// compute the distance to all other nodes
-
-				for ( let j = 0, jl = nodes.length; j < jl; j ++ ) {
-
-					const to = nodes[ j ];
-
-					const path = navMesh.findPath( from.position, to.position );
-					const cost = computeDistanceOfPath( path );
-
-					this.set( from.index, to.index, cost );
-
-				}
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Clears the cost table.
-		*
-		* @return {CostTable} A reference to this cost table.
-		*/
-		clear() {
-
-			this._nodeMap.clear();
-
-			return this;
-
-		}
-
-		/**
-		* Sets the cost for the given pair of navigation nodes.
-		*
-		* @param {Number} from - The start node index.
-		* @param {Number} to - The destintation node index.
-		* @param {Number} cost - The cost.
-		* @return {CostTable} A reference to this cost table.
-		*/
-		set( from, to, cost ) {
-
-			const nodeMap = this._nodeMap;
-
-			if ( nodeMap.has( from ) === false ) nodeMap.set( from, new Map() );
-
-			const nodeCostMap = nodeMap.get( from );
-
-			nodeCostMap.set( to, cost );
-
-			return this;
-
-		}
-
-		/**
-		* Returns the cost for the given pair of navigation nodes.
-		*
-		* @param {Number} from - The start node index.
-		* @param {Number} to - The destintation node index.
-		* @return {Number} The cost.
-		*/
-		get( from, to ) {
-
-			const nodeCostMap = this._nodeMap.get( from );
-
-			return nodeCostMap.get( to );
-
-		}
-
-		/**
-		* Returns the size of the cost table (amount of entries).
-		*
-		* @return {Number} The size of the cost table.
-		*/
-		size() {
-
-			return this._nodeMap.size;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = {
-				nodes: new Array()
-			};
-
-			for ( let [ key, value ] of this._nodeMap.entries() ) {
-
-				json.nodes.push( { index: key, costs: Array.from( value ) } );
-
-			}
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {CostTable} A reference to this cost table.
-		*/
-		fromJSON( json ) {
-
-			const nodes = json.nodes;
-
-			for ( let i = 0, l = nodes.length; i < l; i ++ ) {
-
-				const node = nodes[ i ];
-
-				const index = node.index;
-				const costs = new Map( node.costs );
-
-				this._nodeMap.set( index, costs );
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	//
-
-	function computeDistanceOfPath( path ) {
-
-		let distance = 0;
-
-		for ( let i = 0, l = ( path.length - 1 ); i < l; i ++ ) {
-
-			const from = path[ i ];
-			const to = path[ i + 1 ];
-
-			distance += from.distanceTo( to );
-
-		}
-
-		return distance;
 
 	}
 
@@ -18801,458 +14078,6 @@
 	}
 
 	/**
-	* Class for loading navigation meshes as glTF assets. The loader supports
-	* *glTF* and *glb* files, embedded buffers, index and non-indexed geometries.
-	* Interleaved geometry data are not yet supported.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class NavMeshLoader {
-
-		/**
-		* Loads a {@link NavMesh navigation mesh} from the given URL. The second parameter can be used
-		* to influence the parsing of the navigation mesh.
-		*
-		* @param {String} url - The URL of the glTF asset.
-		* @param {Object} options - The configuration object.
-		* @return {Promise} A promise representing the loading and parsing process.
-		*/
-		load( url, options ) {
-
-			return new Promise( ( resolve, reject ) => {
-
-				fetch( url )
-
-					.then( response => {
-
-						if ( response.status >= 200 && response.status < 300 ) {
-
-							return response.arrayBuffer();
-
-						} else {
-
-							const error = new Error( response.statusText || response.status );
-							error.response = response;
-							return Promise.reject( error );
-
-						}
-
-					} )
-
-					.then( ( arrayBuffer ) => {
-
-						const parser = new Parser();
-						const decoder = new TextDecoder();
-						let data;
-
-						const magic = decoder.decode( new Uint8Array( arrayBuffer, 0, 4 ) );
-
-						if ( magic === BINARY_EXTENSION_HEADER_MAGIC ) {
-
-							parser.parseBinary( arrayBuffer );
-
-							data = parser.extensions.get( 'BINARY' ).content;
-
-						} else {
-
-							data = decoder.decode( new Uint8Array( arrayBuffer ) );
-
-						}
-
-						const json = JSON.parse( data );
-
-						if ( json.asset === undefined || json.asset.version[ 0 ] < 2 ) {
-
-							throw new Error( 'YUKA.NavMeshLoader: Unsupported asset version.' );
-
-						} else {
-
-							const path = extractUrlBase( url );
-
-							return parser.parse( json, path, options );
-
-						}
-
-					} )
-
-					.then( ( data ) => {
-
-						resolve( data );
-
-					} )
-
-					.catch( ( error ) => {
-
-						Logger.error( 'YUKA.NavMeshLoader: Unable to load navigation mesh.', error );
-
-						reject( error );
-
-					} );
-
-			} );
-
-		}
-
-	}
-
-	class Parser {
-
-		constructor() {
-
-			this.json = null;
-			this.path = null;
-			this.cache = new Map();
-			this.extensions = new Map();
-
-		}
-
-		parse( json, path, options ) {
-
-			this.json = json;
-			this.path = path;
-
-			// read the first mesh in the glTF file
-
-			return this.getDependency( 'mesh', 0 ).then( ( data ) => {
-
-				// parse the raw geometry data into a bunch of polygons
-
-				const polygons = this.parseGeometry( data );
-
-				// create and config navMesh
-
-				const navMesh = new NavMesh();
-
-				if ( options ) {
-
-					if ( options.epsilonCoplanarTest ) navMesh.epsilonCoplanarTest = options.epsilonCoplanarTest;
-
-				}
-
-				// use polygons to setup the nav mesh
-
-				return navMesh.fromPolygons( polygons );
-
-			} );
-
-		}
-
-		parseGeometry( data ) {
-
-			const index = data.index;
-			const position = data.position;
-
-			const vertices = new Array();
-			const polygons = new Array();
-
-			// vertices
-
-			for ( let i = 0, l = position.length; i < l; i += 3 ) {
-
-				const v = new Vector3();
-
-				v.x = position[ i + 0 ];
-				v.y = position[ i + 1 ];
-				v.z = position[ i + 2 ];
-
-				vertices.push( v );
-
-			}
-
-			// polygons
-
-			if ( index ) {
-
-				// indexed geometry
-
-				for ( let i = 0, l = index.length; i < l; i += 3 ) {
-
-					const a = index[ i + 0 ];
-					const b = index[ i + 1 ];
-					const c = index[ i + 2 ];
-
-					const contour = [ vertices[ a ], vertices[ b ], vertices[ c ] ];
-
-					const polygon = new Polygon().fromContour( contour );
-
-					polygons.push( polygon );
-
-				}
-
-			} else {
-
-				// non-indexed geometry //todo test
-
-				for ( let i = 0, l = vertices.length; i < l; i += 3 ) {
-
-					const contour = [ vertices[ i + 0 ], vertices[ i + 1 ], vertices[ i + 2 ] ];
-
-					const polygon = new Polygon().fromContour( contour );
-
-					polygons.push( polygon );
-
-				}
-
-			}
-
-			return polygons;
-
-		}
-
-		getDependencies( type ) {
-
-			const cache = this.cache;
-
-			let dependencies = cache.get( type );
-
-			if ( ! dependencies ) {
-
-				const definitions = this.json[ type + ( type === 'mesh' ? 'es' : 's' ) ] || new Array();
-
-				dependencies = Promise.all( definitions.map( ( definition, index ) => {
-
-					return this.getDependency( type, index );
-
-				} ) );
-
-				cache.set( type, dependencies );
-
-			}
-
-			return dependencies;
-
-		}
-
-		getDependency( type, index ) {
-
-			const cache = this.cache;
-			const key = type + ':' + index;
-
-			let dependency = cache.get( key );
-
-			if ( dependency === undefined ) {
-
-				switch ( type ) {
-
-					case 'accessor':
-						dependency = this.loadAccessor( index );
-						break;
-
-					case 'buffer':
-						dependency = this.loadBuffer( index );
-						break;
-
-					case 'bufferView':
-						dependency = this.loadBufferView( index );
-						break;
-
-					case 'mesh':
-						dependency = this.loadMesh( index );
-						break;
-
-					default:
-						throw new Error( 'Unknown type: ' + type );
-
-				}
-
-				cache.set( key, dependency );
-
-			}
-
-			return dependency;
-
-		}
-
-		loadBuffer( index ) {
-
-			const json = this.json;
-			const definition = json.buffers[ index ];
-
-			if ( definition.uri === undefined && index === 0 ) {
-
-				return Promise.resolve( this.extensions.get( 'BINARY' ).body );
-
-			}
-
-			return new Promise( ( resolve, reject ) => {
-
-				const url = resolveURI( definition.uri, this.path );
-
-				fetch( url )
-
-					.then( response => {
-
-						return response.arrayBuffer();
-
-					} )
-
-					.then( ( arrayBuffer ) => {
-
-						resolve( arrayBuffer );
-
-					} ).catch( ( error ) => {
-
-						Logger.error( 'YUKA.NavMeshLoader: Unable to load buffer.', error );
-
-						reject( error );
-
-					} );
-
-			} );
-
-		}
-
-		loadBufferView( index ) {
-
-			const json = this.json;
-
-			const definition = json.bufferViews[ index ];
-
-			return this.getDependency( 'buffer', definition.buffer ).then( ( buffer ) => {
-
-				const byteLength = definition.byteLength || 0;
-				const byteOffset = definition.byteOffset || 0;
-				return buffer.slice( byteOffset, byteOffset + byteLength );
-
-			} );
-
-		}
-
-		loadAccessor( index ) {
-
-			const json = this.json;
-			const definition = json.accessors[ index ];
-
-			return this.getDependency( 'bufferView', definition.bufferView ).then( ( bufferView ) => {
-
-				const itemSize = WEBGL_TYPE_SIZES[ definition.type ];
-				const TypedArray = WEBGL_COMPONENT_TYPES[ definition.componentType ];
-				const byteOffset = definition.byteOffset || 0;
-
-				return new TypedArray( bufferView, byteOffset, definition.count * itemSize );
-
-			} );
-
-		}
-
-		loadMesh( index ) {
-
-			const json = this.json;
-			const definition = json.meshes[ index ];
-
-			return this.getDependencies( 'accessor' ).then( ( accessors ) => {
-
-				// assuming a single primitive
-
-				const primitive = definition.primitives[ 0 ];
-
-				if ( primitive.mode !== 4 ) {
-
-					throw new Error( 'YUKA.NavMeshLoader: Invalid geometry format. Please ensure to represent your geometry as triangles.' );
-
-				}
-
-				return {
-					index: accessors[ primitive.indices ],
-					position: accessors[ primitive.attributes.POSITION ],
-					normal: accessors[ primitive.attributes.NORMAL ]
-				};
-
-			} );
-
-		}
-
-		parseBinary( data ) {
-
-			const chunkView = new DataView( data, BINARY_EXTENSION_HEADER_LENGTH );
-			let chunkIndex = 0;
-
-			const decoder = new TextDecoder();
-			let content = null;
-			let body = null;
-
-			while ( chunkIndex < chunkView.byteLength ) {
-
-				const chunkLength = chunkView.getUint32( chunkIndex, true );
-				chunkIndex += 4;
-
-				const chunkType = chunkView.getUint32( chunkIndex, true );
-				chunkIndex += 4;
-
-				if ( chunkType === BINARY_EXTENSION_CHUNK_TYPES.JSON ) {
-
-					const contentArray = new Uint8Array( data, BINARY_EXTENSION_HEADER_LENGTH + chunkIndex, chunkLength );
-					content = decoder.decode( contentArray );
-
-				} else if ( chunkType === BINARY_EXTENSION_CHUNK_TYPES.BIN ) {
-
-					const byteOffset = BINARY_EXTENSION_HEADER_LENGTH + chunkIndex;
-					body = data.slice( byteOffset, byteOffset + chunkLength );
-
-				}
-
-				chunkIndex += chunkLength;
-
-			}
-
-			this.extensions.set( 'BINARY', { content: content, body: body } );
-
-		}
-
-	}
-
-	// helper functions
-
-	function extractUrlBase( url ) {
-
-		const index = url.lastIndexOf( '/' );
-
-		if ( index === - 1 ) return './';
-
-		return url.substr( 0, index + 1 );
-
-	}
-
-	function resolveURI( uri, path ) {
-
-		if ( typeof uri !== 'string' || uri === '' ) return '';
-
-		if ( /^(https?:)?\/\//i.test( uri ) ) return uri;
-
-		if ( /^data:.*,.*$/i.test( uri ) ) return uri;
-
-		if ( /^blob:.*$/i.test( uri ) ) return uri;
-
-		return path + uri;
-
-	}
-
-	//
-
-	const WEBGL_TYPE_SIZES = {
-		'SCALAR': 1,
-		'VEC2': 2,
-		'VEC3': 3,
-		'VEC4': 4,
-		'MAT2': 4,
-		'MAT3': 9,
-		'MAT4': 16
-	};
-
-	const WEBGL_COMPONENT_TYPES = {
-		5120: Int8Array,
-		5121: Uint8Array,
-		5122: Int16Array,
-		5123: Uint16Array,
-		5125: Uint32Array,
-		5126: Float32Array
-	};
-
-	const BINARY_EXTENSION_HEADER_MAGIC = 'glTF';
-	const BINARY_EXTENSION_HEADER_LENGTH = 12;
-	const BINARY_EXTENSION_CHUNK_TYPES = { JSON: 0x4E4F534A, BIN: 0x004E4942 };
-
-	/**
 	* Class for representing a single partition in context of cell-space partitioning.
 	*
 	* @author {@link https://github.com/Mugen87|Mugen87}
@@ -19777,711 +14602,6 @@
 				this.cells[ i ].resolveReferences( entities );
 
 			}
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing the memory information about a single game entity.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class MemoryRecord {
-
-		/**
-		* Constructs a new memory record.
-		*
-		* @param {GameEntity} entity - The game entity that is represented by this memory record.
-		*/
-		constructor( entity = null ) {
-
-			/**
-			* The game entity that is represented by this memory record.
-			* @type GameEntity
-			*/
-			this.entity = entity;
-
-			/**
-			* Records the time the entity became visible. Useful in combination with a reaction time
-			* in order to prevent immediate actions.
-			* @type Number
-			* @default - Infinity
-			*/
-			this.timeBecameVisible = - Infinity;
-
-			/**
-			* Records the time the entity was last sensed (e.g. seen or heard). Used to determine
-			* if a game entity can "remember" this record or not.
-			* @type Number
-			* @default - Infinity
-			*/
-			this.timeLastSensed = - Infinity;
-
-			/**
-			* Marks the position where the opponent was last sensed.
-			* @type Vector3
-			*/
-			this.lastSensedPosition = new Vector3();
-
-			/**
-			* Whether this game entity is visible or not.
-			* @type Boolean
-			* @default false
-			*/
-			this.visible = false;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			return {
-				type: this.constructor.name,
-				entity: this.entity.uuid,
-				timeBecameVisible: this.timeBecameVisible.toString(),
-				timeLastSensed: this.timeLastSensed.toString(),
-				lastSensedPosition: this.lastSensedPosition.toArray( new Array() ),
-				visible: this.visible
-			};
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {MemoryRecord} A reference to this memory record.
-		*/
-		fromJSON( json ) {
-
-			this.entity = json.entity; // uuid
-			this.timeBecameVisible = parseFloat( json.timeBecameVisible );
-			this.timeLastSensed = parseFloat( json.timeLastSensed );
-			this.lastSensedPosition.fromArray( json.lastSensedPosition );
-			this.visible = json.visible;
-
-			return this;
-
-		}
-
-		/**
-		* Restores UUIDs with references to GameEntity objects.
-		*
-		* @param {Map} entities - Maps game entities to UUIDs.
-		* @return {MemoryRecord} A reference to this memory record.
-		*/
-		resolveReferences( entities ) {
-
-			this.entity = entities.get( this.entity ) || null;
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* Class for representing the memory system of a game entity. It is used for managing,
-	* filtering, and remembering sensory input.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	*/
-	class MemorySystem {
-
-		/**
-		* Constructs a new memory system.
-		*
-		* @param {GameEntity} owner - The game entity that owns this memory system.
-		*/
-		constructor( owner = null ) {
-
-			/**
-			* The game entity that owns this memory system.
-			* @type GameEntity
-			*/
-			this.owner = owner;
-
-			/**
-			* Used to simulate memory of sensory events. It contains {@link MemoryRecord memory records}
-			* of all relevant game entities in the environment. The records are usually update by
-			* the owner of the memory system.
-			* @type Array
-			*/
-			this.records = new Array();
-
-			/**
-			* Same as {@link MemorySystem#records} but used for fast access via the game entity.
-			* @type Map
-			*/
-			this.recordsMap = new Map();
-
-			/**
-			* Represents the duration of the game entities short term memory in seconds.
-			* When a bot requests a list of all recently sensed game entities, this value
-			* is used to determine if the bot is able to remember a game entity or not.
-			* @type Number
-			* @default 1
-			*/
-			this.memorySpan = 1;
-
-		}
-
-		/**
-		* Returns the memory record of the given game entity.
-		*
-		* @param {GameEntity} entity - The game entity.
-		* @return {MemoryRecord} The memory record for this game entity.
-		*/
-		getRecord( entity ) {
-
-			return this.recordsMap.get( entity );
-
-		}
-
-		/**
-		* Creates a memory record for the given game entity.
-		*
-		* @param {GameEntity} entity - The game entity.
-		* @return {MemorySystem} A reference to this memory system.
-		*/
-		createRecord( entity ) {
-
-			const record = new MemoryRecord( entity );
-
-			this.records.push( record );
-			this.recordsMap.set( entity, record );
-
-			return this;
-
-		}
-
-		/**
-		* Deletes the memory record for the given game entity.
-		*
-		* @param {GameEntity} entity - The game entity.
-		* @return {MemorySystem} A reference to this memory system.
-		*/
-		deleteRecord( entity ) {
-
-			const record = this.getRecord( entity );
-			const index = this.records.indexOf( record );
-
-			this.records.splice( index, 1 );
-			this.recordsMap.delete( entity );
-
-			return this;
-
-		}
-
-		/**
-		* Returns true if there is a memory record for the given game entity.
-		*
-		* @param {GameEntity} entity - The game entity.
-		* @return {Boolean} Whether the game entity has a memory record or not.
-		*/
-		hasRecord( entity ) {
-
-			return this.recordsMap.has( entity );
-
-		}
-
-		/**
-		* Removes all memory records from the memory system.
-		*
-		* @return {MemorySystem} A reference to this memory system.
-		*/
-		clear() {
-
-			this.records.length = 0;
-			this.recordsMap.clear();
-
-			return this;
-
-		}
-
-		/**
-		* Determines all valid memory record and stores the result in the given array.
-		*
-		* @param {Number} currentTime - The current elapsed time.
-		* @param {Array} result - The result array.
-		* @return {Array} The result array.
-		*/
-		getValidMemoryRecords( currentTime, result ) {
-
-			const records = this.records;
-
-			result.length = 0;
-
-			for ( let i = 0, l = records.length; i < l; i ++ ) {
-
-				const record = records[ i ];
-
-				if ( ( currentTime - record.timeLastSensed ) <= this.memorySpan ) {
-
-					result.push( record );
-
-				}
-
-			}
-
-			return result;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = {
-				type: this.constructor.name,
-				owner: this.owner.uuid,
-				records: new Array(),
-				memorySpan: this.memorySpan
-			};
-
-			const records = this.records;
-
-			for ( let i = 0, l = records.length; i < l; i ++ ) {
-
-				const record = records[ i ];
-				json.records.push( record.toJSON() );
-
-			}
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {MemorySystem} A reference to this memory system.
-		*/
-		fromJSON( json ) {
-
-			this.owner = json.owner; // uuid
-			this.memorySpan = json.memorySpan;
-
-			const recordsJSON = json.records;
-
-			for ( let i = 0, l = recordsJSON.length; i < l; i ++ ) {
-
-				const recordJSON = recordsJSON[ i ];
-				const record = new MemoryRecord().fromJSON( recordJSON );
-
-				this.records.push( record );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		* Restores UUIDs with references to GameEntity objects.
-		*
-		* @param {Map} entities - Maps game entities to UUIDs.
-		* @return {MemorySystem} A reference to this memory system.
-		*/
-		resolveReferences( entities ) {
-
-			this.owner = entities.get( this.owner ) || null;
-
-			// records
-
-			const records = this.records;
-
-			for ( let i = 0, l = records.length; i < l; i ++ ) {
-
-				const record = 	records[ i ];
-
-				record.resolveReferences( entities );
-				this.recordsMap.set( record.entity, record );
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	const toPoint = new Vector3();
-	const direction$1 = new Vector3();
-	const ray$1 = new Ray();
-	const intersectionPoint$1 = new Vector3();
-	const worldPosition = new Vector3();
-
-	/**
-	 * Class for representing the vision component of a game entity.
-	 *
-	 * @author {@link https://github.com/Mugen87|Mugen87}
-	 */
-	class Vision {
-
-		/**
-		 * Constructs a new vision object.
-		 *
-		 * @param {GameEntity} owner - The owner of this vision instance.
-		 */
-		constructor( owner = null ) {
-
-			/**
-			 * The game entity that owns this vision instance.
-			 * @type GameEntity
-			 */
-			this.owner = owner;
-
-			/**
-			 * The field of view in radians.
-			 * @type Number
-			 * @default π
-			 */
-			this.fieldOfView = Math.PI;
-
-			/**
-			 * The visual range in world units.
-			 * @type Number
-			 * @default Infinity
-			 */
-			this.range = Infinity;
-
-			/**
-			 * An array of obstacles. An obstacle is a game entity that
-			 * implements the {@link GameEntity#lineOfSightTest} method.
-			 * @type Array
-			 */
-			this.obstacles = new Array();
-
-		}
-
-		/**
-		 * Adds an obstacle to this vision instance.
-		 *
-		 * @param {GameEntity} obstacle - The obstacle to add.
-		 * @return {Vision} A reference to this vision instance.
-		 */
-		addObstacle( obstacle ) {
-
-			this.obstacles.push( obstacle );
-
-			return this;
-
-		}
-
-		/**
-		 * Removes an obstacle from this vision instance.
-		 *
-		 * @param {GameEntity} obstacle - The obstacle to remove.
-		 * @return {Vision} A reference to this vision instance.
-		 */
-		removeObstacle( obstacle ) {
-
-			const index = this.obstacles.indexOf( obstacle );
-			this.obstacles.splice( index, 1 );
-
-			return this;
-
-		}
-
-		/**
-		 * Performs a line of sight test in order to determine if the given point
-		 * in 3D space is visible for the game entity.
-		 *
-		 * @param {Vector3} point - The point to test.
-		 * @return {Boolean} Whether the given point is visible or not.
-		 */
-		visible( point ) {
-
-			const owner = this.owner;
-			const obstacles = this.obstacles;
-
-			owner.getWorldPosition( worldPosition );
-
-			// check if point lies within the game entity's visual range
-
-			toPoint.subVectors( point, worldPosition );
-			const distanceToPoint = toPoint.length();
-
-			if ( distanceToPoint > this.range ) return false;
-
-			// next, check if the point lies within the game entity's field of view
-
-			owner.getWorldDirection( direction$1 );
-
-			const angle = direction$1.angleTo( toPoint );
-
-			if ( angle > ( this.fieldOfView * 0.5 ) ) return false;
-
-			// the point lies within the game entity's visual range and field
-			// of view. now check if obstacles block the game entity's view to the given point.
-
-			ray$1.origin.copy( worldPosition );
-			ray$1.direction.copy( toPoint ).divideScalar( distanceToPoint || 1 ); // normalize
-
-			for ( let i = 0, l = obstacles.length; i < l; i ++ ) {
-
-				const obstacle = obstacles[ i ];
-
-				const intersection = obstacle.lineOfSightTest( ray$1, intersectionPoint$1 );
-
-				if ( intersection !== null ) {
-
-					// if an intersection point is closer to the game entity than the given point,
-					// something is blocking the game entity's view
-
-					const squaredDistanceToIntersectionPoint = intersectionPoint$1.squaredDistanceTo( worldPosition );
-
-					if ( squaredDistanceToIntersectionPoint <= ( distanceToPoint * distanceToPoint ) ) return false;
-
-				}
-
-			}
-
-			return true;
-
-		}
-
-		/**
-		 * Transforms this instance into a JSON object.
-		 *
-		 * @return {Object} The JSON object.
-		 */
-		toJSON() {
-
-			const json = {
-				type: this.constructor.name,
-				owner: this.owner.uuid,
-				fieldOfView: this.fieldOfView,
-				range: this.range.toString()
-			};
-
-			json.obstacles = new Array();
-
-			for ( let i = 0, l = this.obstacles.length; i < l; i ++ ) {
-
-				const obstacle = this.obstacles[ i ];
-				json.obstacles.push( obstacle.uuid );
-
-			}
-
-			return json;
-
-		}
-
-		/**
-		 * Restores this instance from the given JSON object.
-		 *
-		 * @param {Object} json - The JSON object.
-		 * @return {Vision} A reference to this vision.
-		 */
-		fromJSON( json ) {
-
-			this.owner = json.owner;
-			this.fieldOfView = json.fieldOfView;
-			this.range = parseFloat( json.range );
-
-			for ( let i = 0, l = json.obstacles.length; i < l; i ++ ) {
-
-				const obstacle = json.obstacles[ i ];
-				this.obstacles.push( obstacle );
-
-			}
-
-			return this;
-
-		}
-
-		/**
-		 * Restores UUIDs with references to GameEntity objects.
-		 *
-		 * @param {Map} entities - Maps game entities to UUIDs.
-		 * @return {Vision} A reference to this vision.
-		 */
-		resolveReferences( entities ) {
-
-			this.owner = entities.get( this.owner ) || null;
-
-			const obstacles = this.obstacles;
-
-			for ( let i = 0, l = obstacles.length; i < l; i ++ ) {
-
-				obstacles[ i ] = entities.get( obstacles[ i ] );
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	const translation$1 = new Vector3();
-	const predictedPosition$3 = new Vector3();
-	const normalPoint = new Vector3();
-	const lineSegment$1 = new LineSegment();
-	const closestNormalPoint = new Vector3();
-
-	/**
-	* This steering behavior produces a force that keeps a vehicle close to its path. It is intended
-	* to use it in combination with {@link FollowPathBehavior} in order to realize a more strict path following.
-	*
-	* @author {@link https://github.com/Mugen87|Mugen87}
-	* @augments SteeringBehavior
-	*/
-	class OnPathBehavior extends SteeringBehavior {
-
-		/**
-		* Constructs a new on path behavior.
-		*
-		* @param {Path} path - The path to stay close to.
-		* @param {Number} radius - Defines the width of the path. With a smaller radius, the vehicle will have to follow the path more closely.
-		* @param {Number} predictionFactor - Determines how far the behavior predicts the movement of the vehicle.
-		*/
-		constructor( path = new Path(), radius = 0.1, predictionFactor = 1 ) {
-
-			super();
-
-			/**
-			* The path to stay close to.
-			* @type Path
-			*/
-			this.path = path;
-
-			/**
-			* Defines the width of the path. With a smaller radius, the vehicle will have to follow the path more closely.
-			* @type Number
-			* @default 0.1
-			*/
-			this.radius = radius;
-
-			/**
-			* Determines how far the behavior predicts the movement of the vehicle.
-			* @type Number
-			* @default 1
-			*/
-			this.predictionFactor = predictionFactor;
-
-			// internal behaviors
-
-			this._seek = new SeekBehavior();
-
-		}
-
-		/**
-		* Calculates the steering force for a single simulation step.
-		*
-		* @param {Vehicle} vehicle - The game entity the force is produced for.
-		* @param {Vector3} force - The force/result vector.
-		* @param {Number} delta - The time delta.
-		* @return {Vector3} The force/result vector.
-		*/
-		calculate( vehicle, force /*, delta */ ) {
-
-			const path = this.path;
-
-			// predicted future position
-
-			translation$1.copy( vehicle.velocity ).multiplyScalar( this.predictionFactor );
-			predictedPosition$3.addVectors( vehicle.position, translation$1 );
-
-			// compute closest line segment and normal point. the normal point is computed by projecting
-			// the predicted position of the vehicle on a line segment.
-
-			let minDistance = Infinity;
-
-			let l = path._waypoints.length;
-
-			// handle looped paths differently since they have one line segment more
-
-			l = ( path.loop === true ) ? l : l - 1;
-
-			for ( let i = 0; i < l; i ++ ) {
-
-				lineSegment$1.from = path._waypoints[ i ];
-
-				// the last waypoint needs to be handled differently for a looped path.
-				// connect the last point with the first one in order to create the last line segment
-
-				if ( path.loop === true && i === ( l - 1 ) ) {
-
-					lineSegment$1.to = path._waypoints[ 0 ];
-
-				} else {
-
-					lineSegment$1.to = path._waypoints[ i + 1 ];
-
-				}
-
-				lineSegment$1.closestPointToPoint( predictedPosition$3, true, normalPoint );
-
-				const distance = predictedPosition$3.squaredDistanceTo( normalPoint );
-
-				if ( distance < minDistance ) {
-
-					minDistance = distance;
-					closestNormalPoint.copy( normalPoint );
-
-				}
-
-			}
-
-			// seek towards the projected point on the closest line segment if
-			// the predicted position of the vehicle is outside the valid range.
-			// also ensure that the path length is greater than zero when performing a seek
-
-			if ( minDistance > ( this.radius * this.radius ) && path._waypoints.length > 1 ) {
-
-				this._seek.target = closestNormalPoint;
-				this._seek.calculate( vehicle, force );
-
-			}
-
-			return force;
-
-		}
-
-		/**
-		* Transforms this instance into a JSON object.
-		*
-		* @return {Object} The JSON object.
-		*/
-		toJSON() {
-
-			const json = super.toJSON();
-
-			json.path = this.path.toJSON();
-			json.radius = this.radius;
-			json.predictionFactor = this.predictionFactor;
-
-			return json;
-
-		}
-
-		/**
-		* Restores this instance from the given JSON object.
-		*
-		* @param {Object} json - The JSON object.
-		* @return {OnPathBehavior} A reference to this behavior.
-		*/
-		fromJSON( json ) {
-
-			super.fromJSON( json );
-
-			this.path.fromJSON( json.path );
-			this.radius = json.radius;
-			this.predictionFactor = json.predictionFactor;
 
 			return this;
 
@@ -21802,16 +15922,16 @@
 	const closestPoint$2=  new Vector3();
 
 	const pointOnLineSegment$1 = new Vector3();
-	const lineSegment$2 = new LineSegment();
+	const lineSegment$1 = new LineSegment();
 	function clampPointWithinRegion(region, point) {
 		let edge = region.edge;
 		let minDistance = Infinity;
 
 		// consider todo: alternate faster implementation with edge perp dot product checks?
 		do {
-			lineSegment$2.set( edge.prev.vertex, edge.vertex );
-			const t = lineSegment$2.closestPointToPointParameter( point );
-			lineSegment$2.at( t, pointOnLineSegment$1 );
+			lineSegment$1.set( edge.prev.vertex, edge.vertex );
+			const t = lineSegment$1.closestPointToPointParameter( point );
+			lineSegment$1.at( t, pointOnLineSegment$1 );
 			const distance = pointOnLineSegment$1.squaredDistanceTo( point );
 			if ( distance < minDistance ) {
 				minDistance = distance;
@@ -22044,139 +16164,6 @@
 			}
 			return 1;
 		}
-	}
-
-	/**
-	* Base class for representing tasks. A task is an isolated unit of work that is
-	* processed in an asynchronous way. Tasks are managed within a {@link TaskQueue task queue}.
-	*
-	* @author {@link https://github.com/robp94|robp94}
-	*/
-	class Task {
-
-		/**
-		* This method represents the actual unit of work.
-		* Must be implemented by all concrete tasks.
-		*/
-		execute() {}
-
-	}
-
-	/**
-	* This class is used for task management. Tasks are processed in an asynchronous
-	* way when there is idle time within a single simulation step or after a defined amount
-	* of time (deadline). The class is a wrapper around {@link https://w3.org/TR/requestidlecallback|requestidlecallback()},
-	* a JavaScript API for cooperative scheduling of background tasks.
-	*
-	* @author {@link https://github.com/robp94|robp94}
-	*/
-	class TaskQueue {
-
-		/**
-		* Constructs a new task queue.
-		*/
-		constructor() {
-
-			/**
-			* A list of pending tasks.
-			* @type Array
-			*/
-			this.tasks = new Array();
-
-			/**
-			* Used to control the asynchronous processing.
-			* - timeout: After this amount of time (in ms), a scheduled task is executed even if
-			* doing so risks causing a negative performance impact (e.g. bad frame time).
-			* @type Object
-			*/
-			this.options = {
-				timeout: 1000 // ms
-			};
-
-			//
-
-			this._active = false;
-			this._handler = runTaskQueue.bind( this );
-			this._taskHandle = 0;
-
-		}
-
-		/**
-		* Adds the given task to the task queue.
-		*
-		* @param {Task} task - The task to add.
-		* @return {TaskQueue} A reference to this task queue.
-		*/
-		enqueue( task ) {
-
-			this.tasks.push( task );
-
-			return this;
-
-		}
-
-		/**
-		* Updates the internal state of the task queue. Should be called
-		* per simulation step.
-		*
-		* @return {TaskQueue} A reference to this task queue.
-		*/
-		update() {
-
-			if ( this.tasks.length > 0 ) {
-
-				if ( this._active === false ) {
-
-					this._taskHandle = requestIdleCallback( this._handler, this.options );
-					this._active = true;
-
-				}
-
-			} else {
-
-				this._active = false;
-
-			}
-
-			return this;
-
-		}
-
-	}
-
-	/**
-	* This function controls the processing of tasks. It schedules tasks when there
-	* is idle time at the end of a simulation step.
-	*
-	* @param {Object} deadline - This object contains a function which returns
-	* a number indicating how much time remains for task processing.
-	*/
-	function runTaskQueue( deadline ) {
-
-		const tasks = this.tasks;
-
-		while ( deadline.timeRemaining() > 0 && tasks.length > 0 ) {
-
-			const task = tasks[ 0 ];
-
-			task.execute();
-
-			tasks.shift();
-
-		}
-
-		if ( tasks.length > 0 ) {
-
-			this._taskHandle = requestIdleCallback( this._handler, this.options );
-			this._active = true;
-
-		} else {
-
-			this._taskHandle = 0;
-			this._active = false;
-
-		}
-
 	}
 
 	const EPSILON = Math.pow(2, -52);
@@ -23322,7 +17309,9 @@ return dispatchBsearch", suffix].join(""));
 	  eq: compileBoundsSearch("-",  true,   "EQ", true)
 	};
 
-	var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
+	function unwrapExports (x) {
+		return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
+	}
 
 	function createCommonjsModule(fn, module) {
 		return module = { exports: {} }, fn(module, module.exports), module.exports;
@@ -24746,8495 +18735,8681 @@ return d[d.length-1];};return ", funcName].join("");
 	  }
 	}
 
-	var unionFind = UnionFind;
-
-	function UnionFind(count) {
-	  this.roots = new Array(count);
-	  this.ranks = new Array(count);
-	  
-	  for(var i=0; i<count; ++i) {
-	    this.roots[i] = i;
-	    this.ranks[i] = 0;
-	  }
-	}
-
-	var proto$2 = UnionFind.prototype;
-
-	Object.defineProperty(proto$2, "length", {
-	  "get": function() {
-	    return this.roots.length
-	  }
-	});
-
-	proto$2.makeSet = function() {
-	  var n = this.roots.length;
-	  this.roots.push(n);
-	  this.ranks.push(0);
-	  return n;
-	};
-
-	proto$2.find = function(x) {
-	  var x0 = x;
-	  var roots = this.roots;
-	  while(roots[x] !== x) {
-	    x = roots[x];
-	  }
-	  while(roots[x0] !== x) {
-	    var y = roots[x0];
-	    roots[x0] = x;
-	    x0 = y;
-	  }
-	  return x;
-	};
-
-	proto$2.link = function(x, y) {
-	  var xr = this.find(x)
-	    , yr = this.find(y);
-	  if(xr === yr) {
-	    return;
-	  }
-	  var ranks = this.ranks
-	    , roots = this.roots
-	    , xd    = ranks[xr]
-	    , yd    = ranks[yr];
-	  if(xd < yd) {
-	    roots[xr] = yr;
-	  } else if(yd < xd) {
-	    roots[yr] = xr;
-	  } else {
-	    roots[yr] = xr;
-	    ++ranks[xr];
-	  }
-	};
-
-	var global$1 = (typeof global !== "undefined" ? global :
-	            typeof self !== "undefined" ? self :
-	            typeof window !== "undefined" ? window : {});
-
-	var lookup = [];
-	var revLookup = [];
-	var Arr = typeof Uint8Array !== 'undefined' ? Uint8Array : Array;
-	var inited = false;
-	function init () {
-	  inited = true;
-	  var code = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-	  for (var i = 0, len = code.length; i < len; ++i) {
-	    lookup[i] = code[i];
-	    revLookup[code.charCodeAt(i)] = i;
-	  }
-
-	  revLookup['-'.charCodeAt(0)] = 62;
-	  revLookup['_'.charCodeAt(0)] = 63;
-	}
-
-	function toByteArray (b64) {
-	  if (!inited) {
-	    init();
-	  }
-	  var i, j, l, tmp, placeHolders, arr;
-	  var len = b64.length;
-
-	  if (len % 4 > 0) {
-	    throw new Error('Invalid string. Length must be a multiple of 4')
-	  }
-
-	  // the number of equal signs (place holders)
-	  // if there are two placeholders, than the two characters before it
-	  // represent one byte
-	  // if there is only one, then the three characters before it represent 2 bytes
-	  // this is just a cheap hack to not do indexOf twice
-	  placeHolders = b64[len - 2] === '=' ? 2 : b64[len - 1] === '=' ? 1 : 0;
-
-	  // base64 is 4/3 + up to two characters of the original data
-	  arr = new Arr(len * 3 / 4 - placeHolders);
-
-	  // if there are placeholders, only get up to the last complete 4 chars
-	  l = placeHolders > 0 ? len - 4 : len;
-
-	  var L = 0;
-
-	  for (i = 0, j = 0; i < l; i += 4, j += 3) {
-	    tmp = (revLookup[b64.charCodeAt(i)] << 18) | (revLookup[b64.charCodeAt(i + 1)] << 12) | (revLookup[b64.charCodeAt(i + 2)] << 6) | revLookup[b64.charCodeAt(i + 3)];
-	    arr[L++] = (tmp >> 16) & 0xFF;
-	    arr[L++] = (tmp >> 8) & 0xFF;
-	    arr[L++] = tmp & 0xFF;
-	  }
-
-	  if (placeHolders === 2) {
-	    tmp = (revLookup[b64.charCodeAt(i)] << 2) | (revLookup[b64.charCodeAt(i + 1)] >> 4);
-	    arr[L++] = tmp & 0xFF;
-	  } else if (placeHolders === 1) {
-	    tmp = (revLookup[b64.charCodeAt(i)] << 10) | (revLookup[b64.charCodeAt(i + 1)] << 4) | (revLookup[b64.charCodeAt(i + 2)] >> 2);
-	    arr[L++] = (tmp >> 8) & 0xFF;
-	    arr[L++] = tmp & 0xFF;
-	  }
-
-	  return arr
-	}
-
-	function tripletToBase64 (num) {
-	  return lookup[num >> 18 & 0x3F] + lookup[num >> 12 & 0x3F] + lookup[num >> 6 & 0x3F] + lookup[num & 0x3F]
-	}
-
-	function encodeChunk (uint8, start, end) {
-	  var tmp;
-	  var output = [];
-	  for (var i = start; i < end; i += 3) {
-	    tmp = (uint8[i] << 16) + (uint8[i + 1] << 8) + (uint8[i + 2]);
-	    output.push(tripletToBase64(tmp));
-	  }
-	  return output.join('')
-	}
-
-	function fromByteArray (uint8) {
-	  if (!inited) {
-	    init();
-	  }
-	  var tmp;
-	  var len = uint8.length;
-	  var extraBytes = len % 3; // if we have 1 byte left, pad 2 bytes
-	  var output = '';
-	  var parts = [];
-	  var maxChunkLength = 16383; // must be multiple of 3
-
-	  // go through the array every three bytes, we'll deal with trailing stuff later
-	  for (var i = 0, len2 = len - extraBytes; i < len2; i += maxChunkLength) {
-	    parts.push(encodeChunk(uint8, i, (i + maxChunkLength) > len2 ? len2 : (i + maxChunkLength)));
-	  }
-
-	  // pad the end with zeros, but make sure to not forget the extra bytes
-	  if (extraBytes === 1) {
-	    tmp = uint8[len - 1];
-	    output += lookup[tmp >> 2];
-	    output += lookup[(tmp << 4) & 0x3F];
-	    output += '==';
-	  } else if (extraBytes === 2) {
-	    tmp = (uint8[len - 2] << 8) + (uint8[len - 1]);
-	    output += lookup[tmp >> 10];
-	    output += lookup[(tmp >> 4) & 0x3F];
-	    output += lookup[(tmp << 2) & 0x3F];
-	    output += '=';
-	  }
-
-	  parts.push(output);
-
-	  return parts.join('')
-	}
-
-	var base64 = /*#__PURE__*/Object.freeze({
-		toByteArray: toByteArray,
-		fromByteArray: fromByteArray
-	});
-
-	function read (buffer, offset, isLE, mLen, nBytes) {
-	  var e, m;
-	  var eLen = nBytes * 8 - mLen - 1;
-	  var eMax = (1 << eLen) - 1;
-	  var eBias = eMax >> 1;
-	  var nBits = -7;
-	  var i = isLE ? (nBytes - 1) : 0;
-	  var d = isLE ? -1 : 1;
-	  var s = buffer[offset + i];
-
-	  i += d;
-
-	  e = s & ((1 << (-nBits)) - 1);
-	  s >>= (-nBits);
-	  nBits += eLen;
-	  for (; nBits > 0; e = e * 256 + buffer[offset + i], i += d, nBits -= 8) {}
-
-	  m = e & ((1 << (-nBits)) - 1);
-	  e >>= (-nBits);
-	  nBits += mLen;
-	  for (; nBits > 0; m = m * 256 + buffer[offset + i], i += d, nBits -= 8) {}
-
-	  if (e === 0) {
-	    e = 1 - eBias;
-	  } else if (e === eMax) {
-	    return m ? NaN : ((s ? -1 : 1) * Infinity)
-	  } else {
-	    m = m + Math.pow(2, mLen);
-	    e = e - eBias;
-	  }
-	  return (s ? -1 : 1) * m * Math.pow(2, e - mLen)
-	}
-
-	function write (buffer, value, offset, isLE, mLen, nBytes) {
-	  var e, m, c;
-	  var eLen = nBytes * 8 - mLen - 1;
-	  var eMax = (1 << eLen) - 1;
-	  var eBias = eMax >> 1;
-	  var rt = (mLen === 23 ? Math.pow(2, -24) - Math.pow(2, -77) : 0);
-	  var i = isLE ? 0 : (nBytes - 1);
-	  var d = isLE ? 1 : -1;
-	  var s = value < 0 || (value === 0 && 1 / value < 0) ? 1 : 0;
-
-	  value = Math.abs(value);
-
-	  if (isNaN(value) || value === Infinity) {
-	    m = isNaN(value) ? 1 : 0;
-	    e = eMax;
-	  } else {
-	    e = Math.floor(Math.log(value) / Math.LN2);
-	    if (value * (c = Math.pow(2, -e)) < 1) {
-	      e--;
-	      c *= 2;
-	    }
-	    if (e + eBias >= 1) {
-	      value += rt / c;
-	    } else {
-	      value += rt * Math.pow(2, 1 - eBias);
-	    }
-	    if (value * c >= 2) {
-	      e++;
-	      c /= 2;
-	    }
-
-	    if (e + eBias >= eMax) {
-	      m = 0;
-	      e = eMax;
-	    } else if (e + eBias >= 1) {
-	      m = (value * c - 1) * Math.pow(2, mLen);
-	      e = e + eBias;
-	    } else {
-	      m = value * Math.pow(2, eBias - 1) * Math.pow(2, mLen);
-	      e = 0;
-	    }
-	  }
-
-	  for (; mLen >= 8; buffer[offset + i] = m & 0xff, i += d, m /= 256, mLen -= 8) {}
-
-	  e = (e << mLen) | m;
-	  eLen += mLen;
-	  for (; eLen > 0; buffer[offset + i] = e & 0xff, i += d, e /= 256, eLen -= 8) {}
-
-	  buffer[offset + i - d] |= s * 128;
-	}
-
-	var toString = {}.toString;
-
-	var isArray = Array.isArray || function (arr) {
-	  return toString.call(arr) == '[object Array]';
-	};
-
-	var INSPECT_MAX_BYTES = 50;
-
-	/**
-	 * If `Buffer.TYPED_ARRAY_SUPPORT`:
-	 *   === true    Use Uint8Array implementation (fastest)
-	 *   === false   Use Object implementation (most compatible, even IE6)
-	 *
-	 * Browsers that support typed arrays are IE 10+, Firefox 4+, Chrome 7+, Safari 5.1+,
-	 * Opera 11.6+, iOS 4.2+.
-	 *
-	 * Due to various browser bugs, sometimes the Object implementation will be used even
-	 * when the browser supports typed arrays.
-	 *
-	 * Note:
-	 *
-	 *   - Firefox 4-29 lacks support for adding new properties to `Uint8Array` instances,
-	 *     See: https://bugzilla.mozilla.org/show_bug.cgi?id=695438.
-	 *
-	 *   - Chrome 9-10 is missing the `TypedArray.prototype.subarray` function.
-	 *
-	 *   - IE10 has a broken `TypedArray.prototype.subarray` function which returns arrays of
-	 *     incorrect length in some situations.
-
-	 * We detect these buggy browsers and set `Buffer.TYPED_ARRAY_SUPPORT` to `false` so they
-	 * get the Object implementation, which is slower but behaves correctly.
-	 */
-	Buffer.TYPED_ARRAY_SUPPORT = global$1.TYPED_ARRAY_SUPPORT !== undefined
-	  ? global$1.TYPED_ARRAY_SUPPORT
-	  : true;
-
-	/*
-	 * Export kMaxLength after typed array support is determined.
-	 */
-	var _kMaxLength = kMaxLength();
-
-	function kMaxLength () {
-	  return Buffer.TYPED_ARRAY_SUPPORT
-	    ? 0x7fffffff
-	    : 0x3fffffff
-	}
-
-	function createBuffer (that, length) {
-	  if (kMaxLength() < length) {
-	    throw new RangeError('Invalid typed array length')
-	  }
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    // Return an augmented `Uint8Array` instance, for best performance
-	    that = new Uint8Array(length);
-	    that.__proto__ = Buffer.prototype;
-	  } else {
-	    // Fallback: Return an object instance of the Buffer class
-	    if (that === null) {
-	      that = new Buffer(length);
-	    }
-	    that.length = length;
-	  }
-
-	  return that
-	}
-
-	/**
-	 * The Buffer constructor returns instances of `Uint8Array` that have their
-	 * prototype changed to `Buffer.prototype`. Furthermore, `Buffer` is a subclass of
-	 * `Uint8Array`, so the returned instances will have all the node `Buffer` methods
-	 * and the `Uint8Array` methods. Square bracket notation works as expected -- it
-	 * returns a single octet.
-	 *
-	 * The `Uint8Array` prototype remains unmodified.
-	 */
-
-	function Buffer (arg, encodingOrOffset, length) {
-	  if (!Buffer.TYPED_ARRAY_SUPPORT && !(this instanceof Buffer)) {
-	    return new Buffer(arg, encodingOrOffset, length)
-	  }
-
-	  // Common case.
-	  if (typeof arg === 'number') {
-	    if (typeof encodingOrOffset === 'string') {
-	      throw new Error(
-	        'If encoding is specified then the first argument must be a string'
-	      )
-	    }
-	    return allocUnsafe(this, arg)
-	  }
-	  return from(this, arg, encodingOrOffset, length)
-	}
-
-	Buffer.poolSize = 8192; // not used by this implementation
-
-	// TODO: Legacy, not needed anymore. Remove in next major version.
-	Buffer._augment = function (arr) {
-	  arr.__proto__ = Buffer.prototype;
-	  return arr
-	};
-
-	function from (that, value, encodingOrOffset, length) {
-	  if (typeof value === 'number') {
-	    throw new TypeError('"value" argument must not be a number')
-	  }
-
-	  if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
-	    return fromArrayBuffer(that, value, encodingOrOffset, length)
-	  }
-
-	  if (typeof value === 'string') {
-	    return fromString(that, value, encodingOrOffset)
-	  }
-
-	  return fromObject(that, value)
-	}
-
-	/**
-	 * Functionally equivalent to Buffer(arg, encoding) but throws a TypeError
-	 * if value is a number.
-	 * Buffer.from(str[, encoding])
-	 * Buffer.from(array)
-	 * Buffer.from(buffer)
-	 * Buffer.from(arrayBuffer[, byteOffset[, length]])
-	 **/
-	Buffer.from = function (value, encodingOrOffset, length) {
-	  return from(null, value, encodingOrOffset, length)
-	};
-
-	if (Buffer.TYPED_ARRAY_SUPPORT) {
-	  Buffer.prototype.__proto__ = Uint8Array.prototype;
-	  Buffer.__proto__ = Uint8Array;
-	}
-
-	function assertSize (size) {
-	  if (typeof size !== 'number') {
-	    throw new TypeError('"size" argument must be a number')
-	  } else if (size < 0) {
-	    throw new RangeError('"size" argument must not be negative')
-	  }
-	}
-
-	function alloc (that, size, fill, encoding) {
-	  assertSize(size);
-	  if (size <= 0) {
-	    return createBuffer(that, size)
-	  }
-	  if (fill !== undefined) {
-	    // Only pay attention to encoding if it's a string. This
-	    // prevents accidentally sending in a number that would
-	    // be interpretted as a start offset.
-	    return typeof encoding === 'string'
-	      ? createBuffer(that, size).fill(fill, encoding)
-	      : createBuffer(that, size).fill(fill)
-	  }
-	  return createBuffer(that, size)
-	}
-
-	/**
-	 * Creates a new filled Buffer instance.
-	 * alloc(size[, fill[, encoding]])
-	 **/
-	Buffer.alloc = function (size, fill, encoding) {
-	  return alloc(null, size, fill, encoding)
-	};
-
-	function allocUnsafe (that, size) {
-	  assertSize(size);
-	  that = createBuffer(that, size < 0 ? 0 : checked(size) | 0);
-	  if (!Buffer.TYPED_ARRAY_SUPPORT) {
-	    for (var i = 0; i < size; ++i) {
-	      that[i] = 0;
-	    }
-	  }
-	  return that
-	}
-
-	/**
-	 * Equivalent to Buffer(num), by default creates a non-zero-filled Buffer instance.
-	 * */
-	Buffer.allocUnsafe = function (size) {
-	  return allocUnsafe(null, size)
-	};
-	/**
-	 * Equivalent to SlowBuffer(num), by default creates a non-zero-filled Buffer instance.
-	 */
-	Buffer.allocUnsafeSlow = function (size) {
-	  return allocUnsafe(null, size)
-	};
-
-	function fromString (that, string, encoding) {
-	  if (typeof encoding !== 'string' || encoding === '') {
-	    encoding = 'utf8';
-	  }
-
-	  if (!Buffer.isEncoding(encoding)) {
-	    throw new TypeError('"encoding" must be a valid string encoding')
-	  }
-
-	  var length = byteLength(string, encoding) | 0;
-	  that = createBuffer(that, length);
-
-	  var actual = that.write(string, encoding);
-
-	  if (actual !== length) {
-	    // Writing a hex string, for example, that contains invalid characters will
-	    // cause everything after the first invalid character to be ignored. (e.g.
-	    // 'abxxcd' will be treated as 'ab')
-	    that = that.slice(0, actual);
-	  }
-
-	  return that
-	}
-
-	function fromArrayLike (that, array) {
-	  var length = array.length < 0 ? 0 : checked(array.length) | 0;
-	  that = createBuffer(that, length);
-	  for (var i = 0; i < length; i += 1) {
-	    that[i] = array[i] & 255;
-	  }
-	  return that
-	}
-
-	function fromArrayBuffer (that, array, byteOffset, length) {
-	  array.byteLength; // this throws if `array` is not a valid ArrayBuffer
-
-	  if (byteOffset < 0 || array.byteLength < byteOffset) {
-	    throw new RangeError('\'offset\' is out of bounds')
-	  }
-
-	  if (array.byteLength < byteOffset + (length || 0)) {
-	    throw new RangeError('\'length\' is out of bounds')
-	  }
-
-	  if (byteOffset === undefined && length === undefined) {
-	    array = new Uint8Array(array);
-	  } else if (length === undefined) {
-	    array = new Uint8Array(array, byteOffset);
-	  } else {
-	    array = new Uint8Array(array, byteOffset, length);
-	  }
-
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    // Return an augmented `Uint8Array` instance, for best performance
-	    that = array;
-	    that.__proto__ = Buffer.prototype;
-	  } else {
-	    // Fallback: Return an object instance of the Buffer class
-	    that = fromArrayLike(that, array);
-	  }
-	  return that
-	}
-
-	function fromObject (that, obj) {
-	  if (internalIsBuffer(obj)) {
-	    var len = checked(obj.length) | 0;
-	    that = createBuffer(that, len);
-
-	    if (that.length === 0) {
-	      return that
-	    }
-
-	    obj.copy(that, 0, 0, len);
-	    return that
-	  }
-
-	  if (obj) {
-	    if ((typeof ArrayBuffer !== 'undefined' &&
-	        obj.buffer instanceof ArrayBuffer) || 'length' in obj) {
-	      if (typeof obj.length !== 'number' || isnan(obj.length)) {
-	        return createBuffer(that, 0)
-	      }
-	      return fromArrayLike(that, obj)
-	    }
-
-	    if (obj.type === 'Buffer' && isArray(obj.data)) {
-	      return fromArrayLike(that, obj.data)
-	    }
-	  }
-
-	  throw new TypeError('First argument must be a string, Buffer, ArrayBuffer, Array, or array-like object.')
-	}
-
-	function checked (length) {
-	  // Note: cannot use `length < kMaxLength()` here because that fails when
-	  // length is NaN (which is otherwise coerced to zero.)
-	  if (length >= kMaxLength()) {
-	    throw new RangeError('Attempt to allocate Buffer larger than maximum ' +
-	                         'size: 0x' + kMaxLength().toString(16) + ' bytes')
-	  }
-	  return length | 0
-	}
-
-	function SlowBuffer (length) {
-	  if (+length != length) { // eslint-disable-line eqeqeq
-	    length = 0;
-	  }
-	  return Buffer.alloc(+length)
-	}
-	Buffer.isBuffer = isBuffer;
-	function internalIsBuffer (b) {
-	  return !!(b != null && b._isBuffer)
-	}
-
-	Buffer.compare = function compare (a, b) {
-	  if (!internalIsBuffer(a) || !internalIsBuffer(b)) {
-	    throw new TypeError('Arguments must be Buffers')
-	  }
-
-	  if (a === b) return 0
-
-	  var x = a.length;
-	  var y = b.length;
-
-	  for (var i = 0, len = Math.min(x, y); i < len; ++i) {
-	    if (a[i] !== b[i]) {
-	      x = a[i];
-	      y = b[i];
-	      break
-	    }
-	  }
-
-	  if (x < y) return -1
-	  if (y < x) return 1
-	  return 0
-	};
-
-	Buffer.isEncoding = function isEncoding (encoding) {
-	  switch (String(encoding).toLowerCase()) {
-	    case 'hex':
-	    case 'utf8':
-	    case 'utf-8':
-	    case 'ascii':
-	    case 'latin1':
-	    case 'binary':
-	    case 'base64':
-	    case 'ucs2':
-	    case 'ucs-2':
-	    case 'utf16le':
-	    case 'utf-16le':
-	      return true
-	    default:
-	      return false
-	  }
-	};
-
-	Buffer.concat = function concat (list, length) {
-	  if (!isArray(list)) {
-	    throw new TypeError('"list" argument must be an Array of Buffers')
-	  }
-
-	  if (list.length === 0) {
-	    return Buffer.alloc(0)
-	  }
-
-	  var i;
-	  if (length === undefined) {
-	    length = 0;
-	    for (i = 0; i < list.length; ++i) {
-	      length += list[i].length;
-	    }
-	  }
-
-	  var buffer = Buffer.allocUnsafe(length);
-	  var pos = 0;
-	  for (i = 0; i < list.length; ++i) {
-	    var buf = list[i];
-	    if (!internalIsBuffer(buf)) {
-	      throw new TypeError('"list" argument must be an Array of Buffers')
-	    }
-	    buf.copy(buffer, pos);
-	    pos += buf.length;
-	  }
-	  return buffer
-	};
-
-	function byteLength (string, encoding) {
-	  if (internalIsBuffer(string)) {
-	    return string.length
-	  }
-	  if (typeof ArrayBuffer !== 'undefined' && typeof ArrayBuffer.isView === 'function' &&
-	      (ArrayBuffer.isView(string) || string instanceof ArrayBuffer)) {
-	    return string.byteLength
-	  }
-	  if (typeof string !== 'string') {
-	    string = '' + string;
-	  }
-
-	  var len = string.length;
-	  if (len === 0) return 0
-
-	  // Use a for loop to avoid recursion
-	  var loweredCase = false;
-	  for (;;) {
-	    switch (encoding) {
-	      case 'ascii':
-	      case 'latin1':
-	      case 'binary':
-	        return len
-	      case 'utf8':
-	      case 'utf-8':
-	      case undefined:
-	        return utf8ToBytes(string).length
-	      case 'ucs2':
-	      case 'ucs-2':
-	      case 'utf16le':
-	      case 'utf-16le':
-	        return len * 2
-	      case 'hex':
-	        return len >>> 1
-	      case 'base64':
-	        return base64ToBytes(string).length
-	      default:
-	        if (loweredCase) return utf8ToBytes(string).length // assume utf8
-	        encoding = ('' + encoding).toLowerCase();
-	        loweredCase = true;
-	    }
-	  }
-	}
-	Buffer.byteLength = byteLength;
-
-	function slowToString (encoding, start, end) {
-	  var loweredCase = false;
-
-	  // No need to verify that "this.length <= MAX_UINT32" since it's a read-only
-	  // property of a typed array.
-
-	  // This behaves neither like String nor Uint8Array in that we set start/end
-	  // to their upper/lower bounds if the value passed is out of range.
-	  // undefined is handled specially as per ECMA-262 6th Edition,
-	  // Section 13.3.3.7 Runtime Semantics: KeyedBindingInitialization.
-	  if (start === undefined || start < 0) {
-	    start = 0;
-	  }
-	  // Return early if start > this.length. Done here to prevent potential uint32
-	  // coercion fail below.
-	  if (start > this.length) {
-	    return ''
-	  }
-
-	  if (end === undefined || end > this.length) {
-	    end = this.length;
-	  }
-
-	  if (end <= 0) {
-	    return ''
-	  }
-
-	  // Force coersion to uint32. This will also coerce falsey/NaN values to 0.
-	  end >>>= 0;
-	  start >>>= 0;
-
-	  if (end <= start) {
-	    return ''
-	  }
-
-	  if (!encoding) encoding = 'utf8';
-
-	  while (true) {
-	    switch (encoding) {
-	      case 'hex':
-	        return hexSlice(this, start, end)
-
-	      case 'utf8':
-	      case 'utf-8':
-	        return utf8Slice(this, start, end)
-
-	      case 'ascii':
-	        return asciiSlice(this, start, end)
-
-	      case 'latin1':
-	      case 'binary':
-	        return latin1Slice(this, start, end)
-
-	      case 'base64':
-	        return base64Slice(this, start, end)
-
-	      case 'ucs2':
-	      case 'ucs-2':
-	      case 'utf16le':
-	      case 'utf-16le':
-	        return utf16leSlice(this, start, end)
-
-	      default:
-	        if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding)
-	        encoding = (encoding + '').toLowerCase();
-	        loweredCase = true;
-	    }
-	  }
-	}
-
-	// The property is used by `Buffer.isBuffer` and `is-buffer` (in Safari 5-7) to detect
-	// Buffer instances.
-	Buffer.prototype._isBuffer = true;
-
-	function swap$1 (b, n, m) {
-	  var i = b[n];
-	  b[n] = b[m];
-	  b[m] = i;
-	}
-
-	Buffer.prototype.swap16 = function swap16 () {
-	  var len = this.length;
-	  if (len % 2 !== 0) {
-	    throw new RangeError('Buffer size must be a multiple of 16-bits')
-	  }
-	  for (var i = 0; i < len; i += 2) {
-	    swap$1(this, i, i + 1);
-	  }
-	  return this
-	};
-
-	Buffer.prototype.swap32 = function swap32 () {
-	  var len = this.length;
-	  if (len % 4 !== 0) {
-	    throw new RangeError('Buffer size must be a multiple of 32-bits')
-	  }
-	  for (var i = 0; i < len; i += 4) {
-	    swap$1(this, i, i + 3);
-	    swap$1(this, i + 1, i + 2);
-	  }
-	  return this
-	};
-
-	Buffer.prototype.swap64 = function swap64 () {
-	  var len = this.length;
-	  if (len % 8 !== 0) {
-	    throw new RangeError('Buffer size must be a multiple of 64-bits')
-	  }
-	  for (var i = 0; i < len; i += 8) {
-	    swap$1(this, i, i + 7);
-	    swap$1(this, i + 1, i + 6);
-	    swap$1(this, i + 2, i + 5);
-	    swap$1(this, i + 3, i + 4);
-	  }
-	  return this
-	};
-
-	Buffer.prototype.toString = function toString () {
-	  var length = this.length | 0;
-	  if (length === 0) return ''
-	  if (arguments.length === 0) return utf8Slice(this, 0, length)
-	  return slowToString.apply(this, arguments)
-	};
-
-	Buffer.prototype.equals = function equals (b) {
-	  if (!internalIsBuffer(b)) throw new TypeError('Argument must be a Buffer')
-	  if (this === b) return true
-	  return Buffer.compare(this, b) === 0
-	};
-
-	Buffer.prototype.inspect = function inspect () {
-	  var str = '';
-	  var max = INSPECT_MAX_BYTES;
-	  if (this.length > 0) {
-	    str = this.toString('hex', 0, max).match(/.{2}/g).join(' ');
-	    if (this.length > max) str += ' ... ';
-	  }
-	  return '<Buffer ' + str + '>'
-	};
-
-	Buffer.prototype.compare = function compare (target, start, end, thisStart, thisEnd) {
-	  if (!internalIsBuffer(target)) {
-	    throw new TypeError('Argument must be a Buffer')
-	  }
-
-	  if (start === undefined) {
-	    start = 0;
-	  }
-	  if (end === undefined) {
-	    end = target ? target.length : 0;
-	  }
-	  if (thisStart === undefined) {
-	    thisStart = 0;
-	  }
-	  if (thisEnd === undefined) {
-	    thisEnd = this.length;
-	  }
-
-	  if (start < 0 || end > target.length || thisStart < 0 || thisEnd > this.length) {
-	    throw new RangeError('out of range index')
-	  }
-
-	  if (thisStart >= thisEnd && start >= end) {
-	    return 0
-	  }
-	  if (thisStart >= thisEnd) {
-	    return -1
-	  }
-	  if (start >= end) {
-	    return 1
-	  }
-
-	  start >>>= 0;
-	  end >>>= 0;
-	  thisStart >>>= 0;
-	  thisEnd >>>= 0;
-
-	  if (this === target) return 0
-
-	  var x = thisEnd - thisStart;
-	  var y = end - start;
-	  var len = Math.min(x, y);
-
-	  var thisCopy = this.slice(thisStart, thisEnd);
-	  var targetCopy = target.slice(start, end);
-
-	  for (var i = 0; i < len; ++i) {
-	    if (thisCopy[i] !== targetCopy[i]) {
-	      x = thisCopy[i];
-	      y = targetCopy[i];
-	      break
-	    }
-	  }
-
-	  if (x < y) return -1
-	  if (y < x) return 1
-	  return 0
-	};
-
-	// Finds either the first index of `val` in `buffer` at offset >= `byteOffset`,
-	// OR the last index of `val` in `buffer` at offset <= `byteOffset`.
-	//
-	// Arguments:
-	// - buffer - a Buffer to search
-	// - val - a string, Buffer, or number
-	// - byteOffset - an index into `buffer`; will be clamped to an int32
-	// - encoding - an optional encoding, relevant is val is a string
-	// - dir - true for indexOf, false for lastIndexOf
-	function bidirectionalIndexOf (buffer, val, byteOffset, encoding, dir) {
-	  // Empty buffer means no match
-	  if (buffer.length === 0) return -1
-
-	  // Normalize byteOffset
-	  if (typeof byteOffset === 'string') {
-	    encoding = byteOffset;
-	    byteOffset = 0;
-	  } else if (byteOffset > 0x7fffffff) {
-	    byteOffset = 0x7fffffff;
-	  } else if (byteOffset < -0x80000000) {
-	    byteOffset = -0x80000000;
-	  }
-	  byteOffset = +byteOffset;  // Coerce to Number.
-	  if (isNaN(byteOffset)) {
-	    // byteOffset: it it's undefined, null, NaN, "foo", etc, search whole buffer
-	    byteOffset = dir ? 0 : (buffer.length - 1);
-	  }
-
-	  // Normalize byteOffset: negative offsets start from the end of the buffer
-	  if (byteOffset < 0) byteOffset = buffer.length + byteOffset;
-	  if (byteOffset >= buffer.length) {
-	    if (dir) return -1
-	    else byteOffset = buffer.length - 1;
-	  } else if (byteOffset < 0) {
-	    if (dir) byteOffset = 0;
-	    else return -1
-	  }
-
-	  // Normalize val
-	  if (typeof val === 'string') {
-	    val = Buffer.from(val, encoding);
-	  }
-
-	  // Finally, search either indexOf (if dir is true) or lastIndexOf
-	  if (internalIsBuffer(val)) {
-	    // Special case: looking for empty string/buffer always fails
-	    if (val.length === 0) {
-	      return -1
-	    }
-	    return arrayIndexOf(buffer, val, byteOffset, encoding, dir)
-	  } else if (typeof val === 'number') {
-	    val = val & 0xFF; // Search for a byte value [0-255]
-	    if (Buffer.TYPED_ARRAY_SUPPORT &&
-	        typeof Uint8Array.prototype.indexOf === 'function') {
-	      if (dir) {
-	        return Uint8Array.prototype.indexOf.call(buffer, val, byteOffset)
-	      } else {
-	        return Uint8Array.prototype.lastIndexOf.call(buffer, val, byteOffset)
-	      }
-	    }
-	    return arrayIndexOf(buffer, [ val ], byteOffset, encoding, dir)
-	  }
-
-	  throw new TypeError('val must be string, number or Buffer')
-	}
-
-	function arrayIndexOf (arr, val, byteOffset, encoding, dir) {
-	  var indexSize = 1;
-	  var arrLength = arr.length;
-	  var valLength = val.length;
-
-	  if (encoding !== undefined) {
-	    encoding = String(encoding).toLowerCase();
-	    if (encoding === 'ucs2' || encoding === 'ucs-2' ||
-	        encoding === 'utf16le' || encoding === 'utf-16le') {
-	      if (arr.length < 2 || val.length < 2) {
-	        return -1
-	      }
-	      indexSize = 2;
-	      arrLength /= 2;
-	      valLength /= 2;
-	      byteOffset /= 2;
-	    }
-	  }
-
-	  function read (buf, i) {
-	    if (indexSize === 1) {
-	      return buf[i]
-	    } else {
-	      return buf.readUInt16BE(i * indexSize)
-	    }
-	  }
-
-	  var i;
-	  if (dir) {
-	    var foundIndex = -1;
-	    for (i = byteOffset; i < arrLength; i++) {
-	      if (read(arr, i) === read(val, foundIndex === -1 ? 0 : i - foundIndex)) {
-	        if (foundIndex === -1) foundIndex = i;
-	        if (i - foundIndex + 1 === valLength) return foundIndex * indexSize
-	      } else {
-	        if (foundIndex !== -1) i -= i - foundIndex;
-	        foundIndex = -1;
-	      }
-	    }
-	  } else {
-	    if (byteOffset + valLength > arrLength) byteOffset = arrLength - valLength;
-	    for (i = byteOffset; i >= 0; i--) {
-	      var found = true;
-	      for (var j = 0; j < valLength; j++) {
-	        if (read(arr, i + j) !== read(val, j)) {
-	          found = false;
-	          break
-	        }
-	      }
-	      if (found) return i
-	    }
-	  }
-
-	  return -1
-	}
-
-	Buffer.prototype.includes = function includes (val, byteOffset, encoding) {
-	  return this.indexOf(val, byteOffset, encoding) !== -1
-	};
-
-	Buffer.prototype.indexOf = function indexOf (val, byteOffset, encoding) {
-	  return bidirectionalIndexOf(this, val, byteOffset, encoding, true)
-	};
-
-	Buffer.prototype.lastIndexOf = function lastIndexOf (val, byteOffset, encoding) {
-	  return bidirectionalIndexOf(this, val, byteOffset, encoding, false)
-	};
-
-	function hexWrite (buf, string, offset, length) {
-	  offset = Number(offset) || 0;
-	  var remaining = buf.length - offset;
-	  if (!length) {
-	    length = remaining;
-	  } else {
-	    length = Number(length);
-	    if (length > remaining) {
-	      length = remaining;
-	    }
-	  }
-
-	  // must be an even number of digits
-	  var strLen = string.length;
-	  if (strLen % 2 !== 0) throw new TypeError('Invalid hex string')
-
-	  if (length > strLen / 2) {
-	    length = strLen / 2;
-	  }
-	  for (var i = 0; i < length; ++i) {
-	    var parsed = parseInt(string.substr(i * 2, 2), 16);
-	    if (isNaN(parsed)) return i
-	    buf[offset + i] = parsed;
-	  }
-	  return i
-	}
-
-	function utf8Write (buf, string, offset, length) {
-	  return blitBuffer(utf8ToBytes(string, buf.length - offset), buf, offset, length)
-	}
-
-	function asciiWrite (buf, string, offset, length) {
-	  return blitBuffer(asciiToBytes(string), buf, offset, length)
-	}
-
-	function latin1Write (buf, string, offset, length) {
-	  return asciiWrite(buf, string, offset, length)
-	}
-
-	function base64Write (buf, string, offset, length) {
-	  return blitBuffer(base64ToBytes(string), buf, offset, length)
-	}
-
-	function ucs2Write (buf, string, offset, length) {
-	  return blitBuffer(utf16leToBytes(string, buf.length - offset), buf, offset, length)
-	}
-
-	Buffer.prototype.write = function write (string, offset, length, encoding) {
-	  // Buffer#write(string)
-	  if (offset === undefined) {
-	    encoding = 'utf8';
-	    length = this.length;
-	    offset = 0;
-	  // Buffer#write(string, encoding)
-	  } else if (length === undefined && typeof offset === 'string') {
-	    encoding = offset;
-	    length = this.length;
-	    offset = 0;
-	  // Buffer#write(string, offset[, length][, encoding])
-	  } else if (isFinite(offset)) {
-	    offset = offset | 0;
-	    if (isFinite(length)) {
-	      length = length | 0;
-	      if (encoding === undefined) encoding = 'utf8';
-	    } else {
-	      encoding = length;
-	      length = undefined;
-	    }
-	  // legacy write(string, encoding, offset, length) - remove in v0.13
-	  } else {
-	    throw new Error(
-	      'Buffer.write(string, encoding, offset[, length]) is no longer supported'
-	    )
-	  }
-
-	  var remaining = this.length - offset;
-	  if (length === undefined || length > remaining) length = remaining;
-
-	  if ((string.length > 0 && (length < 0 || offset < 0)) || offset > this.length) {
-	    throw new RangeError('Attempt to write outside buffer bounds')
-	  }
-
-	  if (!encoding) encoding = 'utf8';
-
-	  var loweredCase = false;
-	  for (;;) {
-	    switch (encoding) {
-	      case 'hex':
-	        return hexWrite(this, string, offset, length)
-
-	      case 'utf8':
-	      case 'utf-8':
-	        return utf8Write(this, string, offset, length)
-
-	      case 'ascii':
-	        return asciiWrite(this, string, offset, length)
-
-	      case 'latin1':
-	      case 'binary':
-	        return latin1Write(this, string, offset, length)
-
-	      case 'base64':
-	        // Warning: maxLength not taken into account in base64Write
-	        return base64Write(this, string, offset, length)
-
-	      case 'ucs2':
-	      case 'ucs-2':
-	      case 'utf16le':
-	      case 'utf-16le':
-	        return ucs2Write(this, string, offset, length)
-
-	      default:
-	        if (loweredCase) throw new TypeError('Unknown encoding: ' + encoding)
-	        encoding = ('' + encoding).toLowerCase();
-	        loweredCase = true;
-	    }
-	  }
-	};
-
-	Buffer.prototype.toJSON = function toJSON () {
-	  return {
-	    type: 'Buffer',
-	    data: Array.prototype.slice.call(this._arr || this, 0)
-	  }
-	};
-
-	function base64Slice (buf, start, end) {
-	  if (start === 0 && end === buf.length) {
-	    return fromByteArray(buf)
-	  } else {
-	    return fromByteArray(buf.slice(start, end))
-	  }
-	}
-
-	function utf8Slice (buf, start, end) {
-	  end = Math.min(buf.length, end);
-	  var res = [];
-
-	  var i = start;
-	  while (i < end) {
-	    var firstByte = buf[i];
-	    var codePoint = null;
-	    var bytesPerSequence = (firstByte > 0xEF) ? 4
-	      : (firstByte > 0xDF) ? 3
-	      : (firstByte > 0xBF) ? 2
-	      : 1;
-
-	    if (i + bytesPerSequence <= end) {
-	      var secondByte, thirdByte, fourthByte, tempCodePoint;
-
-	      switch (bytesPerSequence) {
-	        case 1:
-	          if (firstByte < 0x80) {
-	            codePoint = firstByte;
-	          }
-	          break
-	        case 2:
-	          secondByte = buf[i + 1];
-	          if ((secondByte & 0xC0) === 0x80) {
-	            tempCodePoint = (firstByte & 0x1F) << 0x6 | (secondByte & 0x3F);
-	            if (tempCodePoint > 0x7F) {
-	              codePoint = tempCodePoint;
-	            }
-	          }
-	          break
-	        case 3:
-	          secondByte = buf[i + 1];
-	          thirdByte = buf[i + 2];
-	          if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80) {
-	            tempCodePoint = (firstByte & 0xF) << 0xC | (secondByte & 0x3F) << 0x6 | (thirdByte & 0x3F);
-	            if (tempCodePoint > 0x7FF && (tempCodePoint < 0xD800 || tempCodePoint > 0xDFFF)) {
-	              codePoint = tempCodePoint;
-	            }
-	          }
-	          break
-	        case 4:
-	          secondByte = buf[i + 1];
-	          thirdByte = buf[i + 2];
-	          fourthByte = buf[i + 3];
-	          if ((secondByte & 0xC0) === 0x80 && (thirdByte & 0xC0) === 0x80 && (fourthByte & 0xC0) === 0x80) {
-	            tempCodePoint = (firstByte & 0xF) << 0x12 | (secondByte & 0x3F) << 0xC | (thirdByte & 0x3F) << 0x6 | (fourthByte & 0x3F);
-	            if (tempCodePoint > 0xFFFF && tempCodePoint < 0x110000) {
-	              codePoint = tempCodePoint;
-	            }
-	          }
-	      }
-	    }
-
-	    if (codePoint === null) {
-	      // we did not generate a valid codePoint so insert a
-	      // replacement char (U+FFFD) and advance only 1 byte
-	      codePoint = 0xFFFD;
-	      bytesPerSequence = 1;
-	    } else if (codePoint > 0xFFFF) {
-	      // encode to utf16 (surrogate pair dance)
-	      codePoint -= 0x10000;
-	      res.push(codePoint >>> 10 & 0x3FF | 0xD800);
-	      codePoint = 0xDC00 | codePoint & 0x3FF;
-	    }
-
-	    res.push(codePoint);
-	    i += bytesPerSequence;
-	  }
-
-	  return decodeCodePointsArray(res)
-	}
-
-	// Based on http://stackoverflow.com/a/22747272/680742, the browser with
-	// the lowest limit is Chrome, with 0x10000 args.
-	// We go 1 magnitude less, for safety
-	var MAX_ARGUMENTS_LENGTH = 0x1000;
-
-	function decodeCodePointsArray (codePoints) {
-	  var len = codePoints.length;
-	  if (len <= MAX_ARGUMENTS_LENGTH) {
-	    return String.fromCharCode.apply(String, codePoints) // avoid extra slice()
-	  }
-
-	  // Decode in chunks to avoid "call stack size exceeded".
-	  var res = '';
-	  var i = 0;
-	  while (i < len) {
-	    res += String.fromCharCode.apply(
-	      String,
-	      codePoints.slice(i, i += MAX_ARGUMENTS_LENGTH)
-	    );
-	  }
-	  return res
-	}
-
-	function asciiSlice (buf, start, end) {
-	  var ret = '';
-	  end = Math.min(buf.length, end);
-
-	  for (var i = start; i < end; ++i) {
-	    ret += String.fromCharCode(buf[i] & 0x7F);
-	  }
-	  return ret
-	}
-
-	function latin1Slice (buf, start, end) {
-	  var ret = '';
-	  end = Math.min(buf.length, end);
-
-	  for (var i = start; i < end; ++i) {
-	    ret += String.fromCharCode(buf[i]);
-	  }
-	  return ret
-	}
-
-	function hexSlice (buf, start, end) {
-	  var len = buf.length;
-
-	  if (!start || start < 0) start = 0;
-	  if (!end || end < 0 || end > len) end = len;
-
-	  var out = '';
-	  for (var i = start; i < end; ++i) {
-	    out += toHex(buf[i]);
-	  }
-	  return out
-	}
-
-	function utf16leSlice (buf, start, end) {
-	  var bytes = buf.slice(start, end);
-	  var res = '';
-	  for (var i = 0; i < bytes.length; i += 2) {
-	    res += String.fromCharCode(bytes[i] + bytes[i + 1] * 256);
-	  }
-	  return res
-	}
-
-	Buffer.prototype.slice = function slice (start, end) {
-	  var len = this.length;
-	  start = ~~start;
-	  end = end === undefined ? len : ~~end;
-
-	  if (start < 0) {
-	    start += len;
-	    if (start < 0) start = 0;
-	  } else if (start > len) {
-	    start = len;
-	  }
-
-	  if (end < 0) {
-	    end += len;
-	    if (end < 0) end = 0;
-	  } else if (end > len) {
-	    end = len;
-	  }
-
-	  if (end < start) end = start;
-
-	  var newBuf;
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    newBuf = this.subarray(start, end);
-	    newBuf.__proto__ = Buffer.prototype;
-	  } else {
-	    var sliceLen = end - start;
-	    newBuf = new Buffer(sliceLen, undefined);
-	    for (var i = 0; i < sliceLen; ++i) {
-	      newBuf[i] = this[i + start];
-	    }
-	  }
-
-	  return newBuf
-	};
-
-	/*
-	 * Need to make sure that buffer isn't trying to write out of bounds.
-	 */
-	function checkOffset (offset, ext, length) {
-	  if ((offset % 1) !== 0 || offset < 0) throw new RangeError('offset is not uint')
-	  if (offset + ext > length) throw new RangeError('Trying to access beyond buffer length')
-	}
-
-	Buffer.prototype.readUIntLE = function readUIntLE (offset, byteLength, noAssert) {
-	  offset = offset | 0;
-	  byteLength = byteLength | 0;
-	  if (!noAssert) checkOffset(offset, byteLength, this.length);
-
-	  var val = this[offset];
-	  var mul = 1;
-	  var i = 0;
-	  while (++i < byteLength && (mul *= 0x100)) {
-	    val += this[offset + i] * mul;
-	  }
-
-	  return val
-	};
-
-	Buffer.prototype.readUIntBE = function readUIntBE (offset, byteLength, noAssert) {
-	  offset = offset | 0;
-	  byteLength = byteLength | 0;
-	  if (!noAssert) {
-	    checkOffset(offset, byteLength, this.length);
-	  }
-
-	  var val = this[offset + --byteLength];
-	  var mul = 1;
-	  while (byteLength > 0 && (mul *= 0x100)) {
-	    val += this[offset + --byteLength] * mul;
-	  }
-
-	  return val
-	};
-
-	Buffer.prototype.readUInt8 = function readUInt8 (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 1, this.length);
-	  return this[offset]
-	};
-
-	Buffer.prototype.readUInt16LE = function readUInt16LE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 2, this.length);
-	  return this[offset] | (this[offset + 1] << 8)
-	};
-
-	Buffer.prototype.readUInt16BE = function readUInt16BE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 2, this.length);
-	  return (this[offset] << 8) | this[offset + 1]
-	};
-
-	Buffer.prototype.readUInt32LE = function readUInt32LE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 4, this.length);
-
-	  return ((this[offset]) |
-	      (this[offset + 1] << 8) |
-	      (this[offset + 2] << 16)) +
-	      (this[offset + 3] * 0x1000000)
-	};
-
-	Buffer.prototype.readUInt32BE = function readUInt32BE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 4, this.length);
-
-	  return (this[offset] * 0x1000000) +
-	    ((this[offset + 1] << 16) |
-	    (this[offset + 2] << 8) |
-	    this[offset + 3])
-	};
-
-	Buffer.prototype.readIntLE = function readIntLE (offset, byteLength, noAssert) {
-	  offset = offset | 0;
-	  byteLength = byteLength | 0;
-	  if (!noAssert) checkOffset(offset, byteLength, this.length);
-
-	  var val = this[offset];
-	  var mul = 1;
-	  var i = 0;
-	  while (++i < byteLength && (mul *= 0x100)) {
-	    val += this[offset + i] * mul;
-	  }
-	  mul *= 0x80;
-
-	  if (val >= mul) val -= Math.pow(2, 8 * byteLength);
-
-	  return val
-	};
-
-	Buffer.prototype.readIntBE = function readIntBE (offset, byteLength, noAssert) {
-	  offset = offset | 0;
-	  byteLength = byteLength | 0;
-	  if (!noAssert) checkOffset(offset, byteLength, this.length);
-
-	  var i = byteLength;
-	  var mul = 1;
-	  var val = this[offset + --i];
-	  while (i > 0 && (mul *= 0x100)) {
-	    val += this[offset + --i] * mul;
-	  }
-	  mul *= 0x80;
-
-	  if (val >= mul) val -= Math.pow(2, 8 * byteLength);
-
-	  return val
-	};
-
-	Buffer.prototype.readInt8 = function readInt8 (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 1, this.length);
-	  if (!(this[offset] & 0x80)) return (this[offset])
-	  return ((0xff - this[offset] + 1) * -1)
-	};
-
-	Buffer.prototype.readInt16LE = function readInt16LE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 2, this.length);
-	  var val = this[offset] | (this[offset + 1] << 8);
-	  return (val & 0x8000) ? val | 0xFFFF0000 : val
-	};
-
-	Buffer.prototype.readInt16BE = function readInt16BE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 2, this.length);
-	  var val = this[offset + 1] | (this[offset] << 8);
-	  return (val & 0x8000) ? val | 0xFFFF0000 : val
-	};
-
-	Buffer.prototype.readInt32LE = function readInt32LE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 4, this.length);
-
-	  return (this[offset]) |
-	    (this[offset + 1] << 8) |
-	    (this[offset + 2] << 16) |
-	    (this[offset + 3] << 24)
-	};
-
-	Buffer.prototype.readInt32BE = function readInt32BE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 4, this.length);
-
-	  return (this[offset] << 24) |
-	    (this[offset + 1] << 16) |
-	    (this[offset + 2] << 8) |
-	    (this[offset + 3])
-	};
-
-	Buffer.prototype.readFloatLE = function readFloatLE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 4, this.length);
-	  return read(this, offset, true, 23, 4)
-	};
-
-	Buffer.prototype.readFloatBE = function readFloatBE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 4, this.length);
-	  return read(this, offset, false, 23, 4)
-	};
-
-	Buffer.prototype.readDoubleLE = function readDoubleLE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 8, this.length);
-	  return read(this, offset, true, 52, 8)
-	};
-
-	Buffer.prototype.readDoubleBE = function readDoubleBE (offset, noAssert) {
-	  if (!noAssert) checkOffset(offset, 8, this.length);
-	  return read(this, offset, false, 52, 8)
-	};
-
-	function checkInt (buf, value, offset, ext, max, min) {
-	  if (!internalIsBuffer(buf)) throw new TypeError('"buffer" argument must be a Buffer instance')
-	  if (value > max || value < min) throw new RangeError('"value" argument is out of bounds')
-	  if (offset + ext > buf.length) throw new RangeError('Index out of range')
-	}
-
-	Buffer.prototype.writeUIntLE = function writeUIntLE (value, offset, byteLength, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  byteLength = byteLength | 0;
-	  if (!noAssert) {
-	    var maxBytes = Math.pow(2, 8 * byteLength) - 1;
-	    checkInt(this, value, offset, byteLength, maxBytes, 0);
-	  }
-
-	  var mul = 1;
-	  var i = 0;
-	  this[offset] = value & 0xFF;
-	  while (++i < byteLength && (mul *= 0x100)) {
-	    this[offset + i] = (value / mul) & 0xFF;
-	  }
-
-	  return offset + byteLength
-	};
-
-	Buffer.prototype.writeUIntBE = function writeUIntBE (value, offset, byteLength, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  byteLength = byteLength | 0;
-	  if (!noAssert) {
-	    var maxBytes = Math.pow(2, 8 * byteLength) - 1;
-	    checkInt(this, value, offset, byteLength, maxBytes, 0);
-	  }
-
-	  var i = byteLength - 1;
-	  var mul = 1;
-	  this[offset + i] = value & 0xFF;
-	  while (--i >= 0 && (mul *= 0x100)) {
-	    this[offset + i] = (value / mul) & 0xFF;
-	  }
-
-	  return offset + byteLength
-	};
-
-	Buffer.prototype.writeUInt8 = function writeUInt8 (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 1, 0xff, 0);
-	  if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value);
-	  this[offset] = (value & 0xff);
-	  return offset + 1
-	};
-
-	function objectWriteUInt16 (buf, value, offset, littleEndian) {
-	  if (value < 0) value = 0xffff + value + 1;
-	  for (var i = 0, j = Math.min(buf.length - offset, 2); i < j; ++i) {
-	    buf[offset + i] = (value & (0xff << (8 * (littleEndian ? i : 1 - i)))) >>>
-	      (littleEndian ? i : 1 - i) * 8;
-	  }
-	}
-
-	Buffer.prototype.writeUInt16LE = function writeUInt16LE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0);
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset] = (value & 0xff);
-	    this[offset + 1] = (value >>> 8);
-	  } else {
-	    objectWriteUInt16(this, value, offset, true);
-	  }
-	  return offset + 2
-	};
-
-	Buffer.prototype.writeUInt16BE = function writeUInt16BE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 2, 0xffff, 0);
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset] = (value >>> 8);
-	    this[offset + 1] = (value & 0xff);
-	  } else {
-	    objectWriteUInt16(this, value, offset, false);
-	  }
-	  return offset + 2
-	};
-
-	function objectWriteUInt32 (buf, value, offset, littleEndian) {
-	  if (value < 0) value = 0xffffffff + value + 1;
-	  for (var i = 0, j = Math.min(buf.length - offset, 4); i < j; ++i) {
-	    buf[offset + i] = (value >>> (littleEndian ? i : 3 - i) * 8) & 0xff;
-	  }
-	}
-
-	Buffer.prototype.writeUInt32LE = function writeUInt32LE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0);
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset + 3] = (value >>> 24);
-	    this[offset + 2] = (value >>> 16);
-	    this[offset + 1] = (value >>> 8);
-	    this[offset] = (value & 0xff);
-	  } else {
-	    objectWriteUInt32(this, value, offset, true);
-	  }
-	  return offset + 4
-	};
-
-	Buffer.prototype.writeUInt32BE = function writeUInt32BE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 4, 0xffffffff, 0);
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset] = (value >>> 24);
-	    this[offset + 1] = (value >>> 16);
-	    this[offset + 2] = (value >>> 8);
-	    this[offset + 3] = (value & 0xff);
-	  } else {
-	    objectWriteUInt32(this, value, offset, false);
-	  }
-	  return offset + 4
-	};
-
-	Buffer.prototype.writeIntLE = function writeIntLE (value, offset, byteLength, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) {
-	    var limit = Math.pow(2, 8 * byteLength - 1);
-
-	    checkInt(this, value, offset, byteLength, limit - 1, -limit);
-	  }
-
-	  var i = 0;
-	  var mul = 1;
-	  var sub = 0;
-	  this[offset] = value & 0xFF;
-	  while (++i < byteLength && (mul *= 0x100)) {
-	    if (value < 0 && sub === 0 && this[offset + i - 1] !== 0) {
-	      sub = 1;
-	    }
-	    this[offset + i] = ((value / mul) >> 0) - sub & 0xFF;
-	  }
-
-	  return offset + byteLength
-	};
-
-	Buffer.prototype.writeIntBE = function writeIntBE (value, offset, byteLength, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) {
-	    var limit = Math.pow(2, 8 * byteLength - 1);
-
-	    checkInt(this, value, offset, byteLength, limit - 1, -limit);
-	  }
-
-	  var i = byteLength - 1;
-	  var mul = 1;
-	  var sub = 0;
-	  this[offset + i] = value & 0xFF;
-	  while (--i >= 0 && (mul *= 0x100)) {
-	    if (value < 0 && sub === 0 && this[offset + i + 1] !== 0) {
-	      sub = 1;
-	    }
-	    this[offset + i] = ((value / mul) >> 0) - sub & 0xFF;
-	  }
-
-	  return offset + byteLength
-	};
-
-	Buffer.prototype.writeInt8 = function writeInt8 (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 1, 0x7f, -0x80);
-	  if (!Buffer.TYPED_ARRAY_SUPPORT) value = Math.floor(value);
-	  if (value < 0) value = 0xff + value + 1;
-	  this[offset] = (value & 0xff);
-	  return offset + 1
-	};
-
-	Buffer.prototype.writeInt16LE = function writeInt16LE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000);
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset] = (value & 0xff);
-	    this[offset + 1] = (value >>> 8);
-	  } else {
-	    objectWriteUInt16(this, value, offset, true);
-	  }
-	  return offset + 2
-	};
-
-	Buffer.prototype.writeInt16BE = function writeInt16BE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 2, 0x7fff, -0x8000);
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset] = (value >>> 8);
-	    this[offset + 1] = (value & 0xff);
-	  } else {
-	    objectWriteUInt16(this, value, offset, false);
-	  }
-	  return offset + 2
-	};
-
-	Buffer.prototype.writeInt32LE = function writeInt32LE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000);
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset] = (value & 0xff);
-	    this[offset + 1] = (value >>> 8);
-	    this[offset + 2] = (value >>> 16);
-	    this[offset + 3] = (value >>> 24);
-	  } else {
-	    objectWriteUInt32(this, value, offset, true);
-	  }
-	  return offset + 4
-	};
-
-	Buffer.prototype.writeInt32BE = function writeInt32BE (value, offset, noAssert) {
-	  value = +value;
-	  offset = offset | 0;
-	  if (!noAssert) checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000);
-	  if (value < 0) value = 0xffffffff + value + 1;
-	  if (Buffer.TYPED_ARRAY_SUPPORT) {
-	    this[offset] = (value >>> 24);
-	    this[offset + 1] = (value >>> 16);
-	    this[offset + 2] = (value >>> 8);
-	    this[offset + 3] = (value & 0xff);
-	  } else {
-	    objectWriteUInt32(this, value, offset, false);
-	  }
-	  return offset + 4
-	};
-
-	function checkIEEE754 (buf, value, offset, ext, max, min) {
-	  if (offset + ext > buf.length) throw new RangeError('Index out of range')
-	  if (offset < 0) throw new RangeError('Index out of range')
-	}
-
-	function writeFloat (buf, value, offset, littleEndian, noAssert) {
-	  if (!noAssert) {
-	    checkIEEE754(buf, value, offset, 4, 3.4028234663852886e+38, -3.4028234663852886e+38);
-	  }
-	  write(buf, value, offset, littleEndian, 23, 4);
-	  return offset + 4
-	}
-
-	Buffer.prototype.writeFloatLE = function writeFloatLE (value, offset, noAssert) {
-	  return writeFloat(this, value, offset, true, noAssert)
-	};
-
-	Buffer.prototype.writeFloatBE = function writeFloatBE (value, offset, noAssert) {
-	  return writeFloat(this, value, offset, false, noAssert)
-	};
-
-	function writeDouble (buf, value, offset, littleEndian, noAssert) {
-	  if (!noAssert) {
-	    checkIEEE754(buf, value, offset, 8, 1.7976931348623157E+308, -1.7976931348623157E+308);
-	  }
-	  write(buf, value, offset, littleEndian, 52, 8);
-	  return offset + 8
-	}
-
-	Buffer.prototype.writeDoubleLE = function writeDoubleLE (value, offset, noAssert) {
-	  return writeDouble(this, value, offset, true, noAssert)
-	};
-
-	Buffer.prototype.writeDoubleBE = function writeDoubleBE (value, offset, noAssert) {
-	  return writeDouble(this, value, offset, false, noAssert)
-	};
-
-	// copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
-	Buffer.prototype.copy = function copy (target, targetStart, start, end) {
-	  if (!start) start = 0;
-	  if (!end && end !== 0) end = this.length;
-	  if (targetStart >= target.length) targetStart = target.length;
-	  if (!targetStart) targetStart = 0;
-	  if (end > 0 && end < start) end = start;
-
-	  // Copy 0 bytes; we're done
-	  if (end === start) return 0
-	  if (target.length === 0 || this.length === 0) return 0
-
-	  // Fatal error conditions
-	  if (targetStart < 0) {
-	    throw new RangeError('targetStart out of bounds')
-	  }
-	  if (start < 0 || start >= this.length) throw new RangeError('sourceStart out of bounds')
-	  if (end < 0) throw new RangeError('sourceEnd out of bounds')
-
-	  // Are we oob?
-	  if (end > this.length) end = this.length;
-	  if (target.length - targetStart < end - start) {
-	    end = target.length - targetStart + start;
-	  }
-
-	  var len = end - start;
-	  var i;
-
-	  if (this === target && start < targetStart && targetStart < end) {
-	    // descending copy from end
-	    for (i = len - 1; i >= 0; --i) {
-	      target[i + targetStart] = this[i + start];
-	    }
-	  } else if (len < 1000 || !Buffer.TYPED_ARRAY_SUPPORT) {
-	    // ascending copy from start
-	    for (i = 0; i < len; ++i) {
-	      target[i + targetStart] = this[i + start];
-	    }
-	  } else {
-	    Uint8Array.prototype.set.call(
-	      target,
-	      this.subarray(start, start + len),
-	      targetStart
-	    );
-	  }
-
-	  return len
-	};
-
-	// Usage:
-	//    buffer.fill(number[, offset[, end]])
-	//    buffer.fill(buffer[, offset[, end]])
-	//    buffer.fill(string[, offset[, end]][, encoding])
-	Buffer.prototype.fill = function fill (val, start, end, encoding) {
-	  // Handle string cases:
-	  if (typeof val === 'string') {
-	    if (typeof start === 'string') {
-	      encoding = start;
-	      start = 0;
-	      end = this.length;
-	    } else if (typeof end === 'string') {
-	      encoding = end;
-	      end = this.length;
-	    }
-	    if (val.length === 1) {
-	      var code = val.charCodeAt(0);
-	      if (code < 256) {
-	        val = code;
-	      }
-	    }
-	    if (encoding !== undefined && typeof encoding !== 'string') {
-	      throw new TypeError('encoding must be a string')
-	    }
-	    if (typeof encoding === 'string' && !Buffer.isEncoding(encoding)) {
-	      throw new TypeError('Unknown encoding: ' + encoding)
-	    }
-	  } else if (typeof val === 'number') {
-	    val = val & 255;
-	  }
-
-	  // Invalid ranges are not set to a default, so can range check early.
-	  if (start < 0 || this.length < start || this.length < end) {
-	    throw new RangeError('Out of range index')
-	  }
-
-	  if (end <= start) {
-	    return this
-	  }
-
-	  start = start >>> 0;
-	  end = end === undefined ? this.length : end >>> 0;
-
-	  if (!val) val = 0;
-
-	  var i;
-	  if (typeof val === 'number') {
-	    for (i = start; i < end; ++i) {
-	      this[i] = val;
-	    }
-	  } else {
-	    var bytes = internalIsBuffer(val)
-	      ? val
-	      : utf8ToBytes(new Buffer(val, encoding).toString());
-	    var len = bytes.length;
-	    for (i = 0; i < end - start; ++i) {
-	      this[i + start] = bytes[i % len];
-	    }
-	  }
-
-	  return this
-	};
-
-	// HELPER FUNCTIONS
-	// ================
-
-	var INVALID_BASE64_RE = /[^+\/0-9A-Za-z-_]/g;
-
-	function base64clean (str) {
-	  // Node strips out invalid characters like \n and \t from the string, base64-js does not
-	  str = stringtrim(str).replace(INVALID_BASE64_RE, '');
-	  // Node converts strings with length < 2 to ''
-	  if (str.length < 2) return ''
-	  // Node allows for non-padded base64 strings (missing trailing ===), base64-js does not
-	  while (str.length % 4 !== 0) {
-	    str = str + '=';
-	  }
-	  return str
-	}
-
-	function stringtrim (str) {
-	  if (str.trim) return str.trim()
-	  return str.replace(/^\s+|\s+$/g, '')
-	}
-
-	function toHex (n) {
-	  if (n < 16) return '0' + n.toString(16)
-	  return n.toString(16)
-	}
-
-	function utf8ToBytes (string, units) {
-	  units = units || Infinity;
-	  var codePoint;
-	  var length = string.length;
-	  var leadSurrogate = null;
-	  var bytes = [];
-
-	  for (var i = 0; i < length; ++i) {
-	    codePoint = string.charCodeAt(i);
-
-	    // is surrogate component
-	    if (codePoint > 0xD7FF && codePoint < 0xE000) {
-	      // last char was a lead
-	      if (!leadSurrogate) {
-	        // no lead yet
-	        if (codePoint > 0xDBFF) {
-	          // unexpected trail
-	          if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
-	          continue
-	        } else if (i + 1 === length) {
-	          // unpaired lead
-	          if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
-	          continue
-	        }
-
-	        // valid lead
-	        leadSurrogate = codePoint;
-
-	        continue
-	      }
-
-	      // 2 leads in a row
-	      if (codePoint < 0xDC00) {
-	        if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
-	        leadSurrogate = codePoint;
-	        continue
-	      }
-
-	      // valid surrogate pair
-	      codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000;
-	    } else if (leadSurrogate) {
-	      // valid bmp char, but last char was a lead
-	      if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD);
-	    }
-
-	    leadSurrogate = null;
-
-	    // encode utf8
-	    if (codePoint < 0x80) {
-	      if ((units -= 1) < 0) break
-	      bytes.push(codePoint);
-	    } else if (codePoint < 0x800) {
-	      if ((units -= 2) < 0) break
-	      bytes.push(
-	        codePoint >> 0x6 | 0xC0,
-	        codePoint & 0x3F | 0x80
-	      );
-	    } else if (codePoint < 0x10000) {
-	      if ((units -= 3) < 0) break
-	      bytes.push(
-	        codePoint >> 0xC | 0xE0,
-	        codePoint >> 0x6 & 0x3F | 0x80,
-	        codePoint & 0x3F | 0x80
-	      );
-	    } else if (codePoint < 0x110000) {
-	      if ((units -= 4) < 0) break
-	      bytes.push(
-	        codePoint >> 0x12 | 0xF0,
-	        codePoint >> 0xC & 0x3F | 0x80,
-	        codePoint >> 0x6 & 0x3F | 0x80,
-	        codePoint & 0x3F | 0x80
-	      );
-	    } else {
-	      throw new Error('Invalid code point')
-	    }
-	  }
-
-	  return bytes
-	}
-
-	function asciiToBytes (str) {
-	  var byteArray = [];
-	  for (var i = 0; i < str.length; ++i) {
-	    // Node's code seems to be doing this and not & 0x7F..
-	    byteArray.push(str.charCodeAt(i) & 0xFF);
-	  }
-	  return byteArray
-	}
-
-	function utf16leToBytes (str, units) {
-	  var c, hi, lo;
-	  var byteArray = [];
-	  for (var i = 0; i < str.length; ++i) {
-	    if ((units -= 2) < 0) break
-
-	    c = str.charCodeAt(i);
-	    hi = c >> 8;
-	    lo = c % 256;
-	    byteArray.push(lo);
-	    byteArray.push(hi);
-	  }
-
-	  return byteArray
-	}
-
-
-	function base64ToBytes (str) {
-	  return toByteArray(base64clean(str))
-	}
-
-	function blitBuffer (src, dst, offset, length) {
-	  for (var i = 0; i < length; ++i) {
-	    if ((i + offset >= dst.length) || (i >= src.length)) break
-	    dst[i + offset] = src[i];
-	  }
-	  return i
-	}
-
-	function isnan (val) {
-	  return val !== val // eslint-disable-line no-self-compare
-	}
-
-
-	// the following is from is-buffer, also by Feross Aboukhadijeh and with same lisence
-	// The _isBuffer check is for Safari 5-7 support, because it's missing
-	// Object.prototype.constructor. Remove this eventually
-	function isBuffer(obj) {
-	  return obj != null && (!!obj._isBuffer || isFastBuffer(obj) || isSlowBuffer(obj))
-	}
-
-	function isFastBuffer (obj) {
-	  return !!obj.constructor && typeof obj.constructor.isBuffer === 'function' && obj.constructor.isBuffer(obj)
-	}
-
-	// For Node v0.10 support. Remove this eventually.
-	function isSlowBuffer (obj) {
-	  return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isFastBuffer(obj.slice(0, 0))
-	}
-
-	var bufferEs6 = /*#__PURE__*/Object.freeze({
-		INSPECT_MAX_BYTES: INSPECT_MAX_BYTES,
-		kMaxLength: _kMaxLength,
-		Buffer: Buffer,
-		SlowBuffer: SlowBuffer,
-		isBuffer: isBuffer
-	});
-
-	/**
-	 * Bit twiddling hacks for JavaScript.
-	 *
-	 * Author: Mikola Lysenko
-	 *
-	 * Ported from Stanford bit twiddling hack library:
-	 *    http://graphics.stanford.edu/~seander/bithacks.html
-	 */
-
-	//Number of bits in an integer
-	var INT_BITS = 32;
-
-	//Constants
-	var INT_BITS_1  = INT_BITS;
-	var INT_MAX   =  0x7fffffff;
-	var INT_MIN   = -1<<(INT_BITS-1);
-
-	//Returns -1, 0, +1 depending on sign of x
-	var sign = function(v) {
-	  return (v > 0) - (v < 0);
-	};
-
-	//Computes absolute value of integer
-	var abs = function(v) {
-	  var mask = v >> (INT_BITS-1);
-	  return (v ^ mask) - mask;
-	};
-
-	//Computes minimum of integers x and y
-	var min = function(x, y) {
-	  return y ^ ((x ^ y) & -(x < y));
-	};
-
-	//Computes maximum of integers x and y
-	var max = function(x, y) {
-	  return x ^ ((x ^ y) & -(x < y));
-	};
-
-	//Checks if a number is a power of two
-	var isPow2 = function(v) {
-	  return !(v & (v-1)) && (!!v);
-	};
-
-	//Computes log base 2 of v
-	var log2 = function(v) {
-	  var r, shift;
-	  r =     (v > 0xFFFF) << 4; v >>>= r;
-	  shift = (v > 0xFF  ) << 3; v >>>= shift; r |= shift;
-	  shift = (v > 0xF   ) << 2; v >>>= shift; r |= shift;
-	  shift = (v > 0x3   ) << 1; v >>>= shift; r |= shift;
-	  return r | (v >> 1);
-	};
-
-	//Computes log base 10 of v
-	var log10 = function(v) {
-	  return  (v >= 1000000000) ? 9 : (v >= 100000000) ? 8 : (v >= 10000000) ? 7 :
-	          (v >= 1000000) ? 6 : (v >= 100000) ? 5 : (v >= 10000) ? 4 :
-	          (v >= 1000) ? 3 : (v >= 100) ? 2 : (v >= 10) ? 1 : 0;
-	};
-
-	//Counts number of bits
-	var popCount = function(v) {
-	  v = v - ((v >>> 1) & 0x55555555);
-	  v = (v & 0x33333333) + ((v >>> 2) & 0x33333333);
-	  return ((v + (v >>> 4) & 0xF0F0F0F) * 0x1010101) >>> 24;
-	};
-
-	//Counts number of trailing zeros
-	function countTrailingZeros(v) {
-	  var c = 32;
-	  v &= -v;
-	  if (v) c--;
-	  if (v & 0x0000FFFF) c -= 16;
-	  if (v & 0x00FF00FF) c -= 8;
-	  if (v & 0x0F0F0F0F) c -= 4;
-	  if (v & 0x33333333) c -= 2;
-	  if (v & 0x55555555) c -= 1;
-	  return c;
-	}
-	var countTrailingZeros_1 = countTrailingZeros;
-
-	//Rounds to next power of 2
-	var nextPow2 = function(v) {
-	  v += v === 0;
-	  --v;
-	  v |= v >>> 1;
-	  v |= v >>> 2;
-	  v |= v >>> 4;
-	  v |= v >>> 8;
-	  v |= v >>> 16;
-	  return v + 1;
-	};
-
-	//Rounds down to previous power of 2
-	var prevPow2 = function(v) {
-	  v |= v >>> 1;
-	  v |= v >>> 2;
-	  v |= v >>> 4;
-	  v |= v >>> 8;
-	  v |= v >>> 16;
-	  return v - (v>>>1);
-	};
-
-	//Computes parity of word
-	var parity = function(v) {
-	  v ^= v >>> 16;
-	  v ^= v >>> 8;
-	  v ^= v >>> 4;
-	  v &= 0xf;
-	  return (0x6996 >>> v) & 1;
-	};
-
-	var REVERSE_TABLE = new Array(256);
-
-	(function(tab) {
-	  for(var i=0; i<256; ++i) {
-	    var v = i, r = i, s = 7;
-	    for (v >>>= 1; v; v >>>= 1) {
-	      r <<= 1;
-	      r |= v & 1;
-	      --s;
-	    }
-	    tab[i] = (r << s) & 0xff;
-	  }
-	})(REVERSE_TABLE);
-
-	//Reverse bits in a 32 bit word
-	var reverse = function(v) {
-	  return  (REVERSE_TABLE[ v         & 0xff] << 24) |
-	          (REVERSE_TABLE[(v >>> 8)  & 0xff] << 16) |
-	          (REVERSE_TABLE[(v >>> 16) & 0xff] << 8)  |
-	           REVERSE_TABLE[(v >>> 24) & 0xff];
-	};
-
-	//Interleave bits of 2 coordinates with 16 bits.  Useful for fast quadtree codes
-	var interleave2 = function(x, y) {
-	  x &= 0xFFFF;
-	  x = (x | (x << 8)) & 0x00FF00FF;
-	  x = (x | (x << 4)) & 0x0F0F0F0F;
-	  x = (x | (x << 2)) & 0x33333333;
-	  x = (x | (x << 1)) & 0x55555555;
-
-	  y &= 0xFFFF;
-	  y = (y | (y << 8)) & 0x00FF00FF;
-	  y = (y | (y << 4)) & 0x0F0F0F0F;
-	  y = (y | (y << 2)) & 0x33333333;
-	  y = (y | (y << 1)) & 0x55555555;
-
-	  return x | (y << 1);
-	};
-
-	//Extracts the nth interleaved component
-	var deinterleave2 = function(v, n) {
-	  v = (v >>> n) & 0x55555555;
-	  v = (v | (v >>> 1))  & 0x33333333;
-	  v = (v | (v >>> 2))  & 0x0F0F0F0F;
-	  v = (v | (v >>> 4))  & 0x00FF00FF;
-	  v = (v | (v >>> 16)) & 0x000FFFF;
-	  return (v << 16) >> 16;
-	};
-
-
-	//Interleave bits of 3 coordinates, each with 10 bits.  Useful for fast octree codes
-	var interleave3 = function(x, y, z) {
-	  x &= 0x3FF;
-	  x  = (x | (x<<16)) & 4278190335;
-	  x  = (x | (x<<8))  & 251719695;
-	  x  = (x | (x<<4))  & 3272356035;
-	  x  = (x | (x<<2))  & 1227133513;
-
-	  y &= 0x3FF;
-	  y  = (y | (y<<16)) & 4278190335;
-	  y  = (y | (y<<8))  & 251719695;
-	  y  = (y | (y<<4))  & 3272356035;
-	  y  = (y | (y<<2))  & 1227133513;
-	  x |= (y << 1);
-	  
-	  z &= 0x3FF;
-	  z  = (z | (z<<16)) & 4278190335;
-	  z  = (z | (z<<8))  & 251719695;
-	  z  = (z | (z<<4))  & 3272356035;
-	  z  = (z | (z<<2))  & 1227133513;
-	  
-	  return x | (z << 2);
-	};
-
-	//Extracts nth interleaved component of a 3-tuple
-	var deinterleave3 = function(v, n) {
-	  v = (v >>> n)       & 1227133513;
-	  v = (v | (v>>>2))   & 3272356035;
-	  v = (v | (v>>>4))   & 251719695;
-	  v = (v | (v>>>8))   & 4278190335;
-	  v = (v | (v>>>16))  & 0x3FF;
-	  return (v<<22)>>22;
-	};
-
-	//Computes next combination in colexicographic order (this is mistakenly called nextPermutation on the bit twiddling hacks page)
-	var nextCombination = function(v) {
-	  var t = v | (v - 1);
-	  return (t + 1) | (((~t & -~t) - 1) >>> (countTrailingZeros(v) + 1));
-	};
-
-	var twiddle = {
-		INT_BITS: INT_BITS_1,
-		INT_MAX: INT_MAX,
-		INT_MIN: INT_MIN,
-		sign: sign,
-		abs: abs,
-		min: min,
-		max: max,
-		isPow2: isPow2,
-		log2: log2,
-		log10: log10,
-		popCount: popCount,
-		countTrailingZeros: countTrailingZeros_1,
-		nextPow2: nextPow2,
-		prevPow2: prevPow2,
-		parity: parity,
-		reverse: reverse,
-		interleave2: interleave2,
-		deinterleave2: deinterleave2,
-		interleave3: interleave3,
-		deinterleave3: deinterleave3,
-		nextCombination: nextCombination
-	};
-
-	function dupe_array(count, value, i) {
-	  var c = count[i]|0;
-	  if(c <= 0) {
-	    return []
-	  }
-	  var result = new Array(c), j;
-	  if(i === count.length-1) {
-	    for(j=0; j<c; ++j) {
-	      result[j] = value;
-	    }
-	  } else {
-	    for(j=0; j<c; ++j) {
-	      result[j] = dupe_array(count, value, i+1);
-	    }
-	  }
-	  return result
-	}
-
-	function dupe_number(count, value) {
-	  var result, i;
-	  result = new Array(count);
-	  for(i=0; i<count; ++i) {
-	    result[i] = value;
-	  }
-	  return result
-	}
-
-	function dupe(count, value) {
-	  if(typeof value === "undefined") {
-	    value = 0;
-	  }
-	  switch(typeof count) {
-	    case "number":
-	      if(count > 0) {
-	        return dupe_number(count|0, value)
-	      }
-	    break
-	    case "object":
-	      if(typeof (count.length) === "number") {
-	        return dupe_array(count, value, 0)
-	      }
-	    break
-	  }
-	  return []
-	}
-
-	var dup = dupe;
-
-	var pool = createCommonjsModule(function (module, exports) {
-
-
-
-
-	//Legacy pool support
-	if(!commonjsGlobal.__TYPEDARRAY_POOL) {
-	  commonjsGlobal.__TYPEDARRAY_POOL = {
-	      UINT8   : dup([32, 0])
-	    , UINT16  : dup([32, 0])
-	    , UINT32  : dup([32, 0])
-	    , INT8    : dup([32, 0])
-	    , INT16   : dup([32, 0])
-	    , INT32   : dup([32, 0])
-	    , FLOAT   : dup([32, 0])
-	    , DOUBLE  : dup([32, 0])
-	    , DATA    : dup([32, 0])
-	    , UINT8C  : dup([32, 0])
-	    , BUFFER  : dup([32, 0])
+	var clipper = createCommonjsModule(function (module) {
+	/*******************************************************************************
+	 *                                                                              *
+	 * Author    :  Angus Johnson                                                   *
+	 * Version   :  6.4.2                                                           *
+	 * Date      :  27 February 2017                                                *
+	 * Website   :  http://www.angusj.com                                           *
+	 * Copyright :  Angus Johnson 2010-2017                                         *
+	 *                                                                              *
+	 * License:                                                                     *
+	 * Use, modification & distribution is subject to Boost Software License Ver 1. *
+	 * http://www.boost.org/LICENSE_1_0.txt                                         *
+	 *                                                                              *
+	 * Attributions:                                                                *
+	 * The code in this library is an extension of Bala Vatti's clipping algorithm: *
+	 * "A generic solution to polygon clipping"                                     *
+	 * Communications of the ACM, Vol 35, Issue 7 (July 1992) pp 56-63.             *
+	 * http://portal.acm.org/citation.cfm?id=129906                                 *
+	 *                                                                              *
+	 * Computer graphics and geometric modeling: implementation and algorithms      *
+	 * By Max K. Agoston                                                            *
+	 * Springer; 1 edition (January 4, 2005)                                        *
+	 * http://books.google.com/books?q=vatti+clipping+agoston                       *
+	 *                                                                              *
+	 * See also:                                                                    *
+	 * "Polygon Offsetting by Computing Winding Numbers"                            *
+	 * Paper no. DETC2005-85513 pp. 565-575                                         *
+	 * ASME 2005 International Design Engineering Technical Conferences             *
+	 * and Computers and Information in Engineering Conference (IDETC/CIE2005)      *
+	 * September 24-28, 2005 , Long Beach, California, USA                          *
+	 * http://www.me.berkeley.edu/~mcmains/pubs/DAC05OffsetPolygon.pdf              *
+	 *                                                                              *
+	 *******************************************************************************/
+	/*******************************************************************************
+	 *                                                                              *
+	 * Author    :  Timo                                                            *
+	 * Version   :  6.4.2.2                                                         *
+	 * Date      :  8 September 2017                                                 *
+	 *                                                                              *
+	 * This is a translation of the C# Clipper library to Javascript.               *
+	 * Int128 struct of C# is implemented using JSBN of Tom Wu.                     *
+	 * Because Javascript lacks support for 64-bit integers, the space              *
+	 * is a little more restricted than in C# version.                              *
+	 *                                                                              *
+	 * C# version has support for coordinate space:                                 *
+	 * +-4611686018427387903 ( sqrt(2^127 -1)/2 )                                   *
+	 * while Javascript version has support for space:                              *
+	 * +-4503599627370495 ( sqrt(2^106 -1)/2 )                                      *
+	 *                                                                              *
+	 * Tom Wu's JSBN proved to be the fastest big integer library:                  *
+	 * http://jsperf.com/big-integer-library-test                                   *
+	 *                                                                              *
+	 * This class can be made simpler when (if ever) 64-bit integer support comes   *
+	 * or floating point Clipper is released.                                       *
+	 *                                                                              *
+	 *******************************************************************************/
+	/*******************************************************************************
+	 *                                                                              *
+	 * Basic JavaScript BN library - subset useful for RSA encryption.              *
+	 * http://www-cs-students.stanford.edu/~tjw/jsbn/                               *
+	 * Copyright (c) 2005  Tom Wu                                                   *
+	 * All Rights Reserved.                                                         *
+	 * See "LICENSE" for details:                                                   *
+	 * http://www-cs-students.stanford.edu/~tjw/jsbn/LICENSE                        *
+	 *                                                                              *
+	 *******************************************************************************/
+	(function ()
+	{
+		var ClipperLib = {};
+		ClipperLib.version = '6.4.2.2';
+
+		//UseLines: Enables open path clipping. Adds a very minor cost to performance.
+		ClipperLib.use_lines = true;
+
+		//ClipperLib.use_xyz: adds a Z member to IntPoint. Adds a minor cost to performance.
+		ClipperLib.use_xyz = false;
+
+		var isNode = false;
+		if (module.exports)
+		{
+			module.exports = ClipperLib;
+			isNode = true;
+		}
+		else
+		{
+			if (typeof (document) !== "undefined") window.ClipperLib = ClipperLib;
+			else self['ClipperLib'] = ClipperLib;
+		}
+		var navigator_appName;
+		if (!isNode)
+		{
+			var nav = navigator.userAgent.toString().toLowerCase();
+			navigator_appName = navigator.appName;
+		}
+		else
+		{
+			var nav = "chrome"; // Node.js uses Chrome's V8 engine
+			navigator_appName = "Netscape"; // Firefox, Chrome and Safari returns "Netscape", so Node.js should also
+		}
+		// Browser test to speedup performance critical functions
+		var browser = {};
+
+		if (nav.indexOf("chrome") != -1 && nav.indexOf("chromium") == -1) browser.chrome = 1;
+		else browser.chrome = 0;
+		if (nav.indexOf("chromium") != -1) browser.chromium = 1;
+		else browser.chromium = 0;
+		if (nav.indexOf("safari") != -1 && nav.indexOf("chrome") == -1 && nav.indexOf("chromium") == -1) browser.safari = 1;
+		else browser.safari = 0;
+		if (nav.indexOf("firefox") != -1) browser.firefox = 1;
+		else browser.firefox = 0;
+		if (nav.indexOf("firefox/17") != -1) browser.firefox17 = 1;
+		else browser.firefox17 = 0;
+		if (nav.indexOf("firefox/15") != -1) browser.firefox15 = 1;
+		else browser.firefox15 = 0;
+		if (nav.indexOf("firefox/3") != -1) browser.firefox3 = 1;
+		else browser.firefox3 = 0;
+		if (nav.indexOf("opera") != -1) browser.opera = 1;
+		else browser.opera = 0;
+		if (nav.indexOf("msie 10") != -1) browser.msie10 = 1;
+		else browser.msie10 = 0;
+		if (nav.indexOf("msie 9") != -1) browser.msie9 = 1;
+		else browser.msie9 = 0;
+		if (nav.indexOf("msie 8") != -1) browser.msie8 = 1;
+		else browser.msie8 = 0;
+		if (nav.indexOf("msie 7") != -1) browser.msie7 = 1;
+		else browser.msie7 = 0;
+		if (nav.indexOf("msie ") != -1) browser.msie = 1;
+		else browser.msie = 0;
+		ClipperLib.biginteger_used = null;
+
+		// Copyright (c) 2005  Tom Wu
+		// All Rights Reserved.
+		// See "LICENSE" for details.
+		// Basic JavaScript BN library - subset useful for RSA encryption.
+		// Bits per digit
+		var dbits;
+		// (public) Constructor
+		/**
+		* @constructor
+		*/
+		function BigInteger(a, b, c)
+		{
+			// This test variable can be removed,
+			// but at least for performance tests it is useful piece of knowledge
+			// This is the only ClipperLib related variable in BigInteger library
+			ClipperLib.biginteger_used = 1;
+			if (a != null)
+				if ("number" == typeof a && "undefined" == typeof (b)) this.fromInt(a); // faster conversion
+				else if ("number" == typeof a) this.fromNumber(a, b, c);
+			else if (b == null && "string" != typeof a) this.fromString(a, 256);
+			else this.fromString(a, b);
+		}
+		// return new, unset BigInteger
+		function nbi()
+		{
+			return new BigInteger(null, undefined, undefined);
+		}
+		// am: Compute w_j += (x*this_i), propagate carries,
+		// c is initial carry, returns final carry.
+		// c < 3*dvalue, x < 2*dvalue, this_i < dvalue
+		// We need to select the fastest one that works in this environment.
+		// am1: use a single mult and divide to get the high bits,
+		// max digit bits should be 26 because
+		// max internal value = 2*dvalue^2-2*dvalue (< 2^53)
+		function am1(i, x, w, j, c, n)
+		{
+			while (--n >= 0)
+			{
+				var v = x * this[i++] + w[j] + c;
+				c = Math.floor(v / 0x4000000);
+				w[j++] = v & 0x3ffffff;
+			}
+			return c;
+		}
+		// am2 avoids a big mult-and-extract completely.
+		// Max digit bits should be <= 30 because we do bitwise ops
+		// on values up to 2*hdvalue^2-hdvalue-1 (< 2^31)
+		function am2(i, x, w, j, c, n)
+		{
+			var xl = x & 0x7fff,
+				xh = x >> 15;
+			while (--n >= 0)
+			{
+				var l = this[i] & 0x7fff;
+				var h = this[i++] >> 15;
+				var m = xh * l + h * xl;
+				l = xl * l + ((m & 0x7fff) << 15) + w[j] + (c & 0x3fffffff);
+				c = (l >>> 30) + (m >>> 15) + xh * h + (c >>> 30);
+				w[j++] = l & 0x3fffffff;
+			}
+			return c;
+		}
+		// Alternately, set max digit bits to 28 since some
+		// browsers slow down when dealing with 32-bit numbers.
+		function am3(i, x, w, j, c, n)
+		{
+			var xl = x & 0x3fff,
+				xh = x >> 14;
+			while (--n >= 0)
+			{
+				var l = this[i] & 0x3fff;
+				var h = this[i++] >> 14;
+				var m = xh * l + h * xl;
+				l = xl * l + ((m & 0x3fff) << 14) + w[j] + c;
+				c = (l >> 28) + (m >> 14) + xh * h;
+				w[j++] = l & 0xfffffff;
+			}
+			return c;
+		}
+		if (navigator_appName == "Microsoft Internet Explorer")
+		{
+			BigInteger.prototype.am = am2;
+			dbits = 30;
+		}
+		else if (navigator_appName != "Netscape")
+		{
+			BigInteger.prototype.am = am1;
+			dbits = 26;
+		}
+		else
+		{ // Mozilla/Netscape seems to prefer am3
+			BigInteger.prototype.am = am3;
+			dbits = 28;
+		}
+		BigInteger.prototype.DB = dbits;
+		BigInteger.prototype.DM = ((1 << dbits) - 1);
+		BigInteger.prototype.DV = (1 << dbits);
+		var BI_FP = 52;
+		BigInteger.prototype.FV = Math.pow(2, BI_FP);
+		BigInteger.prototype.F1 = BI_FP - dbits;
+		BigInteger.prototype.F2 = 2 * dbits - BI_FP;
+		// Digit conversions
+		var BI_RM = "0123456789abcdefghijklmnopqrstuvwxyz";
+		var BI_RC = new Array();
+		var rr, vv;
+		rr = "0".charCodeAt(0);
+		for (vv = 0; vv <= 9; ++vv) BI_RC[rr++] = vv;
+		rr = "a".charCodeAt(0);
+		for (vv = 10; vv < 36; ++vv) BI_RC[rr++] = vv;
+		rr = "A".charCodeAt(0);
+		for (vv = 10; vv < 36; ++vv) BI_RC[rr++] = vv;
+
+		function int2char(n)
+		{
+			return BI_RM.charAt(n);
+		}
+
+		function intAt(s, i)
+		{
+			var c = BI_RC[s.charCodeAt(i)];
+			return (c == null) ? -1 : c;
+		}
+		// (protected) copy this to r
+		function bnpCopyTo(r)
+		{
+			for (var i = this.t - 1; i >= 0; --i) r[i] = this[i];
+			r.t = this.t;
+			r.s = this.s;
+		}
+		// (protected) set from integer value x, -DV <= x < DV
+		function bnpFromInt(x)
+		{
+			this.t = 1;
+			this.s = (x < 0) ? -1 : 0;
+			if (x > 0) this[0] = x;
+			else if (x < -1) this[0] = x + this.DV;
+			else this.t = 0;
+		}
+		// return bigint initialized to value
+		function nbv(i)
+		{
+			var r = nbi();
+			r.fromInt(i);
+			return r;
+		}
+		// (protected) set from string and radix
+		function bnpFromString(s, b)
+		{
+			var k;
+			if (b == 16) k = 4;
+			else if (b == 8) k = 3;
+			else if (b == 256) k = 8; // byte array
+			else if (b == 2) k = 1;
+			else if (b == 32) k = 5;
+			else if (b == 4) k = 2;
+			else
+			{
+				this.fromRadix(s, b);
+				return;
+			}
+			this.t = 0;
+			this.s = 0;
+			var i = s.length,
+				mi = false,
+				sh = 0;
+			while (--i >= 0)
+			{
+				var x = (k == 8) ? s[i] & 0xff : intAt(s, i);
+				if (x < 0)
+				{
+					if (s.charAt(i) == "-") mi = true;
+					continue;
+				}
+				mi = false;
+				if (sh == 0)
+					this[this.t++] = x;
+				else if (sh + k > this.DB)
+				{
+					this[this.t - 1] |= (x & ((1 << (this.DB - sh)) - 1)) << sh;
+					this[this.t++] = (x >> (this.DB - sh));
+				}
+				else
+					this[this.t - 1] |= x << sh;
+				sh += k;
+				if (sh >= this.DB) sh -= this.DB;
+			}
+			if (k == 8 && (s[0] & 0x80) != 0)
+			{
+				this.s = -1;
+				if (sh > 0) this[this.t - 1] |= ((1 << (this.DB - sh)) - 1) << sh;
+			}
+			this.clamp();
+			if (mi) BigInteger.ZERO.subTo(this, this);
+		}
+		// (protected) clamp off excess high words
+		function bnpClamp()
+		{
+			var c = this.s & this.DM;
+			while (this.t > 0 && this[this.t - 1] == c) --this.t;
+		}
+		// (public) return string representation in given radix
+		function bnToString(b)
+		{
+			if (this.s < 0) return "-" + this.negate().toString(b);
+			var k;
+			if (b == 16) k = 4;
+			else if (b == 8) k = 3;
+			else if (b == 2) k = 1;
+			else if (b == 32) k = 5;
+			else if (b == 4) k = 2;
+			else return this.toRadix(b);
+			var km = (1 << k) - 1,
+				d, m = false,
+				r = "",
+				i = this.t;
+			var p = this.DB - (i * this.DB) % k;
+			if (i-- > 0)
+			{
+				if (p < this.DB && (d = this[i] >> p) > 0)
+				{
+					m = true;
+					r = int2char(d);
+				}
+				while (i >= 0)
+				{
+					if (p < k)
+					{
+						d = (this[i] & ((1 << p) - 1)) << (k - p);
+						d |= this[--i] >> (p += this.DB - k);
+					}
+					else
+					{
+						d = (this[i] >> (p -= k)) & km;
+						if (p <= 0)
+						{
+							p += this.DB;
+							--i;
+						}
+					}
+					if (d > 0) m = true;
+					if (m) r += int2char(d);
+				}
+			}
+			return m ? r : "0";
+		}
+		// (public) -this
+		function bnNegate()
+		{
+			var r = nbi();
+			BigInteger.ZERO.subTo(this, r);
+			return r;
+		}
+		// (public) |this|
+		function bnAbs()
+		{
+			return (this.s < 0) ? this.negate() : this;
+		}
+		// (public) return + if this > a, - if this < a, 0 if equal
+		function bnCompareTo(a)
+		{
+			var r = this.s - a.s;
+			if (r != 0) return r;
+			var i = this.t;
+			r = i - a.t;
+			if (r != 0) return (this.s < 0) ? -r : r;
+			while (--i >= 0)
+				if ((r = this[i] - a[i]) != 0) return r;
+			return 0;
+		}
+		// returns bit length of the integer x
+		function nbits(x)
+		{
+			var r = 1,
+				t;
+			if ((t = x >>> 16) != 0)
+			{
+				x = t;
+				r += 16;
+			}
+			if ((t = x >> 8) != 0)
+			{
+				x = t;
+				r += 8;
+			}
+			if ((t = x >> 4) != 0)
+			{
+				x = t;
+				r += 4;
+			}
+			if ((t = x >> 2) != 0)
+			{
+				x = t;
+				r += 2;
+			}
+			if ((t = x >> 1) != 0)
+			{
+				x = t;
+				r += 1;
+			}
+			return r;
+		}
+		// (public) return the number of bits in "this"
+		function bnBitLength()
+		{
+			if (this.t <= 0) return 0;
+			return this.DB * (this.t - 1) + nbits(this[this.t - 1] ^ (this.s & this.DM));
+		}
+		// (protected) r = this << n*DB
+		function bnpDLShiftTo(n, r)
+		{
+			var i;
+			for (i = this.t - 1; i >= 0; --i) r[i + n] = this[i];
+			for (i = n - 1; i >= 0; --i) r[i] = 0;
+			r.t = this.t + n;
+			r.s = this.s;
+		}
+		// (protected) r = this >> n*DB
+		function bnpDRShiftTo(n, r)
+		{
+			for (var i = n; i < this.t; ++i) r[i - n] = this[i];
+			r.t = Math.max(this.t - n, 0);
+			r.s = this.s;
+		}
+		// (protected) r = this << n
+		function bnpLShiftTo(n, r)
+		{
+			var bs = n % this.DB;
+			var cbs = this.DB - bs;
+			var bm = (1 << cbs) - 1;
+			var ds = Math.floor(n / this.DB),
+				c = (this.s << bs) & this.DM,
+				i;
+			for (i = this.t - 1; i >= 0; --i)
+			{
+				r[i + ds + 1] = (this[i] >> cbs) | c;
+				c = (this[i] & bm) << bs;
+			}
+			for (i = ds - 1; i >= 0; --i) r[i] = 0;
+			r[ds] = c;
+			r.t = this.t + ds + 1;
+			r.s = this.s;
+			r.clamp();
+		}
+		// (protected) r = this >> n
+		function bnpRShiftTo(n, r)
+		{
+			r.s = this.s;
+			var ds = Math.floor(n / this.DB);
+			if (ds >= this.t)
+			{
+				r.t = 0;
+				return;
+			}
+			var bs = n % this.DB;
+			var cbs = this.DB - bs;
+			var bm = (1 << bs) - 1;
+			r[0] = this[ds] >> bs;
+			for (var i = ds + 1; i < this.t; ++i)
+			{
+				r[i - ds - 1] |= (this[i] & bm) << cbs;
+				r[i - ds] = this[i] >> bs;
+			}
+			if (bs > 0) r[this.t - ds - 1] |= (this.s & bm) << cbs;
+			r.t = this.t - ds;
+			r.clamp();
+		}
+		// (protected) r = this - a
+		function bnpSubTo(a, r)
+		{
+			var i = 0,
+				c = 0,
+				m = Math.min(a.t, this.t);
+			while (i < m)
+			{
+				c += this[i] - a[i];
+				r[i++] = c & this.DM;
+				c >>= this.DB;
+			}
+			if (a.t < this.t)
+			{
+				c -= a.s;
+				while (i < this.t)
+				{
+					c += this[i];
+					r[i++] = c & this.DM;
+					c >>= this.DB;
+				}
+				c += this.s;
+			}
+			else
+			{
+				c += this.s;
+				while (i < a.t)
+				{
+					c -= a[i];
+					r[i++] = c & this.DM;
+					c >>= this.DB;
+				}
+				c -= a.s;
+			}
+			r.s = (c < 0) ? -1 : 0;
+			if (c < -1) r[i++] = this.DV + c;
+			else if (c > 0) r[i++] = c;
+			r.t = i;
+			r.clamp();
+		}
+		// (protected) r = this * a, r != this,a (HAC 14.12)
+		// "this" should be the larger one if appropriate.
+		function bnpMultiplyTo(a, r)
+		{
+			var x = this.abs(),
+				y = a.abs();
+			var i = x.t;
+			r.t = i + y.t;
+			while (--i >= 0) r[i] = 0;
+			for (i = 0; i < y.t; ++i) r[i + x.t] = x.am(0, y[i], r, i, 0, x.t);
+			r.s = 0;
+			r.clamp();
+			if (this.s != a.s) BigInteger.ZERO.subTo(r, r);
+		}
+		// (protected) r = this^2, r != this (HAC 14.16)
+		function bnpSquareTo(r)
+		{
+			var x = this.abs();
+			var i = r.t = 2 * x.t;
+			while (--i >= 0) r[i] = 0;
+			for (i = 0; i < x.t - 1; ++i)
+			{
+				var c = x.am(i, x[i], r, 2 * i, 0, 1);
+				if ((r[i + x.t] += x.am(i + 1, 2 * x[i], r, 2 * i + 1, c, x.t - i - 1)) >= x.DV)
+				{
+					r[i + x.t] -= x.DV;
+					r[i + x.t + 1] = 1;
+				}
+			}
+			if (r.t > 0) r[r.t - 1] += x.am(i, x[i], r, 2 * i, 0, 1);
+			r.s = 0;
+			r.clamp();
+		}
+		// (protected) divide this by m, quotient and remainder to q, r (HAC 14.20)
+		// r != q, this != m.  q or r may be null.
+		function bnpDivRemTo(m, q, r)
+		{
+			var pm = m.abs();
+			if (pm.t <= 0) return;
+			var pt = this.abs();
+			if (pt.t < pm.t)
+			{
+				if (q != null) q.fromInt(0);
+				if (r != null) this.copyTo(r);
+				return;
+			}
+			if (r == null) r = nbi();
+			var y = nbi(),
+				ts = this.s,
+				ms = m.s;
+			var nsh = this.DB - nbits(pm[pm.t - 1]); // normalize modulus
+			if (nsh > 0)
+			{
+				pm.lShiftTo(nsh, y);
+				pt.lShiftTo(nsh, r);
+			}
+			else
+			{
+				pm.copyTo(y);
+				pt.copyTo(r);
+			}
+			var ys = y.t;
+			var y0 = y[ys - 1];
+			if (y0 == 0) return;
+			var yt = y0 * (1 << this.F1) + ((ys > 1) ? y[ys - 2] >> this.F2 : 0);
+			var d1 = this.FV / yt,
+				d2 = (1 << this.F1) / yt,
+				e = 1 << this.F2;
+			var i = r.t,
+				j = i - ys,
+				t = (q == null) ? nbi() : q;
+			y.dlShiftTo(j, t);
+			if (r.compareTo(t) >= 0)
+			{
+				r[r.t++] = 1;
+				r.subTo(t, r);
+			}
+			BigInteger.ONE.dlShiftTo(ys, t);
+			t.subTo(y, y); // "negative" y so we can replace sub with am later
+			while (y.t < ys) y[y.t++] = 0;
+			while (--j >= 0)
+			{
+				// Estimate quotient digit
+				var qd = (r[--i] == y0) ? this.DM : Math.floor(r[i] * d1 + (r[i - 1] + e) * d2);
+				if ((r[i] += y.am(0, qd, r, j, 0, ys)) < qd)
+				{ // Try it out
+					y.dlShiftTo(j, t);
+					r.subTo(t, r);
+					while (r[i] < --qd) r.subTo(t, r);
+				}
+			}
+			if (q != null)
+			{
+				r.drShiftTo(ys, q);
+				if (ts != ms) BigInteger.ZERO.subTo(q, q);
+			}
+			r.t = ys;
+			r.clamp();
+			if (nsh > 0) r.rShiftTo(nsh, r); // Denormalize remainder
+			if (ts < 0) BigInteger.ZERO.subTo(r, r);
+		}
+		// (public) this mod a
+		function bnMod(a)
+		{
+			var r = nbi();
+			this.abs().divRemTo(a, null, r);
+			if (this.s < 0 && r.compareTo(BigInteger.ZERO) > 0) a.subTo(r, r);
+			return r;
+		}
+		// Modular reduction using "classic" algorithm
+		/**
+		* @constructor
+		*/
+		function Classic(m)
+		{
+			this.m = m;
+		}
+
+		function cConvert(x)
+		{
+			if (x.s < 0 || x.compareTo(this.m) >= 0) return x.mod(this.m);
+			else return x;
+		}
+
+		function cRevert(x)
+		{
+			return x;
+		}
+
+		function cReduce(x)
+		{
+			x.divRemTo(this.m, null, x);
+		}
+
+		function cMulTo(x, y, r)
+		{
+			x.multiplyTo(y, r);
+			this.reduce(r);
+		}
+
+		function cSqrTo(x, r)
+		{
+			x.squareTo(r);
+			this.reduce(r);
+		}
+		Classic.prototype.convert = cConvert;
+		Classic.prototype.revert = cRevert;
+		Classic.prototype.reduce = cReduce;
+		Classic.prototype.mulTo = cMulTo;
+		Classic.prototype.sqrTo = cSqrTo;
+		// (protected) return "-1/this % 2^DB"; useful for Mont. reduction
+		// justification:
+		//         xy == 1 (mod m)
+		//         xy =  1+km
+		//   xy(2-xy) = (1+km)(1-km)
+		// x[y(2-xy)] = 1-k^2m^2
+		// x[y(2-xy)] == 1 (mod m^2)
+		// if y is 1/x mod m, then y(2-xy) is 1/x mod m^2
+		// should reduce x and y(2-xy) by m^2 at each step to keep size bounded.
+		// JS multiply "overflows" differently from C/C++, so care is needed here.
+		function bnpInvDigit()
+		{
+			if (this.t < 1) return 0;
+			var x = this[0];
+			if ((x & 1) == 0) return 0;
+			var y = x & 3; // y == 1/x mod 2^2
+			y = (y * (2 - (x & 0xf) * y)) & 0xf; // y == 1/x mod 2^4
+			y = (y * (2 - (x & 0xff) * y)) & 0xff; // y == 1/x mod 2^8
+			y = (y * (2 - (((x & 0xffff) * y) & 0xffff))) & 0xffff; // y == 1/x mod 2^16
+			// last step - calculate inverse mod DV directly;
+			// assumes 16 < DB <= 32 and assumes ability to handle 48-bit ints
+			y = (y * (2 - x * y % this.DV)) % this.DV; // y == 1/x mod 2^dbits
+			// we really want the negative inverse, and -DV < y < DV
+			return (y > 0) ? this.DV - y : -y;
+		}
+		// Montgomery reduction
+		/**
+		* @constructor
+		*/
+		function Montgomery(m)
+		{
+			this.m = m;
+			this.mp = m.invDigit();
+			this.mpl = this.mp & 0x7fff;
+			this.mph = this.mp >> 15;
+			this.um = (1 << (m.DB - 15)) - 1;
+			this.mt2 = 2 * m.t;
+		}
+		// xR mod m
+		function montConvert(x)
+		{
+			var r = nbi();
+			x.abs().dlShiftTo(this.m.t, r);
+			r.divRemTo(this.m, null, r);
+			if (x.s < 0 && r.compareTo(BigInteger.ZERO) > 0) this.m.subTo(r, r);
+			return r;
+		}
+		// x/R mod m
+		function montRevert(x)
+		{
+			var r = nbi();
+			x.copyTo(r);
+			this.reduce(r);
+			return r;
+		}
+		// x = x/R mod m (HAC 14.32)
+		function montReduce(x)
+		{
+			while (x.t <= this.mt2) // pad x so am has enough room later
+				x[x.t++] = 0;
+			for (var i = 0; i < this.m.t; ++i)
+			{
+				// faster way of calculating u0 = x[i]*mp mod DV
+				var j = x[i] & 0x7fff;
+				var u0 = (j * this.mpl + (((j * this.mph + (x[i] >> 15) * this.mpl) & this.um) << 15)) & x.DM;
+				// use am to combine the multiply-shift-add into one call
+				j = i + this.m.t;
+				x[j] += this.m.am(0, u0, x, i, 0, this.m.t);
+				// propagate carry
+				while (x[j] >= x.DV)
+				{
+					x[j] -= x.DV;
+					x[++j]++;
+				}
+			}
+			x.clamp();
+			x.drShiftTo(this.m.t, x);
+			if (x.compareTo(this.m) >= 0) x.subTo(this.m, x);
+		}
+		// r = "x^2/R mod m"; x != r
+		function montSqrTo(x, r)
+		{
+			x.squareTo(r);
+			this.reduce(r);
+		}
+		// r = "xy/R mod m"; x,y != r
+		function montMulTo(x, y, r)
+		{
+			x.multiplyTo(y, r);
+			this.reduce(r);
+		}
+		Montgomery.prototype.convert = montConvert;
+		Montgomery.prototype.revert = montRevert;
+		Montgomery.prototype.reduce = montReduce;
+		Montgomery.prototype.mulTo = montMulTo;
+		Montgomery.prototype.sqrTo = montSqrTo;
+		// (protected) true iff this is even
+		function bnpIsEven()
+		{
+			return ((this.t > 0) ? (this[0] & 1) : this.s) == 0;
+		}
+		// (protected) this^e, e < 2^32, doing sqr and mul with "r" (HAC 14.79)
+		function bnpExp(e, z)
+		{
+			if (e > 0xffffffff || e < 1) return BigInteger.ONE;
+			var r = nbi(),
+				r2 = nbi(),
+				g = z.convert(this),
+				i = nbits(e) - 1;
+			g.copyTo(r);
+			while (--i >= 0)
+			{
+				z.sqrTo(r, r2);
+				if ((e & (1 << i)) > 0) z.mulTo(r2, g, r);
+				else
+				{
+					var t = r;
+					r = r2;
+					r2 = t;
+				}
+			}
+			return z.revert(r);
+		}
+		// (public) this^e % m, 0 <= e < 2^32
+		function bnModPowInt(e, m)
+		{
+			var z;
+			if (e < 256 || m.isEven()) z = new Classic(m);
+			else z = new Montgomery(m);
+			return this.exp(e, z);
+		}
+		// protected
+		BigInteger.prototype.copyTo = bnpCopyTo;
+		BigInteger.prototype.fromInt = bnpFromInt;
+		BigInteger.prototype.fromString = bnpFromString;
+		BigInteger.prototype.clamp = bnpClamp;
+		BigInteger.prototype.dlShiftTo = bnpDLShiftTo;
+		BigInteger.prototype.drShiftTo = bnpDRShiftTo;
+		BigInteger.prototype.lShiftTo = bnpLShiftTo;
+		BigInteger.prototype.rShiftTo = bnpRShiftTo;
+		BigInteger.prototype.subTo = bnpSubTo;
+		BigInteger.prototype.multiplyTo = bnpMultiplyTo;
+		BigInteger.prototype.squareTo = bnpSquareTo;
+		BigInteger.prototype.divRemTo = bnpDivRemTo;
+		BigInteger.prototype.invDigit = bnpInvDigit;
+		BigInteger.prototype.isEven = bnpIsEven;
+		BigInteger.prototype.exp = bnpExp;
+		// public
+		BigInteger.prototype.toString = bnToString;
+		BigInteger.prototype.negate = bnNegate;
+		BigInteger.prototype.abs = bnAbs;
+		BigInteger.prototype.compareTo = bnCompareTo;
+		BigInteger.prototype.bitLength = bnBitLength;
+		BigInteger.prototype.mod = bnMod;
+		BigInteger.prototype.modPowInt = bnModPowInt;
+		// "constants"
+		BigInteger.ZERO = nbv(0);
+		BigInteger.ONE = nbv(1);
+		// Copyright (c) 2005-2009  Tom Wu
+		// All Rights Reserved.
+		// See "LICENSE" for details.
+		// Extended JavaScript BN functions, required for RSA private ops.
+		// Version 1.1: new BigInteger("0", 10) returns "proper" zero
+		// Version 1.2: square() API, isProbablePrime fix
+		// (public)
+		function bnClone()
+		{
+			var r = nbi();
+			this.copyTo(r);
+			return r;
+		}
+		// (public) return value as integer
+		function bnIntValue()
+		{
+			if (this.s < 0)
+			{
+				if (this.t == 1) return this[0] - this.DV;
+				else if (this.t == 0) return -1;
+			}
+			else if (this.t == 1) return this[0];
+			else if (this.t == 0) return 0;
+			// assumes 16 < DB < 32
+			return ((this[1] & ((1 << (32 - this.DB)) - 1)) << this.DB) | this[0];
+		}
+		// (public) return value as byte
+		function bnByteValue()
+		{
+			return (this.t == 0) ? this.s : (this[0] << 24) >> 24;
+		}
+		// (public) return value as short (assumes DB>=16)
+		function bnShortValue()
+		{
+			return (this.t == 0) ? this.s : (this[0] << 16) >> 16;
+		}
+		// (protected) return x s.t. r^x < DV
+		function bnpChunkSize(r)
+		{
+			return Math.floor(Math.LN2 * this.DB / Math.log(r));
+		}
+		// (public) 0 if this == 0, 1 if this > 0
+		function bnSigNum()
+		{
+			if (this.s < 0) return -1;
+			else if (this.t <= 0 || (this.t == 1 && this[0] <= 0)) return 0;
+			else return 1;
+		}
+		// (protected) convert to radix string
+		function bnpToRadix(b)
+		{
+			if (b == null) b = 10;
+			if (this.signum() == 0 || b < 2 || b > 36) return "0";
+			var cs = this.chunkSize(b);
+			var a = Math.pow(b, cs);
+			var d = nbv(a),
+				y = nbi(),
+				z = nbi(),
+				r = "";
+			this.divRemTo(d, y, z);
+			while (y.signum() > 0)
+			{
+				r = (a + z.intValue()).toString(b).substr(1) + r;
+				y.divRemTo(d, y, z);
+			}
+			return z.intValue().toString(b) + r;
+		}
+		// (protected) convert from radix string
+		function bnpFromRadix(s, b)
+		{
+			this.fromInt(0);
+			if (b == null) b = 10;
+			var cs = this.chunkSize(b);
+			var d = Math.pow(b, cs),
+				mi = false,
+				j = 0,
+				w = 0;
+			for (var i = 0; i < s.length; ++i)
+			{
+				var x = intAt(s, i);
+				if (x < 0)
+				{
+					if (s.charAt(i) == "-" && this.signum() == 0) mi = true;
+					continue;
+				}
+				w = b * w + x;
+				if (++j >= cs)
+				{
+					this.dMultiply(d);
+					this.dAddOffset(w, 0);
+					j = 0;
+					w = 0;
+				}
+			}
+			if (j > 0)
+			{
+				this.dMultiply(Math.pow(b, j));
+				this.dAddOffset(w, 0);
+			}
+			if (mi) BigInteger.ZERO.subTo(this, this);
+		}
+		// (protected) alternate constructor
+		function bnpFromNumber(a, b, c)
+		{
+			if ("number" == typeof b)
+			{
+				// new BigInteger(int,int,RNG)
+				if (a < 2) this.fromInt(1);
+				else
+				{
+					this.fromNumber(a, c);
+					if (!this.testBit(a - 1)) // force MSB set
+						this.bitwiseTo(BigInteger.ONE.shiftLeft(a - 1), op_or, this);
+					if (this.isEven()) this.dAddOffset(1, 0); // force odd
+					while (!this.isProbablePrime(b))
+					{
+						this.dAddOffset(2, 0);
+						if (this.bitLength() > a) this.subTo(BigInteger.ONE.shiftLeft(a - 1), this);
+					}
+				}
+			}
+			else
+			{
+				// new BigInteger(int,RNG)
+				var x = new Array(),
+					t = a & 7;
+				x.length = (a >> 3) + 1;
+				b.nextBytes(x);
+				if (t > 0) x[0] &= ((1 << t) - 1);
+				else x[0] = 0;
+				this.fromString(x, 256);
+			}
+		}
+		// (public) convert to bigendian byte array
+		function bnToByteArray()
+		{
+			var i = this.t,
+				r = new Array();
+			r[0] = this.s;
+			var p = this.DB - (i * this.DB) % 8,
+				d, k = 0;
+			if (i-- > 0)
+			{
+				if (p < this.DB && (d = this[i] >> p) != (this.s & this.DM) >> p)
+					r[k++] = d | (this.s << (this.DB - p));
+				while (i >= 0)
+				{
+					if (p < 8)
+					{
+						d = (this[i] & ((1 << p) - 1)) << (8 - p);
+						d |= this[--i] >> (p += this.DB - 8);
+					}
+					else
+					{
+						d = (this[i] >> (p -= 8)) & 0xff;
+						if (p <= 0)
+						{
+							p += this.DB;
+							--i;
+						}
+					}
+					if ((d & 0x80) != 0) d |= -256;
+					if (k == 0 && (this.s & 0x80) != (d & 0x80)) ++k;
+					if (k > 0 || d != this.s) r[k++] = d;
+				}
+			}
+			return r;
+		}
+
+		function bnEquals(a)
+		{
+			return (this.compareTo(a) == 0);
+		}
+
+		function bnMin(a)
+		{
+			return (this.compareTo(a) < 0) ? this : a;
+		}
+
+		function bnMax(a)
+		{
+			return (this.compareTo(a) > 0) ? this : a;
+		}
+		// (protected) r = this op a (bitwise)
+		function bnpBitwiseTo(a, op, r)
+		{
+			var i, f, m = Math.min(a.t, this.t);
+			for (i = 0; i < m; ++i) r[i] = op(this[i], a[i]);
+			if (a.t < this.t)
+			{
+				f = a.s & this.DM;
+				for (i = m; i < this.t; ++i) r[i] = op(this[i], f);
+				r.t = this.t;
+			}
+			else
+			{
+				f = this.s & this.DM;
+				for (i = m; i < a.t; ++i) r[i] = op(f, a[i]);
+				r.t = a.t;
+			}
+			r.s = op(this.s, a.s);
+			r.clamp();
+		}
+		// (public) this & a
+		function op_and(x, y)
+		{
+			return x & y;
+		}
+
+		function bnAnd(a)
+		{
+			var r = nbi();
+			this.bitwiseTo(a, op_and, r);
+			return r;
+		}
+		// (public) this | a
+		function op_or(x, y)
+		{
+			return x | y;
+		}
+
+		function bnOr(a)
+		{
+			var r = nbi();
+			this.bitwiseTo(a, op_or, r);
+			return r;
+		}
+		// (public) this ^ a
+		function op_xor(x, y)
+		{
+			return x ^ y;
+		}
+
+		function bnXor(a)
+		{
+			var r = nbi();
+			this.bitwiseTo(a, op_xor, r);
+			return r;
+		}
+		// (public) this & ~a
+		function op_andnot(x, y)
+		{
+			return x & ~y;
+		}
+
+		function bnAndNot(a)
+		{
+			var r = nbi();
+			this.bitwiseTo(a, op_andnot, r);
+			return r;
+		}
+		// (public) ~this
+		function bnNot()
+		{
+			var r = nbi();
+			for (var i = 0; i < this.t; ++i) r[i] = this.DM & ~this[i];
+			r.t = this.t;
+			r.s = ~this.s;
+			return r;
+		}
+		// (public) this << n
+		function bnShiftLeft(n)
+		{
+			var r = nbi();
+			if (n < 0) this.rShiftTo(-n, r);
+			else this.lShiftTo(n, r);
+			return r;
+		}
+		// (public) this >> n
+		function bnShiftRight(n)
+		{
+			var r = nbi();
+			if (n < 0) this.lShiftTo(-n, r);
+			else this.rShiftTo(n, r);
+			return r;
+		}
+		// return index of lowest 1-bit in x, x < 2^31
+		function lbit(x)
+		{
+			if (x == 0) return -1;
+			var r = 0;
+			if ((x & 0xffff) == 0)
+			{
+				x >>= 16;
+				r += 16;
+			}
+			if ((x & 0xff) == 0)
+			{
+				x >>= 8;
+				r += 8;
+			}
+			if ((x & 0xf) == 0)
+			{
+				x >>= 4;
+				r += 4;
+			}
+			if ((x & 3) == 0)
+			{
+				x >>= 2;
+				r += 2;
+			}
+			if ((x & 1) == 0) ++r;
+			return r;
+		}
+		// (public) returns index of lowest 1-bit (or -1 if none)
+		function bnGetLowestSetBit()
+		{
+			for (var i = 0; i < this.t; ++i)
+				if (this[i] != 0) return i * this.DB + lbit(this[i]);
+			if (this.s < 0) return this.t * this.DB;
+			return -1;
+		}
+		// return number of 1 bits in x
+		function cbit(x)
+		{
+			var r = 0;
+			while (x != 0)
+			{
+				x &= x - 1;
+				++r;
+			}
+			return r;
+		}
+		// (public) return number of set bits
+		function bnBitCount()
+		{
+			var r = 0,
+				x = this.s & this.DM;
+			for (var i = 0; i < this.t; ++i) r += cbit(this[i] ^ x);
+			return r;
+		}
+		// (public) true iff nth bit is set
+		function bnTestBit(n)
+		{
+			var j = Math.floor(n / this.DB);
+			if (j >= this.t) return (this.s != 0);
+			return ((this[j] & (1 << (n % this.DB))) != 0);
+		}
+		// (protected) this op (1<<n)
+		function bnpChangeBit(n, op)
+		{
+			var r = BigInteger.ONE.shiftLeft(n);
+			this.bitwiseTo(r, op, r);
+			return r;
+		}
+		// (public) this | (1<<n)
+		function bnSetBit(n)
+		{
+			return this.changeBit(n, op_or);
+		}
+		// (public) this & ~(1<<n)
+		function bnClearBit(n)
+		{
+			return this.changeBit(n, op_andnot);
+		}
+		// (public) this ^ (1<<n)
+		function bnFlipBit(n)
+		{
+			return this.changeBit(n, op_xor);
+		}
+		// (protected) r = this + a
+		function bnpAddTo(a, r)
+		{
+			var i = 0,
+				c = 0,
+				m = Math.min(a.t, this.t);
+			while (i < m)
+			{
+				c += this[i] + a[i];
+				r[i++] = c & this.DM;
+				c >>= this.DB;
+			}
+			if (a.t < this.t)
+			{
+				c += a.s;
+				while (i < this.t)
+				{
+					c += this[i];
+					r[i++] = c & this.DM;
+					c >>= this.DB;
+				}
+				c += this.s;
+			}
+			else
+			{
+				c += this.s;
+				while (i < a.t)
+				{
+					c += a[i];
+					r[i++] = c & this.DM;
+					c >>= this.DB;
+				}
+				c += a.s;
+			}
+			r.s = (c < 0) ? -1 : 0;
+			if (c > 0) r[i++] = c;
+			else if (c < -1) r[i++] = this.DV + c;
+			r.t = i;
+			r.clamp();
+		}
+		// (public) this + a
+		function bnAdd(a)
+		{
+			var r = nbi();
+			this.addTo(a, r);
+			return r;
+		}
+		// (public) this - a
+		function bnSubtract(a)
+		{
+			var r = nbi();
+			this.subTo(a, r);
+			return r;
+		}
+		// (public) this * a
+		function bnMultiply(a)
+		{
+			var r = nbi();
+			this.multiplyTo(a, r);
+			return r;
+		}
+		// (public) this^2
+		function bnSquare()
+		{
+			var r = nbi();
+			this.squareTo(r);
+			return r;
+		}
+		// (public) this / a
+		function bnDivide(a)
+		{
+			var r = nbi();
+			this.divRemTo(a, r, null);
+			return r;
+		}
+		// (public) this % a
+		function bnRemainder(a)
+		{
+			var r = nbi();
+			this.divRemTo(a, null, r);
+			return r;
+		}
+		// (public) [this/a,this%a]
+		function bnDivideAndRemainder(a)
+		{
+			var q = nbi(),
+				r = nbi();
+			this.divRemTo(a, q, r);
+			return new Array(q, r);
+		}
+		// (protected) this *= n, this >= 0, 1 < n < DV
+		function bnpDMultiply(n)
+		{
+			this[this.t] = this.am(0, n - 1, this, 0, 0, this.t);
+			++this.t;
+			this.clamp();
+		}
+		// (protected) this += n << w words, this >= 0
+		function bnpDAddOffset(n, w)
+		{
+			if (n == 0) return;
+			while (this.t <= w) this[this.t++] = 0;
+			this[w] += n;
+			while (this[w] >= this.DV)
+			{
+				this[w] -= this.DV;
+				if (++w >= this.t) this[this.t++] = 0;
+				++this[w];
+			}
+		}
+		// A "null" reducer
+		/**
+		* @constructor
+		*/
+		function NullExp()
+		{}
+
+		function nNop(x)
+		{
+			return x;
+		}
+
+		function nMulTo(x, y, r)
+		{
+			x.multiplyTo(y, r);
+		}
+
+		function nSqrTo(x, r)
+		{
+			x.squareTo(r);
+		}
+		NullExp.prototype.convert = nNop;
+		NullExp.prototype.revert = nNop;
+		NullExp.prototype.mulTo = nMulTo;
+		NullExp.prototype.sqrTo = nSqrTo;
+		// (public) this^e
+		function bnPow(e)
+		{
+			return this.exp(e, new NullExp());
+		}
+		// (protected) r = lower n words of "this * a", a.t <= n
+		// "this" should be the larger one if appropriate.
+		function bnpMultiplyLowerTo(a, n, r)
+		{
+			var i = Math.min(this.t + a.t, n);
+			r.s = 0; // assumes a,this >= 0
+			r.t = i;
+			while (i > 0) r[--i] = 0;
+			var j;
+			for (j = r.t - this.t; i < j; ++i) r[i + this.t] = this.am(0, a[i], r, i, 0, this.t);
+			for (j = Math.min(a.t, n); i < j; ++i) this.am(0, a[i], r, i, 0, n - i);
+			r.clamp();
+		}
+		// (protected) r = "this * a" without lower n words, n > 0
+		// "this" should be the larger one if appropriate.
+		function bnpMultiplyUpperTo(a, n, r)
+		{
+			--n;
+			var i = r.t = this.t + a.t - n;
+			r.s = 0; // assumes a,this >= 0
+			while (--i >= 0) r[i] = 0;
+			for (i = Math.max(n - this.t, 0); i < a.t; ++i)
+				r[this.t + i - n] = this.am(n - i, a[i], r, 0, 0, this.t + i - n);
+			r.clamp();
+			r.drShiftTo(1, r);
+		}
+		// Barrett modular reduction
+		/**
+		* @constructor
+		*/
+		function Barrett(m)
+		{
+			// setup Barrett
+			this.r2 = nbi();
+			this.q3 = nbi();
+			BigInteger.ONE.dlShiftTo(2 * m.t, this.r2);
+			this.mu = this.r2.divide(m);
+			this.m = m;
+		}
+
+		function barrettConvert(x)
+		{
+			if (x.s < 0 || x.t > 2 * this.m.t) return x.mod(this.m);
+			else if (x.compareTo(this.m) < 0) return x;
+			else
+			{
+				var r = nbi();
+				x.copyTo(r);
+				this.reduce(r);
+				return r;
+			}
+		}
+
+		function barrettRevert(x)
+		{
+			return x;
+		}
+		// x = x mod m (HAC 14.42)
+		function barrettReduce(x)
+		{
+			x.drShiftTo(this.m.t - 1, this.r2);
+			if (x.t > this.m.t + 1)
+			{
+				x.t = this.m.t + 1;
+				x.clamp();
+			}
+			this.mu.multiplyUpperTo(this.r2, this.m.t + 1, this.q3);
+			this.m.multiplyLowerTo(this.q3, this.m.t + 1, this.r2);
+			while (x.compareTo(this.r2) < 0) x.dAddOffset(1, this.m.t + 1);
+			x.subTo(this.r2, x);
+			while (x.compareTo(this.m) >= 0) x.subTo(this.m, x);
+		}
+		// r = x^2 mod m; x != r
+		function barrettSqrTo(x, r)
+		{
+			x.squareTo(r);
+			this.reduce(r);
+		}
+		// r = x*y mod m; x,y != r
+		function barrettMulTo(x, y, r)
+		{
+			x.multiplyTo(y, r);
+			this.reduce(r);
+		}
+		Barrett.prototype.convert = barrettConvert;
+		Barrett.prototype.revert = barrettRevert;
+		Barrett.prototype.reduce = barrettReduce;
+		Barrett.prototype.mulTo = barrettMulTo;
+		Barrett.prototype.sqrTo = barrettSqrTo;
+		// (public) this^e % m (HAC 14.85)
+		function bnModPow(e, m)
+		{
+			var i = e.bitLength(),
+				k, r = nbv(1),
+				z;
+			if (i <= 0) return r;
+			else if (i < 18) k = 1;
+			else if (i < 48) k = 3;
+			else if (i < 144) k = 4;
+			else if (i < 768) k = 5;
+			else k = 6;
+			if (i < 8)
+				z = new Classic(m);
+			else if (m.isEven())
+				z = new Barrett(m);
+			else
+				z = new Montgomery(m);
+			// precomputation
+			var g = new Array(),
+				n = 3,
+				k1 = k - 1,
+				km = (1 << k) - 1;
+			g[1] = z.convert(this);
+			if (k > 1)
+			{
+				var g2 = nbi();
+				z.sqrTo(g[1], g2);
+				while (n <= km)
+				{
+					g[n] = nbi();
+					z.mulTo(g2, g[n - 2], g[n]);
+					n += 2;
+				}
+			}
+			var j = e.t - 1,
+				w, is1 = true,
+				r2 = nbi(),
+				t;
+			i = nbits(e[j]) - 1;
+			while (j >= 0)
+			{
+				if (i >= k1) w = (e[j] >> (i - k1)) & km;
+				else
+				{
+					w = (e[j] & ((1 << (i + 1)) - 1)) << (k1 - i);
+					if (j > 0) w |= e[j - 1] >> (this.DB + i - k1);
+				}
+				n = k;
+				while ((w & 1) == 0)
+				{
+					w >>= 1;
+					--n;
+				}
+				if ((i -= n) < 0)
+				{
+					i += this.DB;
+					--j;
+				}
+				if (is1)
+				{ // ret == 1, don't bother squaring or multiplying it
+					g[w].copyTo(r);
+					is1 = false;
+				}
+				else
+				{
+					while (n > 1)
+					{
+						z.sqrTo(r, r2);
+						z.sqrTo(r2, r);
+						n -= 2;
+					}
+					if (n > 0) z.sqrTo(r, r2);
+					else
+					{
+						t = r;
+						r = r2;
+						r2 = t;
+					}
+					z.mulTo(r2, g[w], r);
+				}
+				while (j >= 0 && (e[j] & (1 << i)) == 0)
+				{
+					z.sqrTo(r, r2);
+					t = r;
+					r = r2;
+					r2 = t;
+					if (--i < 0)
+					{
+						i = this.DB - 1;
+						--j;
+					}
+				}
+			}
+			return z.revert(r);
+		}
+		// (public) gcd(this,a) (HAC 14.54)
+		function bnGCD(a)
+		{
+			var x = (this.s < 0) ? this.negate() : this.clone();
+			var y = (a.s < 0) ? a.negate() : a.clone();
+			if (x.compareTo(y) < 0)
+			{
+				var t = x;
+				x = y;
+				y = t;
+			}
+			var i = x.getLowestSetBit(),
+				g = y.getLowestSetBit();
+			if (g < 0) return x;
+			if (i < g) g = i;
+			if (g > 0)
+			{
+				x.rShiftTo(g, x);
+				y.rShiftTo(g, y);
+			}
+			while (x.signum() > 0)
+			{
+				if ((i = x.getLowestSetBit()) > 0) x.rShiftTo(i, x);
+				if ((i = y.getLowestSetBit()) > 0) y.rShiftTo(i, y);
+				if (x.compareTo(y) >= 0)
+				{
+					x.subTo(y, x);
+					x.rShiftTo(1, x);
+				}
+				else
+				{
+					y.subTo(x, y);
+					y.rShiftTo(1, y);
+				}
+			}
+			if (g > 0) y.lShiftTo(g, y);
+			return y;
+		}
+		// (protected) this % n, n < 2^26
+		function bnpModInt(n)
+		{
+			if (n <= 0) return 0;
+			var d = this.DV % n,
+				r = (this.s < 0) ? n - 1 : 0;
+			if (this.t > 0)
+				if (d == 0) r = this[0] % n;
+				else
+					for (var i = this.t - 1; i >= 0; --i) r = (d * r + this[i]) % n;
+			return r;
+		}
+		// (public) 1/this % m (HAC 14.61)
+		function bnModInverse(m)
+		{
+			var ac = m.isEven();
+			if ((this.isEven() && ac) || m.signum() == 0) return BigInteger.ZERO;
+			var u = m.clone(),
+				v = this.clone();
+			var a = nbv(1),
+				b = nbv(0),
+				c = nbv(0),
+				d = nbv(1);
+			while (u.signum() != 0)
+			{
+				while (u.isEven())
+				{
+					u.rShiftTo(1, u);
+					if (ac)
+					{
+						if (!a.isEven() || !b.isEven())
+						{
+							a.addTo(this, a);
+							b.subTo(m, b);
+						}
+						a.rShiftTo(1, a);
+					}
+					else if (!b.isEven()) b.subTo(m, b);
+					b.rShiftTo(1, b);
+				}
+				while (v.isEven())
+				{
+					v.rShiftTo(1, v);
+					if (ac)
+					{
+						if (!c.isEven() || !d.isEven())
+						{
+							c.addTo(this, c);
+							d.subTo(m, d);
+						}
+						c.rShiftTo(1, c);
+					}
+					else if (!d.isEven()) d.subTo(m, d);
+					d.rShiftTo(1, d);
+				}
+				if (u.compareTo(v) >= 0)
+				{
+					u.subTo(v, u);
+					if (ac) a.subTo(c, a);
+					b.subTo(d, b);
+				}
+				else
+				{
+					v.subTo(u, v);
+					if (ac) c.subTo(a, c);
+					d.subTo(b, d);
+				}
+			}
+			if (v.compareTo(BigInteger.ONE) != 0) return BigInteger.ZERO;
+			if (d.compareTo(m) >= 0) return d.subtract(m);
+			if (d.signum() < 0) d.addTo(m, d);
+			else return d;
+			if (d.signum() < 0) return d.add(m);
+			else return d;
+		}
+		var lowprimes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461, 463, 467, 479, 487, 491, 499, 503, 509, 521, 523, 541, 547, 557, 563, 569, 571, 577, 587, 593, 599, 601, 607, 613, 617, 619, 631, 641, 643, 647, 653, 659, 661, 673, 677, 683, 691, 701, 709, 719, 727, 733, 739, 743, 751, 757, 761, 769, 773, 787, 797, 809, 811, 821, 823, 827, 829, 839, 853, 857, 859, 863, 877, 881, 883, 887, 907, 911, 919, 929, 937, 941, 947, 953, 967, 971, 977, 983, 991, 997];
+		var lplim = (1 << 26) / lowprimes[lowprimes.length - 1];
+		// (public) test primality with certainty >= 1-.5^t
+		function bnIsProbablePrime(t)
+		{
+			var i, x = this.abs();
+			if (x.t == 1 && x[0] <= lowprimes[lowprimes.length - 1])
+			{
+				for (i = 0; i < lowprimes.length; ++i)
+					if (x[0] == lowprimes[i]) return true;
+				return false;
+			}
+			if (x.isEven()) return false;
+			i = 1;
+			while (i < lowprimes.length)
+			{
+				var m = lowprimes[i],
+					j = i + 1;
+				while (j < lowprimes.length && m < lplim) m *= lowprimes[j++];
+				m = x.modInt(m);
+				while (i < j)
+					if (m % lowprimes[i++] == 0) return false;
+			}
+			return x.millerRabin(t);
+		}
+		// (protected) true if probably prime (HAC 4.24, Miller-Rabin)
+		function bnpMillerRabin(t)
+		{
+			var n1 = this.subtract(BigInteger.ONE);
+			var k = n1.getLowestSetBit();
+			if (k <= 0) return false;
+			var r = n1.shiftRight(k);
+			t = (t + 1) >> 1;
+			if (t > lowprimes.length) t = lowprimes.length;
+			var a = nbi();
+			for (var i = 0; i < t; ++i)
+			{
+				//Pick bases at random, instead of starting at 2
+				a.fromInt(lowprimes[Math.floor(Math.random() * lowprimes.length)]);
+				var y = a.modPow(r, this);
+				if (y.compareTo(BigInteger.ONE) != 0 && y.compareTo(n1) != 0)
+				{
+					var j = 1;
+					while (j++ < k && y.compareTo(n1) != 0)
+					{
+						y = y.modPowInt(2, this);
+						if (y.compareTo(BigInteger.ONE) == 0) return false;
+					}
+					if (y.compareTo(n1) != 0) return false;
+				}
+			}
+			return true;
+		}
+		// protected
+		BigInteger.prototype.chunkSize = bnpChunkSize;
+		BigInteger.prototype.toRadix = bnpToRadix;
+		BigInteger.prototype.fromRadix = bnpFromRadix;
+		BigInteger.prototype.fromNumber = bnpFromNumber;
+		BigInteger.prototype.bitwiseTo = bnpBitwiseTo;
+		BigInteger.prototype.changeBit = bnpChangeBit;
+		BigInteger.prototype.addTo = bnpAddTo;
+		BigInteger.prototype.dMultiply = bnpDMultiply;
+		BigInteger.prototype.dAddOffset = bnpDAddOffset;
+		BigInteger.prototype.multiplyLowerTo = bnpMultiplyLowerTo;
+		BigInteger.prototype.multiplyUpperTo = bnpMultiplyUpperTo;
+		BigInteger.prototype.modInt = bnpModInt;
+		BigInteger.prototype.millerRabin = bnpMillerRabin;
+		// public
+		BigInteger.prototype.clone = bnClone;
+		BigInteger.prototype.intValue = bnIntValue;
+		BigInteger.prototype.byteValue = bnByteValue;
+		BigInteger.prototype.shortValue = bnShortValue;
+		BigInteger.prototype.signum = bnSigNum;
+		BigInteger.prototype.toByteArray = bnToByteArray;
+		BigInteger.prototype.equals = bnEquals;
+		BigInteger.prototype.min = bnMin;
+		BigInteger.prototype.max = bnMax;
+		BigInteger.prototype.and = bnAnd;
+		BigInteger.prototype.or = bnOr;
+		BigInteger.prototype.xor = bnXor;
+		BigInteger.prototype.andNot = bnAndNot;
+		BigInteger.prototype.not = bnNot;
+		BigInteger.prototype.shiftLeft = bnShiftLeft;
+		BigInteger.prototype.shiftRight = bnShiftRight;
+		BigInteger.prototype.getLowestSetBit = bnGetLowestSetBit;
+		BigInteger.prototype.bitCount = bnBitCount;
+		BigInteger.prototype.testBit = bnTestBit;
+		BigInteger.prototype.setBit = bnSetBit;
+		BigInteger.prototype.clearBit = bnClearBit;
+		BigInteger.prototype.flipBit = bnFlipBit;
+		BigInteger.prototype.add = bnAdd;
+		BigInteger.prototype.subtract = bnSubtract;
+		BigInteger.prototype.multiply = bnMultiply;
+		BigInteger.prototype.divide = bnDivide;
+		BigInteger.prototype.remainder = bnRemainder;
+		BigInteger.prototype.divideAndRemainder = bnDivideAndRemainder;
+		BigInteger.prototype.modPow = bnModPow;
+		BigInteger.prototype.modInverse = bnModInverse;
+		BigInteger.prototype.pow = bnPow;
+		BigInteger.prototype.gcd = bnGCD;
+		BigInteger.prototype.isProbablePrime = bnIsProbablePrime;
+		// JSBN-specific extension
+		BigInteger.prototype.square = bnSquare;
+		var Int128 = BigInteger;
+		// BigInteger interfaces not implemented in jsbn:
+		// BigInteger(int signum, byte[] magnitude)
+		// double doubleValue()
+		// float floatValue()
+		// int hashCode()
+		// long longValue()
+		// static BigInteger valueOf(long val)
+		// Helper functions to make BigInteger functions callable with two parameters
+		// as in original C# Clipper
+		Int128.prototype.IsNegative = function ()
+		{
+			if (this.compareTo(Int128.ZERO) == -1) return true;
+			else return false;
+		};
+
+		Int128.op_Equality = function (val1, val2)
+		{
+			if (val1.compareTo(val2) == 0) return true;
+			else return false;
+		};
+
+		Int128.op_Inequality = function (val1, val2)
+		{
+			if (val1.compareTo(val2) != 0) return true;
+			else return false;
+		};
+
+		Int128.op_GreaterThan = function (val1, val2)
+		{
+			if (val1.compareTo(val2) > 0) return true;
+			else return false;
+		};
+
+		Int128.op_LessThan = function (val1, val2)
+		{
+			if (val1.compareTo(val2) < 0) return true;
+			else return false;
+		};
+
+		Int128.op_Addition = function (lhs, rhs)
+		{
+			return new Int128(lhs, undefined, undefined).add(new Int128(rhs, undefined, undefined));
+		};
+
+		Int128.op_Subtraction = function (lhs, rhs)
+		{
+			return new Int128(lhs, undefined, undefined).subtract(new Int128(rhs, undefined, undefined));
+		};
+
+		Int128.Int128Mul = function (lhs, rhs)
+		{
+			return new Int128(lhs, undefined, undefined).multiply(new Int128(rhs, undefined, undefined));
+		};
+
+		Int128.op_Division = function (lhs, rhs)
+		{
+			return lhs.divide(rhs);
+		};
+
+		Int128.prototype.ToDouble = function ()
+		{
+			return parseFloat(this.toString()); // This could be something faster
+		};
+
+		// end of Int128 section
+		/*
+		// Uncomment the following two lines if you want to use Int128 outside ClipperLib
+		if (typeof(document) !== "undefined") window.Int128 = Int128;
+		else self.Int128 = Int128;
+		*/
+
+		// ---------------------------------------------
+
+		// Here starts the actual Clipper library:
+		// Helper function to support Inheritance in Javascript
+		var Inherit = function (ce, ce2)
+		{
+			var p;
+			if (typeof (Object.getOwnPropertyNames) === 'undefined')
+			{
+				for (p in ce2.prototype)
+					if (typeof (ce.prototype[p]) === 'undefined' || ce.prototype[p] === Object.prototype[p]) ce.prototype[p] = ce2.prototype[p];
+				for (p in ce2)
+					if (typeof (ce[p]) === 'undefined') ce[p] = ce2[p];
+				ce.$baseCtor = ce2;
+			}
+			else
+			{
+				var props = Object.getOwnPropertyNames(ce2.prototype);
+				for (var i = 0; i < props.length; i++)
+					if (typeof (Object.getOwnPropertyDescriptor(ce.prototype, props[i])) === 'undefined') Object.defineProperty(ce.prototype, props[i], Object.getOwnPropertyDescriptor(ce2.prototype, props[i]));
+				for (p in ce2)
+					if (typeof (ce[p]) === 'undefined') ce[p] = ce2[p];
+				ce.$baseCtor = ce2;
+			}
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.Path = function ()
+		{
+			return [];
+		};
+
+		ClipperLib.Path.prototype.push = Array.prototype.push;
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.Paths = function ()
+		{
+			return []; // Was previously [[]], but caused problems when pushed
+		};
+
+		ClipperLib.Paths.prototype.push = Array.prototype.push;
+
+		// Preserves the calling way of original C# Clipper
+		// Is essential due to compatibility, because DoublePoint is public class in original C# version
+		/**
+		* @constructor
+		*/
+		ClipperLib.DoublePoint = function ()
+		{
+			var a = arguments;
+			this.X = 0;
+			this.Y = 0;
+			// public DoublePoint(DoublePoint dp)
+			// public DoublePoint(IntPoint ip)
+			if (a.length === 1)
+			{
+				this.X = a[0].X;
+				this.Y = a[0].Y;
+			}
+			else if (a.length === 2)
+			{
+				this.X = a[0];
+				this.Y = a[1];
+			}
+		}; // This is internal faster function when called without arguments
+		/**
+		* @constructor
+		*/
+		ClipperLib.DoublePoint0 = function ()
+		{
+			this.X = 0;
+			this.Y = 0;
+		};
+
+		ClipperLib.DoublePoint0.prototype = ClipperLib.DoublePoint.prototype;
+
+		// This is internal faster function when called with 1 argument (dp or ip)
+		/**
+		* @constructor
+		*/
+		ClipperLib.DoublePoint1 = function (dp)
+		{
+			this.X = dp.X;
+			this.Y = dp.Y;
+		};
+
+		ClipperLib.DoublePoint1.prototype = ClipperLib.DoublePoint.prototype;
+
+		// This is internal faster function when called with 2 arguments (x and y)
+		/**
+		* @constructor
+		*/
+		ClipperLib.DoublePoint2 = function (x, y)
+		{
+			this.X = x;
+			this.Y = y;
+		};
+
+		ClipperLib.DoublePoint2.prototype = ClipperLib.DoublePoint.prototype;
+
+		// PolyTree & PolyNode start
+		/**
+		* @suppress {missingProperties}
+		*/
+		ClipperLib.PolyNode = function ()
+		{
+			this.m_Parent = null;
+			this.m_polygon = new ClipperLib.Path();
+			this.m_Index = 0;
+			this.m_jointype = 0;
+			this.m_endtype = 0;
+			this.m_Childs = [];
+			this.IsOpen = false;
+		};
+
+		ClipperLib.PolyNode.prototype.IsHoleNode = function ()
+		{
+			var result = true;
+			var node = this.m_Parent;
+			while (node !== null)
+			{
+				result = !result;
+				node = node.m_Parent;
+			}
+			return result;
+		};
+
+		ClipperLib.PolyNode.prototype.ChildCount = function ()
+		{
+			return this.m_Childs.length;
+		};
+
+		ClipperLib.PolyNode.prototype.Contour = function ()
+		{
+			return this.m_polygon;
+		};
+
+		ClipperLib.PolyNode.prototype.AddChild = function (Child)
+		{
+			var cnt = this.m_Childs.length;
+			this.m_Childs.push(Child);
+			Child.m_Parent = this;
+			Child.m_Index = cnt;
+		};
+
+		ClipperLib.PolyNode.prototype.GetNext = function ()
+		{
+			if (this.m_Childs.length > 0)
+				return this.m_Childs[0];
+			else
+				return this.GetNextSiblingUp();
+		};
+
+		ClipperLib.PolyNode.prototype.GetNextSiblingUp = function ()
+		{
+			if (this.m_Parent === null)
+				return null;
+			else if (this.m_Index === this.m_Parent.m_Childs.length - 1)
+				return this.m_Parent.GetNextSiblingUp();
+			else
+				return this.m_Parent.m_Childs[this.m_Index + 1];
+		};
+
+		ClipperLib.PolyNode.prototype.Childs = function ()
+		{
+			return this.m_Childs;
+		};
+
+		ClipperLib.PolyNode.prototype.Parent = function ()
+		{
+			return this.m_Parent;
+		};
+
+		ClipperLib.PolyNode.prototype.IsHole = function ()
+		{
+			return this.IsHoleNode();
+		};
+
+		// PolyTree : PolyNode
+		/**
+		 * @suppress {missingProperties}
+		 * @constructor
+		 */
+		ClipperLib.PolyTree = function ()
+		{
+			this.m_AllPolys = [];
+			ClipperLib.PolyNode.call(this);
+		};
+
+		ClipperLib.PolyTree.prototype.Clear = function ()
+		{
+			for (var i = 0, ilen = this.m_AllPolys.length; i < ilen; i++)
+				this.m_AllPolys[i] = null;
+			this.m_AllPolys.length = 0;
+			this.m_Childs.length = 0;
+		};
+
+		ClipperLib.PolyTree.prototype.GetFirst = function ()
+		{
+			if (this.m_Childs.length > 0)
+				return this.m_Childs[0];
+			else
+				return null;
+		};
+
+		ClipperLib.PolyTree.prototype.Total = function ()
+		{
+			var result = this.m_AllPolys.length;
+			//with negative offsets, ignore the hidden outer polygon ...
+			if (result > 0 && this.m_Childs[0] !== this.m_AllPolys[0]) result--;
+			return result;
+		};
+
+		Inherit(ClipperLib.PolyTree, ClipperLib.PolyNode);
+
+		// PolyTree & PolyNode end
+
+		ClipperLib.Math_Abs_Int64 = ClipperLib.Math_Abs_Int32 = ClipperLib.Math_Abs_Double = function (a)
+		{
+			return Math.abs(a);
+		};
+
+		ClipperLib.Math_Max_Int32_Int32 = function (a, b)
+		{
+			return Math.max(a, b);
+		};
+
+		/*
+		-----------------------------------
+		cast_32 speedtest: http://jsperf.com/truncate-float-to-integer/2
+		-----------------------------------
+		*/
+		if (browser.msie || browser.opera || browser.safari) ClipperLib.Cast_Int32 = function (a)
+		{
+			return a | 0;
+		};
+
+		else ClipperLib.Cast_Int32 = function (a)
+		{ // eg. browser.chrome || browser.chromium || browser.firefox
+			return ~~a;
+		};
+
+		/*
+		--------------------------
+		cast_64 speedtests: http://jsperf.com/truncate-float-to-integer
+		Chrome: bitwise_not_floor
+		Firefox17: toInteger (typeof test)
+		IE9: bitwise_or_floor
+		IE7 and IE8: to_parseint
+		Chromium: to_floor_or_ceil
+		Firefox3: to_floor_or_ceil
+		Firefox15: to_floor_or_ceil
+		Opera: to_floor_or_ceil
+		Safari: to_floor_or_ceil
+		--------------------------
+		*/
+		if (typeof Number.toInteger === "undefined")
+			Number.toInteger = null;
+
+		if (browser.chrome) ClipperLib.Cast_Int64 = function (a)
+		{
+			if (a < -2147483648 || a > 2147483647)
+				return a < 0 ? Math.ceil(a) : Math.floor(a);
+			else return ~~a;
+		};
+
+		else if (browser.firefox && typeof (Number.toInteger) === "function") ClipperLib.Cast_Int64 = function (a)
+		{
+			return Number.toInteger(a);
+		};
+
+		else if (browser.msie7 || browser.msie8) ClipperLib.Cast_Int64 = function (a)
+		{
+			return parseInt(a, 10);
+		};
+
+		else if (browser.msie) ClipperLib.Cast_Int64 = function (a)
+		{
+			if (a < -2147483648 || a > 2147483647)
+				return a < 0 ? Math.ceil(a) : Math.floor(a);
+			return a | 0;
+		};
+
+		// eg. browser.chromium || browser.firefox || browser.opera || browser.safari
+		else ClipperLib.Cast_Int64 = function (a)
+		{
+			return a < 0 ? Math.ceil(a) : Math.floor(a);
+		};
+
+		ClipperLib.Clear = function (a)
+		{
+			a.length = 0;
+		};
+
+		//ClipperLib.MaxSteps = 64; // How many steps at maximum in arc in BuildArc() function
+		ClipperLib.PI = 3.141592653589793;
+		ClipperLib.PI2 = 2 * 3.141592653589793;
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntPoint = function ()
+		{
+			var a = arguments,
+				alen = a.length;
+			this.X = 0;
+			this.Y = 0;
+			if (ClipperLib.use_xyz)
+			{
+				this.Z = 0;
+				if (alen === 3) // public IntPoint(cInt x, cInt y, cInt z = 0)
+				{
+					this.X = a[0];
+					this.Y = a[1];
+					this.Z = a[2];
+				}
+				else if (alen === 2) // public IntPoint(cInt x, cInt y)
+				{
+					this.X = a[0];
+					this.Y = a[1];
+					this.Z = 0;
+				}
+				else if (alen === 1)
+				{
+					if (a[0] instanceof ClipperLib.DoublePoint) // public IntPoint(DoublePoint dp)
+					{
+						var dp = a[0];
+						this.X = ClipperLib.Clipper.Round(dp.X);
+						this.Y = ClipperLib.Clipper.Round(dp.Y);
+						this.Z = 0;
+					}
+					else // public IntPoint(IntPoint pt)
+					{
+						var pt = a[0];
+						if (typeof (pt.Z) === "undefined") pt.Z = 0;
+						this.X = pt.X;
+						this.Y = pt.Y;
+						this.Z = pt.Z;
+					}
+				}
+				else // public IntPoint()
+				{
+					this.X = 0;
+					this.Y = 0;
+					this.Z = 0;
+				}
+			}
+			else // if (!ClipperLib.use_xyz)
+			{
+				if (alen === 2) // public IntPoint(cInt X, cInt Y)
+				{
+					this.X = a[0];
+					this.Y = a[1];
+				}
+				else if (alen === 1)
+				{
+					if (a[0] instanceof ClipperLib.DoublePoint) // public IntPoint(DoublePoint dp)
+					{
+						var dp = a[0];
+						this.X = ClipperLib.Clipper.Round(dp.X);
+						this.Y = ClipperLib.Clipper.Round(dp.Y);
+					}
+					else // public IntPoint(IntPoint pt)
+					{
+						var pt = a[0];
+						this.X = pt.X;
+						this.Y = pt.Y;
+					}
+				}
+				else // public IntPoint(IntPoint pt)
+				{
+					this.X = 0;
+					this.Y = 0;
+				}
+			}
+		};
+
+		ClipperLib.IntPoint.op_Equality = function (a, b)
+		{
+			//return a == b;
+			return a.X === b.X && a.Y === b.Y;
+		};
+
+		ClipperLib.IntPoint.op_Inequality = function (a, b)
+		{
+			//return a !== b;
+			return a.X !== b.X || a.Y !== b.Y;
+		};
+
+		/*
+	  ClipperLib.IntPoint.prototype.Equals = function (obj)
+	  {
+		if (obj === null)
+			return false;
+		if (obj instanceof ClipperLib.IntPoint)
+		{
+			var a = Cast(obj, ClipperLib.IntPoint);
+			return (this.X == a.X) && (this.Y == a.Y);
+		}
+		else
+			return false;
 	  };
-	}
 
-	var hasUint8C = (typeof Uint8ClampedArray) !== 'undefined';
-	var POOL = commonjsGlobal.__TYPEDARRAY_POOL;
+		*/
 
-	//Upgrade pool
-	if(!POOL.UINT8C) {
-	  POOL.UINT8C = dup([32, 0]);
-	}
-	if(!POOL.BUFFER) {
-	  POOL.BUFFER = dup([32, 0]);
-	}
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntPoint0 = function ()
+		{
+			this.X = 0;
+			this.Y = 0;
+			if (ClipperLib.use_xyz)
+				this.Z = 0;
+		};
 
-	//New technique: Only allocate from ArrayBufferView and Buffer
-	var DATA    = POOL.DATA
-	  , BUFFER  = POOL.BUFFER;
+		ClipperLib.IntPoint0.prototype = ClipperLib.IntPoint.prototype;
 
-	exports.free = function free(array) {
-	  if(isBuffer(array)) {
-	    BUFFER[twiddle.log2(array.length)].push(array);
-	  } else {
-	    if(Object.prototype.toString.call(array) !== '[object ArrayBuffer]') {
-	      array = array.buffer;
-	    }
-	    if(!array) {
-	      return
-	    }
-	    var n = array.length || array.byteLength;
-	    var log_n = twiddle.log2(n)|0;
-	    DATA[log_n].push(array);
-	  }
-	};
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntPoint1 = function (pt)
+		{
+			this.X = pt.X;
+			this.Y = pt.Y;
+			if (ClipperLib.use_xyz)
+			{
+				if (typeof pt.Z === "undefined") this.Z = 0;
+				else this.Z = pt.Z;
+			}
+		};
 
-	function freeArrayBuffer(buffer) {
-	  if(!buffer) {
-	    return
-	  }
-	  var n = buffer.length || buffer.byteLength;
-	  var log_n = twiddle.log2(n);
-	  DATA[log_n].push(buffer);
-	}
+		ClipperLib.IntPoint1.prototype = ClipperLib.IntPoint.prototype;
 
-	function freeTypedArray(array) {
-	  freeArrayBuffer(array.buffer);
-	}
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntPoint1dp = function (dp)
+		{
+			this.X = ClipperLib.Clipper.Round(dp.X);
+			this.Y = ClipperLib.Clipper.Round(dp.Y);
+			if (ClipperLib.use_xyz)
+				this.Z = 0;
+		};
 
-	exports.freeUint8 =
-	exports.freeUint16 =
-	exports.freeUint32 =
-	exports.freeInt8 =
-	exports.freeInt16 =
-	exports.freeInt32 =
-	exports.freeFloat32 = 
-	exports.freeFloat =
-	exports.freeFloat64 = 
-	exports.freeDouble = 
-	exports.freeUint8Clamped = 
-	exports.freeDataView = freeTypedArray;
+		ClipperLib.IntPoint1dp.prototype = ClipperLib.IntPoint.prototype;
 
-	exports.freeArrayBuffer = freeArrayBuffer;
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntPoint2 = function (x, y, z)
+		{
+			this.X = x;
+			this.Y = y;
+			if (ClipperLib.use_xyz)
+			{
+				if (typeof z === "undefined") this.Z = 0;
+				else this.Z = z;
+			}
+		};
 
-	exports.freeBuffer = function freeBuffer(array) {
-	  BUFFER[twiddle.log2(array.length)].push(array);
-	};
+		ClipperLib.IntPoint2.prototype = ClipperLib.IntPoint.prototype;
 
-	exports.malloc = function malloc(n, dtype) {
-	  if(dtype === undefined || dtype === 'arraybuffer') {
-	    return mallocArrayBuffer(n)
-	  } else {
-	    switch(dtype) {
-	      case 'uint8':
-	        return mallocUint8(n)
-	      case 'uint16':
-	        return mallocUint16(n)
-	      case 'uint32':
-	        return mallocUint32(n)
-	      case 'int8':
-	        return mallocInt8(n)
-	      case 'int16':
-	        return mallocInt16(n)
-	      case 'int32':
-	        return mallocInt32(n)
-	      case 'float':
-	      case 'float32':
-	        return mallocFloat(n)
-	      case 'double':
-	      case 'float64':
-	        return mallocDouble(n)
-	      case 'uint8_clamped':
-	        return mallocUint8Clamped(n)
-	      case 'buffer':
-	        return mallocBuffer(n)
-	      case 'data':
-	      case 'dataview':
-	        return mallocDataView(n)
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntRect = function ()
+		{
+			var a = arguments,
+				alen = a.length;
+			if (alen === 4) // function (l, t, r, b)
+			{
+				this.left = a[0];
+				this.top = a[1];
+				this.right = a[2];
+				this.bottom = a[3];
+			}
+			else if (alen === 1) // function (ir)
+			{
+				var ir = a[0];
+				this.left = ir.left;
+				this.top = ir.top;
+				this.right = ir.right;
+				this.bottom = ir.bottom;
+			}
+			else // function ()
+			{
+				this.left = 0;
+				this.top = 0;
+				this.right = 0;
+				this.bottom = 0;
+			}
+		};
 
-	      default:
-	        return null
-	    }
-	  }
-	  return null
-	};
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntRect0 = function ()
+		{
+			this.left = 0;
+			this.top = 0;
+			this.right = 0;
+			this.bottom = 0;
+		};
 
-	function mallocArrayBuffer(n) {
-	  var n = twiddle.nextPow2(n);
-	  var log_n = twiddle.log2(n);
-	  var d = DATA[log_n];
-	  if(d.length > 0) {
-	    return d.pop()
-	  }
-	  return new ArrayBuffer(n)
-	}
-	exports.mallocArrayBuffer = mallocArrayBuffer;
+		ClipperLib.IntRect0.prototype = ClipperLib.IntRect.prototype;
 
-	function mallocUint8(n) {
-	  return new Uint8Array(mallocArrayBuffer(n), 0, n)
-	}
-	exports.mallocUint8 = mallocUint8;
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntRect1 = function (ir)
+		{
+			this.left = ir.left;
+			this.top = ir.top;
+			this.right = ir.right;
+			this.bottom = ir.bottom;
+		};
 
-	function mallocUint16(n) {
-	  return new Uint16Array(mallocArrayBuffer(2*n), 0, n)
-	}
-	exports.mallocUint16 = mallocUint16;
+		ClipperLib.IntRect1.prototype = ClipperLib.IntRect.prototype;
 
-	function mallocUint32(n) {
-	  return new Uint32Array(mallocArrayBuffer(4*n), 0, n)
-	}
-	exports.mallocUint32 = mallocUint32;
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntRect4 = function (l, t, r, b)
+		{
+			this.left = l;
+			this.top = t;
+			this.right = r;
+			this.bottom = b;
+		};
 
-	function mallocInt8(n) {
-	  return new Int8Array(mallocArrayBuffer(n), 0, n)
-	}
-	exports.mallocInt8 = mallocInt8;
+		ClipperLib.IntRect4.prototype = ClipperLib.IntRect.prototype;
 
-	function mallocInt16(n) {
-	  return new Int16Array(mallocArrayBuffer(2*n), 0, n)
-	}
-	exports.mallocInt16 = mallocInt16;
+		ClipperLib.ClipType = {
+			ctIntersection: 0,
+			ctUnion: 1,
+			ctDifference: 2,
+			ctXor: 3
+		};
 
-	function mallocInt32(n) {
-	  return new Int32Array(mallocArrayBuffer(4*n), 0, n)
-	}
-	exports.mallocInt32 = mallocInt32;
+		ClipperLib.PolyType = {
+			ptSubject: 0,
+			ptClip: 1
+		};
 
-	function mallocFloat(n) {
-	  return new Float32Array(mallocArrayBuffer(4*n), 0, n)
-	}
-	exports.mallocFloat32 = exports.mallocFloat = mallocFloat;
+		ClipperLib.PolyFillType = {
+			pftEvenOdd: 0,
+			pftNonZero: 1,
+			pftPositive: 2,
+			pftNegative: 3
+		};
 
-	function mallocDouble(n) {
-	  return new Float64Array(mallocArrayBuffer(8*n), 0, n)
-	}
-	exports.mallocFloat64 = exports.mallocDouble = mallocDouble;
+		ClipperLib.JoinType = {
+			jtSquare: 0,
+			jtRound: 1,
+			jtMiter: 2
+		};
 
-	function mallocUint8Clamped(n) {
-	  if(hasUint8C) {
-	    return new Uint8ClampedArray(mallocArrayBuffer(n), 0, n)
-	  } else {
-	    return mallocUint8(n)
-	  }
-	}
-	exports.mallocUint8Clamped = mallocUint8Clamped;
+		ClipperLib.EndType = {
+			etOpenSquare: 0,
+			etOpenRound: 1,
+			etOpenButt: 2,
+			etClosedLine: 3,
+			etClosedPolygon: 4
+		};
 
-	function mallocDataView(n) {
-	  return new DataView(mallocArrayBuffer(n), 0, n)
-	}
-	exports.mallocDataView = mallocDataView;
+		ClipperLib.EdgeSide = {
+			esLeft: 0,
+			esRight: 1
+		};
 
-	function mallocBuffer(n) {
-	  n = twiddle.nextPow2(n);
-	  var log_n = twiddle.log2(n);
-	  var cache = BUFFER[log_n];
-	  if(cache.length > 0) {
-	    return cache.pop()
-	  }
-	  return new Buffer(n)
-	}
-	exports.mallocBuffer = mallocBuffer;
+		ClipperLib.Direction = {
+			dRightToLeft: 0,
+			dLeftToRight: 1
+		};
 
-	exports.clearCache = function clearCache() {
-	  for(var i=0; i<32; ++i) {
-	    POOL.UINT8[i].length = 0;
-	    POOL.UINT16[i].length = 0;
-	    POOL.UINT32[i].length = 0;
-	    POOL.INT8[i].length = 0;
-	    POOL.INT16[i].length = 0;
-	    POOL.INT32[i].length = 0;
-	    POOL.FLOAT[i].length = 0;
-	    POOL.DOUBLE[i].length = 0;
-	    POOL.UINT8C[i].length = 0;
-	    DATA[i].length = 0;
-	    BUFFER[i].length = 0;
-	  }
-	};
+		/**
+		* @constructor
+		*/
+		ClipperLib.TEdge = function ()
+		{
+			this.Bot = new ClipperLib.IntPoint0();
+			this.Curr = new ClipperLib.IntPoint0(); //current (updated for every new scanbeam)
+			this.Top = new ClipperLib.IntPoint0();
+			this.Delta = new ClipperLib.IntPoint0();
+			this.Dx = 0;
+			this.PolyTyp = ClipperLib.PolyType.ptSubject;
+			this.Side = ClipperLib.EdgeSide.esLeft; //side only refers to current side of solution poly
+			this.WindDelta = 0; //1 or -1 depending on winding direction
+			this.WindCnt = 0;
+			this.WindCnt2 = 0; //winding count of the opposite polytype
+			this.OutIdx = 0;
+			this.Next = null;
+			this.Prev = null;
+			this.NextInLML = null;
+			this.NextInAEL = null;
+			this.PrevInAEL = null;
+			this.NextInSEL = null;
+			this.PrevInSEL = null;
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.IntersectNode = function ()
+		{
+			this.Edge1 = null;
+			this.Edge2 = null;
+			this.Pt = new ClipperLib.IntPoint0();
+		};
+
+		ClipperLib.MyIntersectNodeSort = function () {};
+
+		ClipperLib.MyIntersectNodeSort.Compare = function (node1, node2)
+		{
+			var i = node2.Pt.Y - node1.Pt.Y;
+			if (i > 0) return 1;
+			else if (i < 0) return -1;
+			else return 0;
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.LocalMinima = function ()
+		{
+			this.Y = 0;
+			this.LeftBound = null;
+			this.RightBound = null;
+			this.Next = null;
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.Scanbeam = function ()
+		{
+			this.Y = 0;
+			this.Next = null;
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.Maxima = function ()
+		{
+			this.X = 0;
+			this.Next = null;
+			this.Prev = null;
+		};
+
+		//OutRec: contains a path in the clipping solution. Edges in the AEL will
+		//carry a pointer to an OutRec when they are part of the clipping solution.
+		/**
+		* @constructor
+		*/
+		ClipperLib.OutRec = function ()
+		{
+			this.Idx = 0;
+			this.IsHole = false;
+			this.IsOpen = false;
+			this.FirstLeft = null; //see comments in clipper.pas
+			this.Pts = null;
+			this.BottomPt = null;
+			this.PolyNode = null;
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.OutPt = function ()
+		{
+			this.Idx = 0;
+			this.Pt = new ClipperLib.IntPoint0();
+			this.Next = null;
+			this.Prev = null;
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.Join = function ()
+		{
+			this.OutPt1 = null;
+			this.OutPt2 = null;
+			this.OffPt = new ClipperLib.IntPoint0();
+		};
+
+		ClipperLib.ClipperBase = function ()
+		{
+			this.m_MinimaList = null;
+			this.m_CurrentLM = null;
+			this.m_edges = new Array();
+			this.m_UseFullRange = false;
+			this.m_HasOpenPaths = false;
+			this.PreserveCollinear = false;
+			this.m_Scanbeam = null;
+			this.m_PolyOuts = null;
+			this.m_ActiveEdges = null;
+		};
+
+		// Ranges are in original C# too high for Javascript (in current state 2013 september):
+		// protected const double horizontal = -3.4E+38;
+		// internal const cInt loRange = 0x3FFFFFFF; // = 1073741823 = sqrt(2^63 -1)/2
+		// internal const cInt hiRange = 0x3FFFFFFFFFFFFFFFL; // = 4611686018427387903 = sqrt(2^127 -1)/2
+		// So had to adjust them to more suitable for Javascript.
+		// If JS some day supports truly 64-bit integers, then these ranges can be as in C#
+		// and biginteger library can be more simpler (as then 128bit can be represented as two 64bit numbers)
+		ClipperLib.ClipperBase.horizontal = -9007199254740992; //-2^53
+		ClipperLib.ClipperBase.Skip = -2;
+		ClipperLib.ClipperBase.Unassigned = -1;
+		ClipperLib.ClipperBase.tolerance = 1E-20;
+		ClipperLib.ClipperBase.loRange = 47453132; // sqrt(2^53 -1)/2
+		ClipperLib.ClipperBase.hiRange = 4503599627370495; // sqrt(2^106 -1)/2
+
+		ClipperLib.ClipperBase.near_zero = function (val)
+		{
+			return (val > -ClipperLib.ClipperBase.tolerance) && (val < ClipperLib.ClipperBase.tolerance);
+		};
+
+		ClipperLib.ClipperBase.IsHorizontal = function (e)
+		{
+			return e.Delta.Y === 0;
+		};
+
+		ClipperLib.ClipperBase.prototype.PointIsVertex = function (pt, pp)
+		{
+			var pp2 = pp;
+			do {
+				if (ClipperLib.IntPoint.op_Equality(pp2.Pt, pt))
+					return true;
+				pp2 = pp2.Next;
+			}
+			while (pp2 !== pp)
+			return false;
+		};
+
+		ClipperLib.ClipperBase.prototype.PointOnLineSegment = function (pt, linePt1, linePt2, UseFullRange)
+		{
+			if (UseFullRange)
+				return ((pt.X === linePt1.X) && (pt.Y === linePt1.Y)) ||
+					((pt.X === linePt2.X) && (pt.Y === linePt2.Y)) ||
+					(((pt.X > linePt1.X) === (pt.X < linePt2.X)) &&
+						((pt.Y > linePt1.Y) === (pt.Y < linePt2.Y)) &&
+						(Int128.op_Equality(Int128.Int128Mul((pt.X - linePt1.X), (linePt2.Y - linePt1.Y)),
+							Int128.Int128Mul((linePt2.X - linePt1.X), (pt.Y - linePt1.Y)))));
+			else
+				return ((pt.X === linePt1.X) && (pt.Y === linePt1.Y)) || ((pt.X === linePt2.X) && (pt.Y === linePt2.Y)) || (((pt.X > linePt1.X) === (pt.X < linePt2.X)) && ((pt.Y > linePt1.Y) === (pt.Y < linePt2.Y)) && ((pt.X - linePt1.X) * (linePt2.Y - linePt1.Y) === (linePt2.X - linePt1.X) * (pt.Y - linePt1.Y)));
+		};
+
+		ClipperLib.ClipperBase.prototype.PointOnPolygon = function (pt, pp, UseFullRange)
+		{
+			var pp2 = pp;
+			while (true)
+			{
+				if (this.PointOnLineSegment(pt, pp2.Pt, pp2.Next.Pt, UseFullRange))
+					return true;
+				pp2 = pp2.Next;
+				if (pp2 === pp)
+					break;
+			}
+			return false;
+		};
+
+		ClipperLib.ClipperBase.prototype.SlopesEqual = ClipperLib.ClipperBase.SlopesEqual = function ()
+		{
+			var a = arguments,
+				alen = a.length;
+			var e1, e2, pt1, pt2, pt3, pt4, UseFullRange;
+			if (alen === 3) // function (e1, e2, UseFullRange)
+			{
+				e1 = a[0];
+				e2 = a[1];
+				UseFullRange = a[2];
+				if (UseFullRange)
+					return Int128.op_Equality(Int128.Int128Mul(e1.Delta.Y, e2.Delta.X), Int128.Int128Mul(e1.Delta.X, e2.Delta.Y));
+				else
+					return ClipperLib.Cast_Int64((e1.Delta.Y) * (e2.Delta.X)) === ClipperLib.Cast_Int64((e1.Delta.X) * (e2.Delta.Y));
+			}
+			else if (alen === 4) // function (pt1, pt2, pt3, UseFullRange)
+			{
+				pt1 = a[0];
+				pt2 = a[1];
+				pt3 = a[2];
+				UseFullRange = a[3];
+				if (UseFullRange)
+					return Int128.op_Equality(Int128.Int128Mul(pt1.Y - pt2.Y, pt2.X - pt3.X), Int128.Int128Mul(pt1.X - pt2.X, pt2.Y - pt3.Y));
+				else
+					return ClipperLib.Cast_Int64((pt1.Y - pt2.Y) * (pt2.X - pt3.X)) - ClipperLib.Cast_Int64((pt1.X - pt2.X) * (pt2.Y - pt3.Y)) === 0;
+			}
+			else // function (pt1, pt2, pt3, pt4, UseFullRange)
+			{
+				pt1 = a[0];
+				pt2 = a[1];
+				pt3 = a[2];
+				pt4 = a[3];
+				UseFullRange = a[4];
+				if (UseFullRange)
+					return Int128.op_Equality(Int128.Int128Mul(pt1.Y - pt2.Y, pt3.X - pt4.X), Int128.Int128Mul(pt1.X - pt2.X, pt3.Y - pt4.Y));
+				else
+					return ClipperLib.Cast_Int64((pt1.Y - pt2.Y) * (pt3.X - pt4.X)) - ClipperLib.Cast_Int64((pt1.X - pt2.X) * (pt3.Y - pt4.Y)) === 0;
+			}
+		};
+
+		ClipperLib.ClipperBase.SlopesEqual3 = function (e1, e2, UseFullRange)
+		{
+			if (UseFullRange)
+				return Int128.op_Equality(Int128.Int128Mul(e1.Delta.Y, e2.Delta.X), Int128.Int128Mul(e1.Delta.X, e2.Delta.Y));
+			else
+				return ClipperLib.Cast_Int64((e1.Delta.Y) * (e2.Delta.X)) === ClipperLib.Cast_Int64((e1.Delta.X) * (e2.Delta.Y));
+		};
+
+		ClipperLib.ClipperBase.SlopesEqual4 = function (pt1, pt2, pt3, UseFullRange)
+		{
+			if (UseFullRange)
+				return Int128.op_Equality(Int128.Int128Mul(pt1.Y - pt2.Y, pt2.X - pt3.X), Int128.Int128Mul(pt1.X - pt2.X, pt2.Y - pt3.Y));
+			else
+				return ClipperLib.Cast_Int64((pt1.Y - pt2.Y) * (pt2.X - pt3.X)) - ClipperLib.Cast_Int64((pt1.X - pt2.X) * (pt2.Y - pt3.Y)) === 0;
+		};
+
+		ClipperLib.ClipperBase.SlopesEqual5 = function (pt1, pt2, pt3, pt4, UseFullRange)
+		{
+			if (UseFullRange)
+				return Int128.op_Equality(Int128.Int128Mul(pt1.Y - pt2.Y, pt3.X - pt4.X), Int128.Int128Mul(pt1.X - pt2.X, pt3.Y - pt4.Y));
+			else
+				return ClipperLib.Cast_Int64((pt1.Y - pt2.Y) * (pt3.X - pt4.X)) - ClipperLib.Cast_Int64((pt1.X - pt2.X) * (pt3.Y - pt4.Y)) === 0;
+		};
+
+		ClipperLib.ClipperBase.prototype.Clear = function ()
+		{
+			this.DisposeLocalMinimaList();
+			for (var i = 0, ilen = this.m_edges.length; i < ilen; ++i)
+			{
+				for (var j = 0, jlen = this.m_edges[i].length; j < jlen; ++j)
+					this.m_edges[i][j] = null;
+				ClipperLib.Clear(this.m_edges[i]);
+			}
+			ClipperLib.Clear(this.m_edges);
+			this.m_UseFullRange = false;
+			this.m_HasOpenPaths = false;
+		};
+
+		ClipperLib.ClipperBase.prototype.DisposeLocalMinimaList = function ()
+		{
+			while (this.m_MinimaList !== null)
+			{
+				var tmpLm = this.m_MinimaList.Next;
+				this.m_MinimaList = null;
+				this.m_MinimaList = tmpLm;
+			}
+			this.m_CurrentLM = null;
+		};
+
+		ClipperLib.ClipperBase.prototype.RangeTest = function (Pt, useFullRange)
+		{
+			if (useFullRange.Value)
+			{
+				if (Pt.X > ClipperLib.ClipperBase.hiRange || Pt.Y > ClipperLib.ClipperBase.hiRange || -Pt.X > ClipperLib.ClipperBase.hiRange || -Pt.Y > ClipperLib.ClipperBase.hiRange)
+					ClipperLib.Error("Coordinate outside allowed range in RangeTest().");
+			}
+			else if (Pt.X > ClipperLib.ClipperBase.loRange || Pt.Y > ClipperLib.ClipperBase.loRange || -Pt.X > ClipperLib.ClipperBase.loRange || -Pt.Y > ClipperLib.ClipperBase.loRange)
+			{
+				useFullRange.Value = true;
+				this.RangeTest(Pt, useFullRange);
+			}
+		};
+
+		ClipperLib.ClipperBase.prototype.InitEdge = function (e, eNext, ePrev, pt)
+		{
+			e.Next = eNext;
+			e.Prev = ePrev;
+			//e.Curr = pt;
+			e.Curr.X = pt.X;
+			e.Curr.Y = pt.Y;
+			if (ClipperLib.use_xyz) e.Curr.Z = pt.Z;
+			e.OutIdx = -1;
+		};
+
+		ClipperLib.ClipperBase.prototype.InitEdge2 = function (e, polyType)
+		{
+			if (e.Curr.Y >= e.Next.Curr.Y)
+			{
+				//e.Bot = e.Curr;
+				e.Bot.X = e.Curr.X;
+				e.Bot.Y = e.Curr.Y;
+				if (ClipperLib.use_xyz) e.Bot.Z = e.Curr.Z;
+				//e.Top = e.Next.Curr;
+				e.Top.X = e.Next.Curr.X;
+				e.Top.Y = e.Next.Curr.Y;
+				if (ClipperLib.use_xyz) e.Top.Z = e.Next.Curr.Z;
+			}
+			else
+			{
+				//e.Top = e.Curr;
+				e.Top.X = e.Curr.X;
+				e.Top.Y = e.Curr.Y;
+				if (ClipperLib.use_xyz) e.Top.Z = e.Curr.Z;
+				//e.Bot = e.Next.Curr;
+				e.Bot.X = e.Next.Curr.X;
+				e.Bot.Y = e.Next.Curr.Y;
+				if (ClipperLib.use_xyz) e.Bot.Z = e.Next.Curr.Z;
+			}
+			this.SetDx(e);
+			e.PolyTyp = polyType;
+		};
+
+		ClipperLib.ClipperBase.prototype.FindNextLocMin = function (E)
+		{
+			var E2;
+			for (;;)
+			{
+				while (ClipperLib.IntPoint.op_Inequality(E.Bot, E.Prev.Bot) || ClipperLib.IntPoint.op_Equality(E.Curr, E.Top))
+					E = E.Next;
+				if (E.Dx !== ClipperLib.ClipperBase.horizontal && E.Prev.Dx !== ClipperLib.ClipperBase.horizontal)
+					break;
+				while (E.Prev.Dx === ClipperLib.ClipperBase.horizontal)
+					E = E.Prev;
+				E2 = E;
+				while (E.Dx === ClipperLib.ClipperBase.horizontal)
+					E = E.Next;
+				if (E.Top.Y === E.Prev.Bot.Y)
+					continue;
+				//ie just an intermediate horz.
+				if (E2.Prev.Bot.X < E.Bot.X)
+					E = E2;
+				break;
+			}
+			return E;
+		};
+
+		ClipperLib.ClipperBase.prototype.ProcessBound = function (E, LeftBoundIsForward)
+		{
+			var EStart;
+			var Result = E;
+			var Horz;
+
+			if (Result.OutIdx === ClipperLib.ClipperBase.Skip)
+			{
+				//check if there are edges beyond the skip edge in the bound and if so
+				//create another LocMin and calling ProcessBound once more ...
+				E = Result;
+				if (LeftBoundIsForward)
+				{
+					while (E.Top.Y === E.Next.Bot.Y) E = E.Next;
+					while (E !== Result && E.Dx === ClipperLib.ClipperBase.horizontal) E = E.Prev;
+				}
+				else
+				{
+					while (E.Top.Y === E.Prev.Bot.Y) E = E.Prev;
+					while (E !== Result && E.Dx === ClipperLib.ClipperBase.horizontal) E = E.Next;
+				}
+				if (E === Result)
+				{
+					if (LeftBoundIsForward) Result = E.Next;
+					else Result = E.Prev;
+				}
+				else
+				{
+					//there are more edges in the bound beyond result starting with E
+					if (LeftBoundIsForward)
+						E = Result.Next;
+					else
+						E = Result.Prev;
+					var locMin = new ClipperLib.LocalMinima();
+					locMin.Next = null;
+					locMin.Y = E.Bot.Y;
+					locMin.LeftBound = null;
+					locMin.RightBound = E;
+					E.WindDelta = 0;
+					Result = this.ProcessBound(E, LeftBoundIsForward);
+					this.InsertLocalMinima(locMin);
+				}
+				return Result;
+			}
+
+			if (E.Dx === ClipperLib.ClipperBase.horizontal)
+			{
+				//We need to be careful with open paths because this may not be a
+				//true local minima (ie E may be following a skip edge).
+				//Also, consecutive horz. edges may start heading left before going right.
+				if (LeftBoundIsForward) EStart = E.Prev;
+				else EStart = E.Next;
+
+				if (EStart.Dx === ClipperLib.ClipperBase.horizontal) //ie an adjoining horizontal skip edge
+				{
+					if (EStart.Bot.X !== E.Bot.X && EStart.Top.X !== E.Bot.X)
+						this.ReverseHorizontal(E);
+				}
+				else if (EStart.Bot.X !== E.Bot.X)
+					this.ReverseHorizontal(E);
+			}
+
+			EStart = E;
+			if (LeftBoundIsForward)
+			{
+				while (Result.Top.Y === Result.Next.Bot.Y && Result.Next.OutIdx !== ClipperLib.ClipperBase.Skip)
+					Result = Result.Next;
+				if (Result.Dx === ClipperLib.ClipperBase.horizontal && Result.Next.OutIdx !== ClipperLib.ClipperBase.Skip)
+				{
+					//nb: at the top of a bound, horizontals are added to the bound
+					//only when the preceding edge attaches to the horizontal's left vertex
+					//unless a Skip edge is encountered when that becomes the top divide
+					Horz = Result;
+					while (Horz.Prev.Dx === ClipperLib.ClipperBase.horizontal)
+						Horz = Horz.Prev;
+					if (Horz.Prev.Top.X > Result.Next.Top.X)
+						Result = Horz.Prev;
+				}
+				while (E !== Result)
+				{
+					E.NextInLML = E.Next;
+					if (E.Dx === ClipperLib.ClipperBase.horizontal && E !== EStart && E.Bot.X !== E.Prev.Top.X)
+						this.ReverseHorizontal(E);
+					E = E.Next;
+				}
+				if (E.Dx === ClipperLib.ClipperBase.horizontal && E !== EStart && E.Bot.X !== E.Prev.Top.X)
+					this.ReverseHorizontal(E);
+				Result = Result.Next;
+				//move to the edge just beyond current bound
+			}
+			else
+			{
+				while (Result.Top.Y === Result.Prev.Bot.Y && Result.Prev.OutIdx !== ClipperLib.ClipperBase.Skip)
+					Result = Result.Prev;
+				if (Result.Dx === ClipperLib.ClipperBase.horizontal && Result.Prev.OutIdx !== ClipperLib.ClipperBase.Skip)
+				{
+					Horz = Result;
+					while (Horz.Next.Dx === ClipperLib.ClipperBase.horizontal)
+						Horz = Horz.Next;
+					if (Horz.Next.Top.X === Result.Prev.Top.X || Horz.Next.Top.X > Result.Prev.Top.X)
+					{
+						Result = Horz.Next;
+					}
+				}
+				while (E !== Result)
+				{
+					E.NextInLML = E.Prev;
+					if (E.Dx === ClipperLib.ClipperBase.horizontal && E !== EStart && E.Bot.X !== E.Next.Top.X)
+						this.ReverseHorizontal(E);
+					E = E.Prev;
+				}
+				if (E.Dx === ClipperLib.ClipperBase.horizontal && E !== EStart && E.Bot.X !== E.Next.Top.X)
+					this.ReverseHorizontal(E);
+				Result = Result.Prev;
+				//move to the edge just beyond current bound
+			}
+
+			return Result;
+		};
+
+		ClipperLib.ClipperBase.prototype.AddPath = function (pg, polyType, Closed)
+		{
+			if (ClipperLib.use_lines)
+			{
+				if (!Closed && polyType === ClipperLib.PolyType.ptClip)
+					ClipperLib.Error("AddPath: Open paths must be subject.");
+			}
+			else
+			{
+				if (!Closed)
+					ClipperLib.Error("AddPath: Open paths have been disabled.");
+			}
+			var highI = pg.length - 1;
+			if (Closed)
+				while (highI > 0 && (ClipperLib.IntPoint.op_Equality(pg[highI], pg[0])))
+					--highI;
+			while (highI > 0 && (ClipperLib.IntPoint.op_Equality(pg[highI], pg[highI - 1])))
+				--highI;
+			if ((Closed && highI < 2) || (!Closed && highI < 1))
+				return false;
+			//create a new edge array ...
+			var edges = new Array();
+			for (var i = 0; i <= highI; i++)
+				edges.push(new ClipperLib.TEdge());
+			var IsFlat = true;
+			//1. Basic (first) edge initialization ...
+
+			//edges[1].Curr = pg[1];
+			edges[1].Curr.X = pg[1].X;
+			edges[1].Curr.Y = pg[1].Y;
+			if (ClipperLib.use_xyz) edges[1].Curr.Z = pg[1].Z;
+
+			var $1 = {
+				Value: this.m_UseFullRange
+			};
+
+			this.RangeTest(pg[0], $1);
+			this.m_UseFullRange = $1.Value;
+
+			$1.Value = this.m_UseFullRange;
+			this.RangeTest(pg[highI], $1);
+			this.m_UseFullRange = $1.Value;
+
+			this.InitEdge(edges[0], edges[1], edges[highI], pg[0]);
+			this.InitEdge(edges[highI], edges[0], edges[highI - 1], pg[highI]);
+			for (var i = highI - 1; i >= 1; --i)
+			{
+				$1.Value = this.m_UseFullRange;
+				this.RangeTest(pg[i], $1);
+				this.m_UseFullRange = $1.Value;
+
+				this.InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i]);
+			}
+
+			var eStart = edges[0];
+			//2. Remove duplicate vertices, and (when closed) collinear edges ...
+			var E = eStart,
+				eLoopStop = eStart;
+			for (;;)
+			{
+				//console.log(E.Next, eStart);
+				//nb: allows matching start and end points when not Closed ...
+				if (E.Curr === E.Next.Curr && (Closed || E.Next !== eStart))
+				{
+					if (E === E.Next)
+						break;
+					if (E === eStart)
+						eStart = E.Next;
+					E = this.RemoveEdge(E);
+					eLoopStop = E;
+					continue;
+				}
+				if (E.Prev === E.Next)
+					break;
+				else if (Closed && ClipperLib.ClipperBase.SlopesEqual4(E.Prev.Curr, E.Curr, E.Next.Curr, this.m_UseFullRange) && (!this.PreserveCollinear || !this.Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr)))
+				{
+					//Collinear edges are allowed for open paths but in closed paths
+					//the default is to merge adjacent collinear edges into a single edge.
+					//However, if the PreserveCollinear property is enabled, only overlapping
+					//collinear edges (ie spikes) will be removed from closed paths.
+					if (E === eStart)
+						eStart = E.Next;
+					E = this.RemoveEdge(E);
+					E = E.Prev;
+					eLoopStop = E;
+					continue;
+				}
+				E = E.Next;
+				if ((E === eLoopStop) || (!Closed && E.Next === eStart)) break;
+			}
+			if ((!Closed && (E === E.Next)) || (Closed && (E.Prev === E.Next)))
+				return false;
+			if (!Closed)
+			{
+				this.m_HasOpenPaths = true;
+				eStart.Prev.OutIdx = ClipperLib.ClipperBase.Skip;
+			}
+			//3. Do second stage of edge initialization ...
+			E = eStart;
+			do {
+				this.InitEdge2(E, polyType);
+				E = E.Next;
+				if (IsFlat && E.Curr.Y !== eStart.Curr.Y)
+					IsFlat = false;
+			}
+			while (E !== eStart)
+			//4. Finally, add edge bounds to LocalMinima list ...
+			//Totally flat paths must be handled differently when adding them
+			//to LocalMinima list to avoid endless loops etc ...
+			if (IsFlat)
+			{
+				if (Closed)
+					return false;
+
+				E.Prev.OutIdx = ClipperLib.ClipperBase.Skip;
+
+				var locMin = new ClipperLib.LocalMinima();
+				locMin.Next = null;
+				locMin.Y = E.Bot.Y;
+				locMin.LeftBound = null;
+				locMin.RightBound = E;
+				locMin.RightBound.Side = ClipperLib.EdgeSide.esRight;
+				locMin.RightBound.WindDelta = 0;
+
+				for (;;)
+				{
+					if (E.Bot.X !== E.Prev.Top.X) this.ReverseHorizontal(E);
+					if (E.Next.OutIdx === ClipperLib.ClipperBase.Skip) break;
+					E.NextInLML = E.Next;
+					E = E.Next;
+				}
+				this.InsertLocalMinima(locMin);
+				this.m_edges.push(edges);
+				return true;
+			}
+			this.m_edges.push(edges);
+			var leftBoundIsForward;
+			var EMin = null;
+
+			//workaround to avoid an endless loop in the while loop below when
+			//open paths have matching start and end points ...
+			if (ClipperLib.IntPoint.op_Equality(E.Prev.Bot, E.Prev.Top))
+				E = E.Next;
+
+			for (;;)
+			{
+				E = this.FindNextLocMin(E);
+				if (E === EMin)
+					break;
+				else if (EMin === null)
+					EMin = E;
+				//E and E.Prev now share a local minima (left aligned if horizontal).
+				//Compare their slopes to find which starts which bound ...
+				var locMin = new ClipperLib.LocalMinima();
+				locMin.Next = null;
+				locMin.Y = E.Bot.Y;
+				if (E.Dx < E.Prev.Dx)
+				{
+					locMin.LeftBound = E.Prev;
+					locMin.RightBound = E;
+					leftBoundIsForward = false;
+					//Q.nextInLML = Q.prev
+				}
+				else
+				{
+					locMin.LeftBound = E;
+					locMin.RightBound = E.Prev;
+					leftBoundIsForward = true;
+					//Q.nextInLML = Q.next
+				}
+				locMin.LeftBound.Side = ClipperLib.EdgeSide.esLeft;
+				locMin.RightBound.Side = ClipperLib.EdgeSide.esRight;
+				if (!Closed)
+					locMin.LeftBound.WindDelta = 0;
+				else if (locMin.LeftBound.Next === locMin.RightBound)
+					locMin.LeftBound.WindDelta = -1;
+				else
+					locMin.LeftBound.WindDelta = 1;
+				locMin.RightBound.WindDelta = -locMin.LeftBound.WindDelta;
+				E = this.ProcessBound(locMin.LeftBound, leftBoundIsForward);
+				if (E.OutIdx === ClipperLib.ClipperBase.Skip)
+					E = this.ProcessBound(E, leftBoundIsForward);
+				var E2 = this.ProcessBound(locMin.RightBound, !leftBoundIsForward);
+				if (E2.OutIdx === ClipperLib.ClipperBase.Skip) E2 = this.ProcessBound(E2, !leftBoundIsForward);
+				if (locMin.LeftBound.OutIdx === ClipperLib.ClipperBase.Skip)
+					locMin.LeftBound = null;
+				else if (locMin.RightBound.OutIdx === ClipperLib.ClipperBase.Skip)
+					locMin.RightBound = null;
+				this.InsertLocalMinima(locMin);
+				if (!leftBoundIsForward)
+					E = E2;
+			}
+			return true;
+		};
+
+		ClipperLib.ClipperBase.prototype.AddPaths = function (ppg, polyType, closed)
+		{
+			//  console.log("-------------------------------------------");
+			//  console.log(JSON.stringify(ppg));
+			var result = false;
+			for (var i = 0, ilen = ppg.length; i < ilen; ++i)
+				if (this.AddPath(ppg[i], polyType, closed))
+					result = true;
+			return result;
+		};
+
+		ClipperLib.ClipperBase.prototype.Pt2IsBetweenPt1AndPt3 = function (pt1, pt2, pt3)
+		{
+			if ((ClipperLib.IntPoint.op_Equality(pt1, pt3)) || (ClipperLib.IntPoint.op_Equality(pt1, pt2)) || (ClipperLib.IntPoint.op_Equality(pt3, pt2)))
+
+				//if ((pt1 == pt3) || (pt1 == pt2) || (pt3 == pt2))
+				return false;
+
+			else if (pt1.X !== pt3.X)
+				return (pt2.X > pt1.X) === (pt2.X < pt3.X);
+			else
+				return (pt2.Y > pt1.Y) === (pt2.Y < pt3.Y);
+		};
+
+		ClipperLib.ClipperBase.prototype.RemoveEdge = function (e)
+		{
+			//removes e from double_linked_list (but without removing from memory)
+			e.Prev.Next = e.Next;
+			e.Next.Prev = e.Prev;
+			var result = e.Next;
+			e.Prev = null; //flag as removed (see ClipperBase.Clear)
+			return result;
+		};
+
+		ClipperLib.ClipperBase.prototype.SetDx = function (e)
+		{
+			e.Delta.X = (e.Top.X - e.Bot.X);
+			e.Delta.Y = (e.Top.Y - e.Bot.Y);
+			if (e.Delta.Y === 0) e.Dx = ClipperLib.ClipperBase.horizontal;
+			else e.Dx = (e.Delta.X) / (e.Delta.Y);
+		};
+
+		ClipperLib.ClipperBase.prototype.InsertLocalMinima = function (newLm)
+		{
+			if (this.m_MinimaList === null)
+			{
+				this.m_MinimaList = newLm;
+			}
+			else if (newLm.Y >= this.m_MinimaList.Y)
+			{
+				newLm.Next = this.m_MinimaList;
+				this.m_MinimaList = newLm;
+			}
+			else
+			{
+				var tmpLm = this.m_MinimaList;
+				while (tmpLm.Next !== null && (newLm.Y < tmpLm.Next.Y))
+					tmpLm = tmpLm.Next;
+				newLm.Next = tmpLm.Next;
+				tmpLm.Next = newLm;
+			}
+		};
+
+		ClipperLib.ClipperBase.prototype.PopLocalMinima = function (Y, current)
+		{
+			current.v = this.m_CurrentLM;
+			if (this.m_CurrentLM !== null && this.m_CurrentLM.Y === Y)
+			{
+				this.m_CurrentLM = this.m_CurrentLM.Next;
+				return true;
+			}
+			return false;
+		};
+
+		ClipperLib.ClipperBase.prototype.ReverseHorizontal = function (e)
+		{
+			//swap horizontal edges' top and bottom x's so they follow the natural
+			//progression of the bounds - ie so their xbots will align with the
+			//adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
+			var tmp = e.Top.X;
+			e.Top.X = e.Bot.X;
+			e.Bot.X = tmp;
+			if (ClipperLib.use_xyz)
+			{
+				tmp = e.Top.Z;
+				e.Top.Z = e.Bot.Z;
+				e.Bot.Z = tmp;
+			}
+		};
+
+		ClipperLib.ClipperBase.prototype.Reset = function ()
+		{
+			this.m_CurrentLM = this.m_MinimaList;
+			if (this.m_CurrentLM === null) //ie nothing to process
+				return;
+			//reset all edges ...
+			this.m_Scanbeam = null;
+			var lm = this.m_MinimaList;
+			while (lm !== null)
+			{
+				this.InsertScanbeam(lm.Y);
+				var e = lm.LeftBound;
+				if (e !== null)
+				{
+					//e.Curr = e.Bot;
+					e.Curr.X = e.Bot.X;
+					e.Curr.Y = e.Bot.Y;
+					if (ClipperLib.use_xyz) e.Curr.Z = e.Bot.Z;
+					e.OutIdx = ClipperLib.ClipperBase.Unassigned;
+				}
+				e = lm.RightBound;
+				if (e !== null)
+				{
+					//e.Curr = e.Bot;
+					e.Curr.X = e.Bot.X;
+					e.Curr.Y = e.Bot.Y;
+					if (ClipperLib.use_xyz) e.Curr.Z = e.Bot.Z;
+					e.OutIdx = ClipperLib.ClipperBase.Unassigned;
+				}
+				lm = lm.Next;
+			}
+			this.m_ActiveEdges = null;
+		};
+
+		ClipperLib.ClipperBase.prototype.InsertScanbeam = function (Y)
+		{
+			//single-linked list: sorted descending, ignoring dups.
+			if (this.m_Scanbeam === null)
+			{
+				this.m_Scanbeam = new ClipperLib.Scanbeam();
+				this.m_Scanbeam.Next = null;
+				this.m_Scanbeam.Y = Y;
+			}
+			else if (Y > this.m_Scanbeam.Y)
+			{
+				var newSb = new ClipperLib.Scanbeam();
+				newSb.Y = Y;
+				newSb.Next = this.m_Scanbeam;
+				this.m_Scanbeam = newSb;
+			}
+			else
+			{
+				var sb2 = this.m_Scanbeam;
+				while (sb2.Next !== null && Y <= sb2.Next.Y)
+				{
+					sb2 = sb2.Next;
+				}
+				if (Y === sb2.Y)
+				{
+					return;
+				} //ie ignores duplicates
+				var newSb1 = new ClipperLib.Scanbeam();
+				newSb1.Y = Y;
+				newSb1.Next = sb2.Next;
+				sb2.Next = newSb1;
+			}
+		};
+
+		ClipperLib.ClipperBase.prototype.PopScanbeam = function (Y)
+		{
+			if (this.m_Scanbeam === null)
+			{
+				Y.v = 0;
+				return false;
+			}
+			Y.v = this.m_Scanbeam.Y;
+			this.m_Scanbeam = this.m_Scanbeam.Next;
+			return true;
+		};
+
+		ClipperLib.ClipperBase.prototype.LocalMinimaPending = function ()
+		{
+			return (this.m_CurrentLM !== null);
+		};
+
+		ClipperLib.ClipperBase.prototype.CreateOutRec = function ()
+		{
+			var result = new ClipperLib.OutRec();
+			result.Idx = ClipperLib.ClipperBase.Unassigned;
+			result.IsHole = false;
+			result.IsOpen = false;
+			result.FirstLeft = null;
+			result.Pts = null;
+			result.BottomPt = null;
+			result.PolyNode = null;
+			this.m_PolyOuts.push(result);
+			result.Idx = this.m_PolyOuts.length - 1;
+			return result;
+		};
+
+		ClipperLib.ClipperBase.prototype.DisposeOutRec = function (index)
+		{
+			var outRec = this.m_PolyOuts[index];
+			outRec.Pts = null;
+			outRec = null;
+			this.m_PolyOuts[index] = null;
+		};
+
+		ClipperLib.ClipperBase.prototype.UpdateEdgeIntoAEL = function (e)
+		{
+			if (e.NextInLML === null)
+			{
+				ClipperLib.Error("UpdateEdgeIntoAEL: invalid call");
+			}
+			var AelPrev = e.PrevInAEL;
+			var AelNext = e.NextInAEL;
+			e.NextInLML.OutIdx = e.OutIdx;
+			if (AelPrev !== null)
+			{
+				AelPrev.NextInAEL = e.NextInLML;
+			}
+			else
+			{
+				this.m_ActiveEdges = e.NextInLML;
+			}
+			if (AelNext !== null)
+			{
+				AelNext.PrevInAEL = e.NextInLML;
+			}
+			e.NextInLML.Side = e.Side;
+			e.NextInLML.WindDelta = e.WindDelta;
+			e.NextInLML.WindCnt = e.WindCnt;
+			e.NextInLML.WindCnt2 = e.WindCnt2;
+			e = e.NextInLML;
+			e.Curr.X = e.Bot.X;
+			e.Curr.Y = e.Bot.Y;
+			e.PrevInAEL = AelPrev;
+			e.NextInAEL = AelNext;
+			if (!ClipperLib.ClipperBase.IsHorizontal(e))
+			{
+				this.InsertScanbeam(e.Top.Y);
+			}
+			return e;
+		};
+
+		ClipperLib.ClipperBase.prototype.SwapPositionsInAEL = function (edge1, edge2)
+		{
+			//check that one or other edge hasn't already been removed from AEL ...
+			if (edge1.NextInAEL === edge1.PrevInAEL || edge2.NextInAEL === edge2.PrevInAEL)
+			{
+				return;
+			}
+
+			if (edge1.NextInAEL === edge2)
+			{
+				var next = edge2.NextInAEL;
+				if (next !== null)
+				{
+					next.PrevInAEL = edge1;
+				}
+				var prev = edge1.PrevInAEL;
+				if (prev !== null)
+				{
+					prev.NextInAEL = edge2;
+				}
+				edge2.PrevInAEL = prev;
+				edge2.NextInAEL = edge1;
+				edge1.PrevInAEL = edge2;
+				edge1.NextInAEL = next;
+			}
+			else if (edge2.NextInAEL === edge1)
+			{
+				var next1 = edge1.NextInAEL;
+				if (next1 !== null)
+				{
+					next1.PrevInAEL = edge2;
+				}
+				var prev1 = edge2.PrevInAEL;
+				if (prev1 !== null)
+				{
+					prev1.NextInAEL = edge1;
+				}
+				edge1.PrevInAEL = prev1;
+				edge1.NextInAEL = edge2;
+				edge2.PrevInAEL = edge1;
+				edge2.NextInAEL = next1;
+			}
+			else
+			{
+				var next2 = edge1.NextInAEL;
+				var prev2 = edge1.PrevInAEL;
+				edge1.NextInAEL = edge2.NextInAEL;
+				if (edge1.NextInAEL !== null)
+				{
+					edge1.NextInAEL.PrevInAEL = edge1;
+				}
+				edge1.PrevInAEL = edge2.PrevInAEL;
+				if (edge1.PrevInAEL !== null)
+				{
+					edge1.PrevInAEL.NextInAEL = edge1;
+				}
+				edge2.NextInAEL = next2;
+				if (edge2.NextInAEL !== null)
+				{
+					edge2.NextInAEL.PrevInAEL = edge2;
+				}
+				edge2.PrevInAEL = prev2;
+				if (edge2.PrevInAEL !== null)
+				{
+					edge2.PrevInAEL.NextInAEL = edge2;
+				}
+			}
+
+			if (edge1.PrevInAEL === null)
+			{
+				this.m_ActiveEdges = edge1;
+			}
+			else
+			{
+				if (edge2.PrevInAEL === null)
+				{
+					this.m_ActiveEdges = edge2;
+				}
+			}
+		};
+
+		ClipperLib.ClipperBase.prototype.DeleteFromAEL = function (e)
+		{
+			var AelPrev = e.PrevInAEL;
+			var AelNext = e.NextInAEL;
+			if (AelPrev === null && AelNext === null && e !== this.m_ActiveEdges)
+			{
+				return;
+			} //already deleted
+			if (AelPrev !== null)
+			{
+				AelPrev.NextInAEL = AelNext;
+			}
+			else
+			{
+				this.m_ActiveEdges = AelNext;
+			}
+			if (AelNext !== null)
+			{
+				AelNext.PrevInAEL = AelPrev;
+			}
+			e.NextInAEL = null;
+			e.PrevInAEL = null;
+		};
+
+		// public Clipper(int InitOptions = 0)
+		/**
+		 * @suppress {missingProperties}
+		 */
+		ClipperLib.Clipper = function (InitOptions)
+		{
+			if (typeof (InitOptions) === "undefined") InitOptions = 0;
+			this.m_PolyOuts = null;
+			this.m_ClipType = ClipperLib.ClipType.ctIntersection;
+			this.m_Scanbeam = null;
+			this.m_Maxima = null;
+			this.m_ActiveEdges = null;
+			this.m_SortedEdges = null;
+			this.m_IntersectList = null;
+			this.m_IntersectNodeComparer = null;
+			this.m_ExecuteLocked = false;
+			this.m_ClipFillType = ClipperLib.PolyFillType.pftEvenOdd;
+			this.m_SubjFillType = ClipperLib.PolyFillType.pftEvenOdd;
+			this.m_Joins = null;
+			this.m_GhostJoins = null;
+			this.m_UsingPolyTree = false;
+			this.ReverseSolution = false;
+			this.StrictlySimple = false;
+
+			ClipperLib.ClipperBase.call(this);
+
+			this.m_Scanbeam = null;
+			this.m_Maxima = null;
+			this.m_ActiveEdges = null;
+			this.m_SortedEdges = null;
+			this.m_IntersectList = new Array();
+			this.m_IntersectNodeComparer = ClipperLib.MyIntersectNodeSort.Compare;
+			this.m_ExecuteLocked = false;
+			this.m_UsingPolyTree = false;
+			this.m_PolyOuts = new Array();
+			this.m_Joins = new Array();
+			this.m_GhostJoins = new Array();
+			this.ReverseSolution = (1 & InitOptions) !== 0;
+			this.StrictlySimple = (2 & InitOptions) !== 0;
+			this.PreserveCollinear = (4 & InitOptions) !== 0;
+			if (ClipperLib.use_xyz)
+			{
+				this.ZFillFunction = null; // function (IntPoint vert1, IntPoint vert2, ref IntPoint intersectPt);
+			}
+		};
+
+		ClipperLib.Clipper.ioReverseSolution = 1;
+		ClipperLib.Clipper.ioStrictlySimple = 2;
+		ClipperLib.Clipper.ioPreserveCollinear = 4;
+
+		ClipperLib.Clipper.prototype.Clear = function ()
+		{
+			if (this.m_edges.length === 0)
+				return;
+			//avoids problems with ClipperBase destructor
+			this.DisposeAllPolyPts();
+			ClipperLib.ClipperBase.prototype.Clear.call(this);
+		};
+
+		ClipperLib.Clipper.prototype.InsertMaxima = function (X)
+		{
+			//double-linked list: sorted ascending, ignoring dups.
+			var newMax = new ClipperLib.Maxima();
+			newMax.X = X;
+			if (this.m_Maxima === null)
+			{
+				this.m_Maxima = newMax;
+				this.m_Maxima.Next = null;
+				this.m_Maxima.Prev = null;
+			}
+			else if (X < this.m_Maxima.X)
+			{
+				newMax.Next = this.m_Maxima;
+				newMax.Prev = null;
+				this.m_Maxima = newMax;
+			}
+			else
+			{
+				var m = this.m_Maxima;
+				while (m.Next !== null && X >= m.Next.X)
+				{
+					m = m.Next;
+				}
+				if (X === m.X)
+				{
+					return;
+				} //ie ignores duplicates (& CG to clean up newMax)
+				//insert newMax between m and m.Next ...
+				newMax.Next = m.Next;
+				newMax.Prev = m;
+				if (m.Next !== null)
+				{
+					m.Next.Prev = newMax;
+				}
+				m.Next = newMax;
+			}
+		};
+
+		// ************************************
+		ClipperLib.Clipper.prototype.Execute = function ()
+		{
+			var a = arguments,
+				alen = a.length,
+				ispolytree = a[1] instanceof ClipperLib.PolyTree;
+			if (alen === 4 && !ispolytree) // function (clipType, solution, subjFillType, clipFillType)
+			{
+				var clipType = a[0],
+					solution = a[1],
+					subjFillType = a[2],
+					clipFillType = a[3];
+				if (this.m_ExecuteLocked)
+					return false;
+				if (this.m_HasOpenPaths)
+					ClipperLib.Error("Error: PolyTree struct is needed for open path clipping.");
+				this.m_ExecuteLocked = true;
+				ClipperLib.Clear(solution);
+				this.m_SubjFillType = subjFillType;
+				this.m_ClipFillType = clipFillType;
+				this.m_ClipType = clipType;
+				this.m_UsingPolyTree = false;
+				try
+				{
+					var succeeded = this.ExecuteInternal();
+					//build the return polygons ...
+					if (succeeded) this.BuildResult(solution);
+				}
+				finally
+				{
+					this.DisposeAllPolyPts();
+					this.m_ExecuteLocked = false;
+				}
+				return succeeded;
+			}
+			else if (alen === 4 && ispolytree) // function (clipType, polytree, subjFillType, clipFillType)
+			{
+				var clipType = a[0],
+					polytree = a[1],
+					subjFillType = a[2],
+					clipFillType = a[3];
+				if (this.m_ExecuteLocked)
+					return false;
+				this.m_ExecuteLocked = true;
+				this.m_SubjFillType = subjFillType;
+				this.m_ClipFillType = clipFillType;
+				this.m_ClipType = clipType;
+				this.m_UsingPolyTree = true;
+				try
+				{
+					var succeeded = this.ExecuteInternal();
+					//build the return polygons ...
+					if (succeeded) this.BuildResult2(polytree);
+				}
+				finally
+				{
+					this.DisposeAllPolyPts();
+					this.m_ExecuteLocked = false;
+				}
+				return succeeded;
+			}
+			else if (alen === 2 && !ispolytree) // function (clipType, solution)
+			{
+				var clipType = a[0],
+					solution = a[1];
+				return this.Execute(clipType, solution, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftEvenOdd);
+			}
+			else if (alen === 2 && ispolytree) // function (clipType, polytree)
+			{
+				var clipType = a[0],
+					polytree = a[1];
+				return this.Execute(clipType, polytree, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftEvenOdd);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.FixHoleLinkage = function (outRec)
+		{
+			//skip if an outermost polygon or
+			//already already points to the correct FirstLeft ...
+			if (outRec.FirstLeft === null || (outRec.IsHole !== outRec.FirstLeft.IsHole && outRec.FirstLeft.Pts !== null))
+				return;
+			var orfl = outRec.FirstLeft;
+			while (orfl !== null && ((orfl.IsHole === outRec.IsHole) || orfl.Pts === null))
+				orfl = orfl.FirstLeft;
+			outRec.FirstLeft = orfl;
+		};
+
+		ClipperLib.Clipper.prototype.ExecuteInternal = function ()
+		{
+			try
+			{
+				this.Reset();
+				this.m_SortedEdges = null;
+				this.m_Maxima = null;
+
+				var botY = {},
+					topY = {};
+
+				if (!this.PopScanbeam(botY))
+				{
+					return false;
+				}
+				this.InsertLocalMinimaIntoAEL(botY.v);
+				while (this.PopScanbeam(topY) || this.LocalMinimaPending())
+				{
+					this.ProcessHorizontals();
+					this.m_GhostJoins.length = 0;
+					if (!this.ProcessIntersections(topY.v))
+					{
+						return false;
+					}
+					this.ProcessEdgesAtTopOfScanbeam(topY.v);
+					botY.v = topY.v;
+					this.InsertLocalMinimaIntoAEL(botY.v);
+				}
+
+				//fix orientations ...
+				var outRec, i, ilen;
+				//fix orientations ...
+				for (i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+				{
+					outRec = this.m_PolyOuts[i];
+					if (outRec.Pts === null || outRec.IsOpen) continue;
+					if ((outRec.IsHole ^ this.ReverseSolution) == (this.Area$1(outRec) > 0))
+						this.ReversePolyPtLinks(outRec.Pts);
+				}
+
+				this.JoinCommonEdges();
+
+				for (i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+				{
+					outRec = this.m_PolyOuts[i];
+					if (outRec.Pts === null)
+						continue;
+					else if (outRec.IsOpen)
+						this.FixupOutPolyline(outRec);
+					else
+						this.FixupOutPolygon(outRec);
+				}
+
+				if (this.StrictlySimple) this.DoSimplePolygons();
+				return true;
+			}
+			//catch { return false; }
+			finally
+			{
+				this.m_Joins.length = 0;
+				this.m_GhostJoins.length = 0;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.DisposeAllPolyPts = function ()
+		{
+			for (var i = 0, ilen = this.m_PolyOuts.length; i < ilen; ++i)
+				this.DisposeOutRec(i);
+			ClipperLib.Clear(this.m_PolyOuts);
+		};
+
+		ClipperLib.Clipper.prototype.AddJoin = function (Op1, Op2, OffPt)
+		{
+			var j = new ClipperLib.Join();
+			j.OutPt1 = Op1;
+			j.OutPt2 = Op2;
+			//j.OffPt = OffPt;
+			j.OffPt.X = OffPt.X;
+			j.OffPt.Y = OffPt.Y;
+			if (ClipperLib.use_xyz) j.OffPt.Z = OffPt.Z;
+			this.m_Joins.push(j);
+		};
+
+		ClipperLib.Clipper.prototype.AddGhostJoin = function (Op, OffPt)
+		{
+			var j = new ClipperLib.Join();
+			j.OutPt1 = Op;
+			//j.OffPt = OffPt;
+			j.OffPt.X = OffPt.X;
+			j.OffPt.Y = OffPt.Y;
+			if (ClipperLib.use_xyz) j.OffPt.Z = OffPt.Z;
+			this.m_GhostJoins.push(j);
+		};
+
+		//if (ClipperLib.use_xyz)
+		//{
+		ClipperLib.Clipper.prototype.SetZ = function (pt, e1, e2)
+		{
+			if (this.ZFillFunction !== null)
+			{
+				if (pt.Z !== 0 || this.ZFillFunction === null) return;
+				else if (ClipperLib.IntPoint.op_Equality(pt, e1.Bot)) pt.Z = e1.Bot.Z;
+				else if (ClipperLib.IntPoint.op_Equality(pt, e1.Top)) pt.Z = e1.Top.Z;
+				else if (ClipperLib.IntPoint.op_Equality(pt, e2.Bot)) pt.Z = e2.Bot.Z;
+				else if (ClipperLib.IntPoint.op_Equality(pt, e2.Top)) pt.Z = e2.Top.Z;
+				else this.ZFillFunction(e1.Bot, e1.Top, e2.Bot, e2.Top, pt);
+			}
+		};
+		//}
+
+		ClipperLib.Clipper.prototype.InsertLocalMinimaIntoAEL = function (botY)
+		{
+			var lm = {};
+
+			var lb;
+			var rb;
+			while (this.PopLocalMinima(botY, lm))
+			{
+				lb = lm.v.LeftBound;
+				rb = lm.v.RightBound;
+
+				var Op1 = null;
+				if (lb === null)
+				{
+					this.InsertEdgeIntoAEL(rb, null);
+					this.SetWindingCount(rb);
+					if (this.IsContributing(rb))
+						Op1 = this.AddOutPt(rb, rb.Bot);
+				}
+				else if (rb === null)
+				{
+					this.InsertEdgeIntoAEL(lb, null);
+					this.SetWindingCount(lb);
+					if (this.IsContributing(lb))
+						Op1 = this.AddOutPt(lb, lb.Bot);
+					this.InsertScanbeam(lb.Top.Y);
+				}
+				else
+				{
+					this.InsertEdgeIntoAEL(lb, null);
+					this.InsertEdgeIntoAEL(rb, lb);
+					this.SetWindingCount(lb);
+					rb.WindCnt = lb.WindCnt;
+					rb.WindCnt2 = lb.WindCnt2;
+					if (this.IsContributing(lb))
+						Op1 = this.AddLocalMinPoly(lb, rb, lb.Bot);
+					this.InsertScanbeam(lb.Top.Y);
+				}
+				if (rb !== null)
+				{
+					if (ClipperLib.ClipperBase.IsHorizontal(rb))
+					{
+						if (rb.NextInLML !== null)
+						{
+							this.InsertScanbeam(rb.NextInLML.Top.Y);
+						}
+						this.AddEdgeToSEL(rb);
+					}
+					else
+					{
+						this.InsertScanbeam(rb.Top.Y);
+					}
+				}
+				if (lb === null || rb === null) continue;
+				//if output polygons share an Edge with a horizontal rb, they'll need joining later ...
+				if (Op1 !== null && ClipperLib.ClipperBase.IsHorizontal(rb) && this.m_GhostJoins.length > 0 && rb.WindDelta !== 0)
+				{
+					for (var i = 0, ilen = this.m_GhostJoins.length; i < ilen; i++)
+					{
+						//if the horizontal Rb and a 'ghost' horizontal overlap, then convert
+						//the 'ghost' join to a real join ready for later ...
+						var j = this.m_GhostJoins[i];
+
+						if (this.HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
+							this.AddJoin(j.OutPt1, Op1, j.OffPt);
+					}
+				}
+
+				if (lb.OutIdx >= 0 && lb.PrevInAEL !== null &&
+					lb.PrevInAEL.Curr.X === lb.Bot.X &&
+					lb.PrevInAEL.OutIdx >= 0 &&
+					ClipperLib.ClipperBase.SlopesEqual5(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top, this.m_UseFullRange) &&
+					lb.WindDelta !== 0 && lb.PrevInAEL.WindDelta !== 0)
+				{
+					var Op2 = this.AddOutPt(lb.PrevInAEL, lb.Bot);
+					this.AddJoin(Op1, Op2, lb.Top);
+				}
+				if (lb.NextInAEL !== rb)
+				{
+					if (rb.OutIdx >= 0 && rb.PrevInAEL.OutIdx >= 0 &&
+						ClipperLib.ClipperBase.SlopesEqual5(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top, this.m_UseFullRange) &&
+						rb.WindDelta !== 0 && rb.PrevInAEL.WindDelta !== 0)
+					{
+						var Op2 = this.AddOutPt(rb.PrevInAEL, rb.Bot);
+						this.AddJoin(Op1, Op2, rb.Top);
+					}
+					var e = lb.NextInAEL;
+					if (e !== null)
+						while (e !== rb)
+						{
+							//nb: For calculating winding counts etc, IntersectEdges() assumes
+							//that param1 will be to the right of param2 ABOVE the intersection ...
+							this.IntersectEdges(rb, e, lb.Curr);
+							//order important here
+							e = e.NextInAEL;
+						}
+				}
+			}
+		};
+
+		ClipperLib.Clipper.prototype.InsertEdgeIntoAEL = function (edge, startEdge)
+		{
+			if (this.m_ActiveEdges === null)
+			{
+				edge.PrevInAEL = null;
+				edge.NextInAEL = null;
+				this.m_ActiveEdges = edge;
+			}
+			else if (startEdge === null && this.E2InsertsBeforeE1(this.m_ActiveEdges, edge))
+			{
+				edge.PrevInAEL = null;
+				edge.NextInAEL = this.m_ActiveEdges;
+				this.m_ActiveEdges.PrevInAEL = edge;
+				this.m_ActiveEdges = edge;
+			}
+			else
+			{
+				if (startEdge === null)
+					startEdge = this.m_ActiveEdges;
+				while (startEdge.NextInAEL !== null && !this.E2InsertsBeforeE1(startEdge.NextInAEL, edge))
+					startEdge = startEdge.NextInAEL;
+				edge.NextInAEL = startEdge.NextInAEL;
+				if (startEdge.NextInAEL !== null)
+					startEdge.NextInAEL.PrevInAEL = edge;
+				edge.PrevInAEL = startEdge;
+				startEdge.NextInAEL = edge;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.E2InsertsBeforeE1 = function (e1, e2)
+		{
+			if (e2.Curr.X === e1.Curr.X)
+			{
+				if (e2.Top.Y > e1.Top.Y)
+					return e2.Top.X < ClipperLib.Clipper.TopX(e1, e2.Top.Y);
+				else
+					return e1.Top.X > ClipperLib.Clipper.TopX(e2, e1.Top.Y);
+			}
+			else
+				return e2.Curr.X < e1.Curr.X;
+		};
+
+		ClipperLib.Clipper.prototype.IsEvenOddFillType = function (edge)
+		{
+			if (edge.PolyTyp === ClipperLib.PolyType.ptSubject)
+				return this.m_SubjFillType === ClipperLib.PolyFillType.pftEvenOdd;
+			else
+				return this.m_ClipFillType === ClipperLib.PolyFillType.pftEvenOdd;
+		};
+
+		ClipperLib.Clipper.prototype.IsEvenOddAltFillType = function (edge)
+		{
+			if (edge.PolyTyp === ClipperLib.PolyType.ptSubject)
+				return this.m_ClipFillType === ClipperLib.PolyFillType.pftEvenOdd;
+			else
+				return this.m_SubjFillType === ClipperLib.PolyFillType.pftEvenOdd;
+		};
+
+		ClipperLib.Clipper.prototype.IsContributing = function (edge)
+		{
+			var pft, pft2;
+			if (edge.PolyTyp === ClipperLib.PolyType.ptSubject)
+			{
+				pft = this.m_SubjFillType;
+				pft2 = this.m_ClipFillType;
+			}
+			else
+			{
+				pft = this.m_ClipFillType;
+				pft2 = this.m_SubjFillType;
+			}
+			switch (pft)
+			{
+			case ClipperLib.PolyFillType.pftEvenOdd:
+				if (edge.WindDelta === 0 && edge.WindCnt !== 1)
+					return false;
+				break;
+			case ClipperLib.PolyFillType.pftNonZero:
+				if (Math.abs(edge.WindCnt) !== 1)
+					return false;
+				break;
+			case ClipperLib.PolyFillType.pftPositive:
+				if (edge.WindCnt !== 1)
+					return false;
+				break;
+			default:
+				if (edge.WindCnt !== -1)
+					return false;
+				break;
+			}
+			switch (this.m_ClipType)
+			{
+			case ClipperLib.ClipType.ctIntersection:
+				switch (pft2)
+				{
+				case ClipperLib.PolyFillType.pftEvenOdd:
+				case ClipperLib.PolyFillType.pftNonZero:
+					return (edge.WindCnt2 !== 0);
+				case ClipperLib.PolyFillType.pftPositive:
+					return (edge.WindCnt2 > 0);
+				default:
+					return (edge.WindCnt2 < 0);
+				}
+			case ClipperLib.ClipType.ctUnion:
+				switch (pft2)
+				{
+				case ClipperLib.PolyFillType.pftEvenOdd:
+				case ClipperLib.PolyFillType.pftNonZero:
+					return (edge.WindCnt2 === 0);
+				case ClipperLib.PolyFillType.pftPositive:
+					return (edge.WindCnt2 <= 0);
+				default:
+					return (edge.WindCnt2 >= 0);
+				}
+			case ClipperLib.ClipType.ctDifference:
+				if (edge.PolyTyp === ClipperLib.PolyType.ptSubject)
+					switch (pft2)
+					{
+					case ClipperLib.PolyFillType.pftEvenOdd:
+					case ClipperLib.PolyFillType.pftNonZero:
+						return (edge.WindCnt2 === 0);
+					case ClipperLib.PolyFillType.pftPositive:
+						return (edge.WindCnt2 <= 0);
+					default:
+						return (edge.WindCnt2 >= 0);
+					}
+				else
+					switch (pft2)
+					{
+					case ClipperLib.PolyFillType.pftEvenOdd:
+					case ClipperLib.PolyFillType.pftNonZero:
+						return (edge.WindCnt2 !== 0);
+					case ClipperLib.PolyFillType.pftPositive:
+						return (edge.WindCnt2 > 0);
+					default:
+						return (edge.WindCnt2 < 0);
+					}
+			case ClipperLib.ClipType.ctXor:
+				if (edge.WindDelta === 0)
+					switch (pft2)
+					{
+					case ClipperLib.PolyFillType.pftEvenOdd:
+					case ClipperLib.PolyFillType.pftNonZero:
+						return (edge.WindCnt2 === 0);
+					case ClipperLib.PolyFillType.pftPositive:
+						return (edge.WindCnt2 <= 0);
+					default:
+						return (edge.WindCnt2 >= 0);
+					}
+				else
+					return true;
+			}
+			return true;
+		};
+
+		ClipperLib.Clipper.prototype.SetWindingCount = function (edge)
+		{
+			var e = edge.PrevInAEL;
+			//find the edge of the same polytype that immediately preceeds 'edge' in AEL
+			while (e !== null && ((e.PolyTyp !== edge.PolyTyp) || (e.WindDelta === 0)))
+				e = e.PrevInAEL;
+			if (e === null)
+			{
+				var pft = (edge.PolyTyp === ClipperLib.PolyType.ptSubject ? this.m_SubjFillType : this.m_ClipFillType);
+				if (edge.WindDelta === 0)
+				{
+					edge.WindCnt = (pft === ClipperLib.PolyFillType.pftNegative ? -1 : 1);
+				}
+				else
+				{
+					edge.WindCnt = edge.WindDelta;
+				}
+				edge.WindCnt2 = 0;
+				e = this.m_ActiveEdges;
+				//ie get ready to calc WindCnt2
+			}
+			else if (edge.WindDelta === 0 && this.m_ClipType !== ClipperLib.ClipType.ctUnion)
+			{
+				edge.WindCnt = 1;
+				edge.WindCnt2 = e.WindCnt2;
+				e = e.NextInAEL;
+				//ie get ready to calc WindCnt2
+			}
+			else if (this.IsEvenOddFillType(edge))
+			{
+				//EvenOdd filling ...
+				if (edge.WindDelta === 0)
+				{
+					//are we inside a subj polygon ...
+					var Inside = true;
+					var e2 = e.PrevInAEL;
+					while (e2 !== null)
+					{
+						if (e2.PolyTyp === e.PolyTyp && e2.WindDelta !== 0)
+							Inside = !Inside;
+						e2 = e2.PrevInAEL;
+					}
+					edge.WindCnt = (Inside ? 0 : 1);
+				}
+				else
+				{
+					edge.WindCnt = edge.WindDelta;
+				}
+				edge.WindCnt2 = e.WindCnt2;
+				e = e.NextInAEL;
+				//ie get ready to calc WindCnt2
+			}
+			else
+			{
+				//nonZero, Positive or Negative filling ...
+				if (e.WindCnt * e.WindDelta < 0)
+				{
+					//prev edge is 'decreasing' WindCount (WC) toward zero
+					//so we're outside the previous polygon ...
+					if (Math.abs(e.WindCnt) > 1)
+					{
+						//outside prev poly but still inside another.
+						//when reversing direction of prev poly use the same WC
+						if (e.WindDelta * edge.WindDelta < 0)
+							edge.WindCnt = e.WindCnt;
+						else
+							edge.WindCnt = e.WindCnt + edge.WindDelta;
+					}
+					else
+						edge.WindCnt = (edge.WindDelta === 0 ? 1 : edge.WindDelta);
+				}
+				else
+				{
+					//prev edge is 'increasing' WindCount (WC) away from zero
+					//so we're inside the previous polygon ...
+					if (edge.WindDelta === 0)
+						edge.WindCnt = (e.WindCnt < 0 ? e.WindCnt - 1 : e.WindCnt + 1);
+					else if (e.WindDelta * edge.WindDelta < 0)
+						edge.WindCnt = e.WindCnt;
+					else
+						edge.WindCnt = e.WindCnt + edge.WindDelta;
+				}
+				edge.WindCnt2 = e.WindCnt2;
+				e = e.NextInAEL;
+				//ie get ready to calc WindCnt2
+			}
+			//update WindCnt2 ...
+			if (this.IsEvenOddAltFillType(edge))
+			{
+				//EvenOdd filling ...
+				while (e !== edge)
+				{
+					if (e.WindDelta !== 0)
+						edge.WindCnt2 = (edge.WindCnt2 === 0 ? 1 : 0);
+					e = e.NextInAEL;
+				}
+			}
+			else
+			{
+				//nonZero, Positive or Negative filling ...
+				while (e !== edge)
+				{
+					edge.WindCnt2 += e.WindDelta;
+					e = e.NextInAEL;
+				}
+			}
+		};
+
+		ClipperLib.Clipper.prototype.AddEdgeToSEL = function (edge)
+		{
+			//SEL pointers in PEdge are use to build transient lists of horizontal edges.
+			//However, since we don't need to worry about processing order, all additions
+			//are made to the front of the list ...
+			if (this.m_SortedEdges === null)
+			{
+				this.m_SortedEdges = edge;
+				edge.PrevInSEL = null;
+				edge.NextInSEL = null;
+			}
+			else
+			{
+				edge.NextInSEL = this.m_SortedEdges;
+				edge.PrevInSEL = null;
+				this.m_SortedEdges.PrevInSEL = edge;
+				this.m_SortedEdges = edge;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.PopEdgeFromSEL = function (e)
+		{
+			//Pop edge from front of SEL (ie SEL is a FILO list)
+			e.v = this.m_SortedEdges;
+			if (e.v === null)
+			{
+				return false;
+			}
+			var oldE = e.v;
+			this.m_SortedEdges = e.v.NextInSEL;
+			if (this.m_SortedEdges !== null)
+			{
+				this.m_SortedEdges.PrevInSEL = null;
+			}
+			oldE.NextInSEL = null;
+			oldE.PrevInSEL = null;
+			return true;
+		};
+
+		ClipperLib.Clipper.prototype.CopyAELToSEL = function ()
+		{
+			var e = this.m_ActiveEdges;
+			this.m_SortedEdges = e;
+			while (e !== null)
+			{
+				e.PrevInSEL = e.PrevInAEL;
+				e.NextInSEL = e.NextInAEL;
+				e = e.NextInAEL;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.SwapPositionsInSEL = function (edge1, edge2)
+		{
+			if (edge1.NextInSEL === null && edge1.PrevInSEL === null)
+				return;
+			if (edge2.NextInSEL === null && edge2.PrevInSEL === null)
+				return;
+			if (edge1.NextInSEL === edge2)
+			{
+				var next = edge2.NextInSEL;
+				if (next !== null)
+					next.PrevInSEL = edge1;
+				var prev = edge1.PrevInSEL;
+				if (prev !== null)
+					prev.NextInSEL = edge2;
+				edge2.PrevInSEL = prev;
+				edge2.NextInSEL = edge1;
+				edge1.PrevInSEL = edge2;
+				edge1.NextInSEL = next;
+			}
+			else if (edge2.NextInSEL === edge1)
+			{
+				var next = edge1.NextInSEL;
+				if (next !== null)
+					next.PrevInSEL = edge2;
+				var prev = edge2.PrevInSEL;
+				if (prev !== null)
+					prev.NextInSEL = edge1;
+				edge1.PrevInSEL = prev;
+				edge1.NextInSEL = edge2;
+				edge2.PrevInSEL = edge1;
+				edge2.NextInSEL = next;
+			}
+			else
+			{
+				var next = edge1.NextInSEL;
+				var prev = edge1.PrevInSEL;
+				edge1.NextInSEL = edge2.NextInSEL;
+				if (edge1.NextInSEL !== null)
+					edge1.NextInSEL.PrevInSEL = edge1;
+				edge1.PrevInSEL = edge2.PrevInSEL;
+				if (edge1.PrevInSEL !== null)
+					edge1.PrevInSEL.NextInSEL = edge1;
+				edge2.NextInSEL = next;
+				if (edge2.NextInSEL !== null)
+					edge2.NextInSEL.PrevInSEL = edge2;
+				edge2.PrevInSEL = prev;
+				if (edge2.PrevInSEL !== null)
+					edge2.PrevInSEL.NextInSEL = edge2;
+			}
+			if (edge1.PrevInSEL === null)
+				this.m_SortedEdges = edge1;
+			else if (edge2.PrevInSEL === null)
+				this.m_SortedEdges = edge2;
+		};
+
+		ClipperLib.Clipper.prototype.AddLocalMaxPoly = function (e1, e2, pt)
+		{
+			this.AddOutPt(e1, pt);
+			if (e2.WindDelta === 0) this.AddOutPt(e2, pt);
+			if (e1.OutIdx === e2.OutIdx)
+			{
+				e1.OutIdx = -1;
+				e2.OutIdx = -1;
+			}
+			else if (e1.OutIdx < e2.OutIdx)
+				this.AppendPolygon(e1, e2);
+			else
+				this.AppendPolygon(e2, e1);
+		};
+
+		ClipperLib.Clipper.prototype.AddLocalMinPoly = function (e1, e2, pt)
+		{
+			var result;
+			var e, prevE;
+			if (ClipperLib.ClipperBase.IsHorizontal(e2) || (e1.Dx > e2.Dx))
+			{
+				result = this.AddOutPt(e1, pt);
+				e2.OutIdx = e1.OutIdx;
+				e1.Side = ClipperLib.EdgeSide.esLeft;
+				e2.Side = ClipperLib.EdgeSide.esRight;
+				e = e1;
+				if (e.PrevInAEL === e2)
+					prevE = e2.PrevInAEL;
+				else
+					prevE = e.PrevInAEL;
+			}
+			else
+			{
+				result = this.AddOutPt(e2, pt);
+				e1.OutIdx = e2.OutIdx;
+				e1.Side = ClipperLib.EdgeSide.esRight;
+				e2.Side = ClipperLib.EdgeSide.esLeft;
+				e = e2;
+				if (e.PrevInAEL === e1)
+					prevE = e1.PrevInAEL;
+				else
+					prevE = e.PrevInAEL;
+			}
+
+			if (prevE !== null && prevE.OutIdx >= 0 && prevE.Top.Y < pt.Y && e.Top.Y < pt.Y)
+			{
+				var xPrev = ClipperLib.Clipper.TopX(prevE, pt.Y);
+				var xE = ClipperLib.Clipper.TopX(e, pt.Y);
+				if ((xPrev === xE) && (e.WindDelta !== 0) && (prevE.WindDelta !== 0) && ClipperLib.ClipperBase.SlopesEqual5(new ClipperLib.IntPoint2(xPrev, pt.Y), prevE.Top, new ClipperLib.IntPoint2(xE, pt.Y), e.Top, this.m_UseFullRange))
+				{
+					var outPt = this.AddOutPt(prevE, pt);
+					this.AddJoin(result, outPt, e.Top);
+				}
+			}
+			return result;
+		};
+
+		ClipperLib.Clipper.prototype.AddOutPt = function (e, pt)
+		{
+			if (e.OutIdx < 0)
+			{
+				var outRec = this.CreateOutRec();
+				outRec.IsOpen = (e.WindDelta === 0);
+				var newOp = new ClipperLib.OutPt();
+				outRec.Pts = newOp;
+				newOp.Idx = outRec.Idx;
+				//newOp.Pt = pt;
+				newOp.Pt.X = pt.X;
+				newOp.Pt.Y = pt.Y;
+				if (ClipperLib.use_xyz) newOp.Pt.Z = pt.Z;
+				newOp.Next = newOp;
+				newOp.Prev = newOp;
+				if (!outRec.IsOpen)
+					this.SetHoleState(e, outRec);
+				e.OutIdx = outRec.Idx;
+				//nb: do this after SetZ !
+				return newOp;
+			}
+			else
+			{
+				var outRec = this.m_PolyOuts[e.OutIdx];
+				//OutRec.Pts is the 'Left-most' point & OutRec.Pts.Prev is the 'Right-most'
+				var op = outRec.Pts;
+				var ToFront = (e.Side === ClipperLib.EdgeSide.esLeft);
+				if (ToFront && ClipperLib.IntPoint.op_Equality(pt, op.Pt))
+					return op;
+				else if (!ToFront && ClipperLib.IntPoint.op_Equality(pt, op.Prev.Pt))
+					return op.Prev;
+				var newOp = new ClipperLib.OutPt();
+				newOp.Idx = outRec.Idx;
+				//newOp.Pt = pt;
+				newOp.Pt.X = pt.X;
+				newOp.Pt.Y = pt.Y;
+				if (ClipperLib.use_xyz) newOp.Pt.Z = pt.Z;
+				newOp.Next = op;
+				newOp.Prev = op.Prev;
+				newOp.Prev.Next = newOp;
+				op.Prev = newOp;
+				if (ToFront)
+					outRec.Pts = newOp;
+				return newOp;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.GetLastOutPt = function (e)
+		{
+			var outRec = this.m_PolyOuts[e.OutIdx];
+			if (e.Side === ClipperLib.EdgeSide.esLeft)
+			{
+				return outRec.Pts;
+			}
+			else
+			{
+				return outRec.Pts.Prev;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.SwapPoints = function (pt1, pt2)
+		{
+			var tmp = new ClipperLib.IntPoint1(pt1.Value);
+			//pt1.Value = pt2.Value;
+			pt1.Value.X = pt2.Value.X;
+			pt1.Value.Y = pt2.Value.Y;
+			if (ClipperLib.use_xyz) pt1.Value.Z = pt2.Value.Z;
+			//pt2.Value = tmp;
+			pt2.Value.X = tmp.X;
+			pt2.Value.Y = tmp.Y;
+			if (ClipperLib.use_xyz) pt2.Value.Z = tmp.Z;
+		};
+
+		ClipperLib.Clipper.prototype.HorzSegmentsOverlap = function (seg1a, seg1b, seg2a, seg2b)
+		{
+			var tmp;
+			if (seg1a > seg1b)
+			{
+				tmp = seg1a;
+				seg1a = seg1b;
+				seg1b = tmp;
+			}
+			if (seg2a > seg2b)
+			{
+				tmp = seg2a;
+				seg2a = seg2b;
+				seg2b = tmp;
+			}
+			return (seg1a < seg2b) && (seg2a < seg1b);
+		};
+
+		ClipperLib.Clipper.prototype.SetHoleState = function (e, outRec)
+		{
+			var e2 = e.PrevInAEL;
+			var eTmp = null;
+			while (e2 !== null)
+			{
+				if (e2.OutIdx >= 0 && e2.WindDelta !== 0)
+				{
+					if (eTmp === null)
+						eTmp = e2;
+					else if (eTmp.OutIdx === e2.OutIdx)
+						eTmp = null; //paired
+				}
+				e2 = e2.PrevInAEL;
+			}
+
+			if (eTmp === null)
+			{
+				outRec.FirstLeft = null;
+				outRec.IsHole = false;
+			}
+			else
+			{
+				outRec.FirstLeft = this.m_PolyOuts[eTmp.OutIdx];
+				outRec.IsHole = !outRec.FirstLeft.IsHole;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.GetDx = function (pt1, pt2)
+		{
+			if (pt1.Y === pt2.Y)
+				return ClipperLib.ClipperBase.horizontal;
+			else
+				return (pt2.X - pt1.X) / (pt2.Y - pt1.Y);
+		};
+
+		ClipperLib.Clipper.prototype.FirstIsBottomPt = function (btmPt1, btmPt2)
+		{
+			var p = btmPt1.Prev;
+			while ((ClipperLib.IntPoint.op_Equality(p.Pt, btmPt1.Pt)) && (p !== btmPt1))
+				p = p.Prev;
+			var dx1p = Math.abs(this.GetDx(btmPt1.Pt, p.Pt));
+			p = btmPt1.Next;
+			while ((ClipperLib.IntPoint.op_Equality(p.Pt, btmPt1.Pt)) && (p !== btmPt1))
+				p = p.Next;
+			var dx1n = Math.abs(this.GetDx(btmPt1.Pt, p.Pt));
+			p = btmPt2.Prev;
+			while ((ClipperLib.IntPoint.op_Equality(p.Pt, btmPt2.Pt)) && (p !== btmPt2))
+				p = p.Prev;
+			var dx2p = Math.abs(this.GetDx(btmPt2.Pt, p.Pt));
+			p = btmPt2.Next;
+			while ((ClipperLib.IntPoint.op_Equality(p.Pt, btmPt2.Pt)) && (p !== btmPt2))
+				p = p.Next;
+			var dx2n = Math.abs(this.GetDx(btmPt2.Pt, p.Pt));
+
+			if (Math.max(dx1p, dx1n) === Math.max(dx2p, dx2n) && Math.min(dx1p, dx1n) === Math.min(dx2p, dx2n))
+			{
+				return this.Area(btmPt1) > 0; //if otherwise identical use orientation
+			}
+			else
+			{
+				return (dx1p >= dx2p && dx1p >= dx2n) || (dx1n >= dx2p && dx1n >= dx2n);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.GetBottomPt = function (pp)
+		{
+			var dups = null;
+			var p = pp.Next;
+			while (p !== pp)
+			{
+				if (p.Pt.Y > pp.Pt.Y)
+				{
+					pp = p;
+					dups = null;
+				}
+				else if (p.Pt.Y === pp.Pt.Y && p.Pt.X <= pp.Pt.X)
+				{
+					if (p.Pt.X < pp.Pt.X)
+					{
+						dups = null;
+						pp = p;
+					}
+					else
+					{
+						if (p.Next !== pp && p.Prev !== pp)
+							dups = p;
+					}
+				}
+				p = p.Next;
+			}
+			if (dups !== null)
+			{
+				//there appears to be at least 2 vertices at bottomPt so ...
+				while (dups !== p)
+				{
+					if (!this.FirstIsBottomPt(p, dups))
+						pp = dups;
+					dups = dups.Next;
+					while (ClipperLib.IntPoint.op_Inequality(dups.Pt, pp.Pt))
+						dups = dups.Next;
+				}
+			}
+			return pp;
+		};
+
+		ClipperLib.Clipper.prototype.GetLowermostRec = function (outRec1, outRec2)
+		{
+			//work out which polygon fragment has the correct hole state ...
+			if (outRec1.BottomPt === null)
+				outRec1.BottomPt = this.GetBottomPt(outRec1.Pts);
+			if (outRec2.BottomPt === null)
+				outRec2.BottomPt = this.GetBottomPt(outRec2.Pts);
+			var bPt1 = outRec1.BottomPt;
+			var bPt2 = outRec2.BottomPt;
+			if (bPt1.Pt.Y > bPt2.Pt.Y)
+				return outRec1;
+			else if (bPt1.Pt.Y < bPt2.Pt.Y)
+				return outRec2;
+			else if (bPt1.Pt.X < bPt2.Pt.X)
+				return outRec1;
+			else if (bPt1.Pt.X > bPt2.Pt.X)
+				return outRec2;
+			else if (bPt1.Next === bPt1)
+				return outRec2;
+			else if (bPt2.Next === bPt2)
+				return outRec1;
+			else if (this.FirstIsBottomPt(bPt1, bPt2))
+				return outRec1;
+			else
+				return outRec2;
+		};
+
+		ClipperLib.Clipper.prototype.OutRec1RightOfOutRec2 = function (outRec1, outRec2)
+		{
+			do {
+				outRec1 = outRec1.FirstLeft;
+				if (outRec1 === outRec2)
+					return true;
+			}
+			while (outRec1 !== null)
+			return false;
+		};
+
+		ClipperLib.Clipper.prototype.GetOutRec = function (idx)
+		{
+			var outrec = this.m_PolyOuts[idx];
+			while (outrec !== this.m_PolyOuts[outrec.Idx])
+				outrec = this.m_PolyOuts[outrec.Idx];
+			return outrec;
+		};
+
+		ClipperLib.Clipper.prototype.AppendPolygon = function (e1, e2)
+		{
+			//get the start and ends of both output polygons ...
+			var outRec1 = this.m_PolyOuts[e1.OutIdx];
+			var outRec2 = this.m_PolyOuts[e2.OutIdx];
+			var holeStateRec;
+			if (this.OutRec1RightOfOutRec2(outRec1, outRec2))
+				holeStateRec = outRec2;
+			else if (this.OutRec1RightOfOutRec2(outRec2, outRec1))
+				holeStateRec = outRec1;
+			else
+				holeStateRec = this.GetLowermostRec(outRec1, outRec2);
+
+			//get the start and ends of both output polygons and
+			//join E2 poly onto E1 poly and delete pointers to E2 ...
+
+			var p1_lft = outRec1.Pts;
+			var p1_rt = p1_lft.Prev;
+			var p2_lft = outRec2.Pts;
+			var p2_rt = p2_lft.Prev;
+			//join e2 poly onto e1 poly and delete pointers to e2 ...
+			if (e1.Side === ClipperLib.EdgeSide.esLeft)
+			{
+				if (e2.Side === ClipperLib.EdgeSide.esLeft)
+				{
+					//z y x a b c
+					this.ReversePolyPtLinks(p2_lft);
+					p2_lft.Next = p1_lft;
+					p1_lft.Prev = p2_lft;
+					p1_rt.Next = p2_rt;
+					p2_rt.Prev = p1_rt;
+					outRec1.Pts = p2_rt;
+				}
+				else
+				{
+					//x y z a b c
+					p2_rt.Next = p1_lft;
+					p1_lft.Prev = p2_rt;
+					p2_lft.Prev = p1_rt;
+					p1_rt.Next = p2_lft;
+					outRec1.Pts = p2_lft;
+				}
+			}
+			else
+			{
+				if (e2.Side === ClipperLib.EdgeSide.esRight)
+				{
+					//a b c z y x
+					this.ReversePolyPtLinks(p2_lft);
+					p1_rt.Next = p2_rt;
+					p2_rt.Prev = p1_rt;
+					p2_lft.Next = p1_lft;
+					p1_lft.Prev = p2_lft;
+				}
+				else
+				{
+					//a b c x y z
+					p1_rt.Next = p2_lft;
+					p2_lft.Prev = p1_rt;
+					p1_lft.Prev = p2_rt;
+					p2_rt.Next = p1_lft;
+				}
+			}
+			outRec1.BottomPt = null;
+			if (holeStateRec === outRec2)
+			{
+				if (outRec2.FirstLeft !== outRec1)
+					outRec1.FirstLeft = outRec2.FirstLeft;
+				outRec1.IsHole = outRec2.IsHole;
+			}
+			outRec2.Pts = null;
+			outRec2.BottomPt = null;
+			outRec2.FirstLeft = outRec1;
+			var OKIdx = e1.OutIdx;
+			var ObsoleteIdx = e2.OutIdx;
+			e1.OutIdx = -1;
+			//nb: safe because we only get here via AddLocalMaxPoly
+			e2.OutIdx = -1;
+			var e = this.m_ActiveEdges;
+			while (e !== null)
+			{
+				if (e.OutIdx === ObsoleteIdx)
+				{
+					e.OutIdx = OKIdx;
+					e.Side = e1.Side;
+					break;
+				}
+				e = e.NextInAEL;
+			}
+			outRec2.Idx = outRec1.Idx;
+		};
+
+		ClipperLib.Clipper.prototype.ReversePolyPtLinks = function (pp)
+		{
+			if (pp === null)
+				return;
+			var pp1;
+			var pp2;
+			pp1 = pp;
+			do {
+				pp2 = pp1.Next;
+				pp1.Next = pp1.Prev;
+				pp1.Prev = pp2;
+				pp1 = pp2;
+			}
+			while (pp1 !== pp)
+		};
+
+		ClipperLib.Clipper.SwapSides = function (edge1, edge2)
+		{
+			var side = edge1.Side;
+			edge1.Side = edge2.Side;
+			edge2.Side = side;
+		};
+
+		ClipperLib.Clipper.SwapPolyIndexes = function (edge1, edge2)
+		{
+			var outIdx = edge1.OutIdx;
+			edge1.OutIdx = edge2.OutIdx;
+			edge2.OutIdx = outIdx;
+		};
+
+		ClipperLib.Clipper.prototype.IntersectEdges = function (e1, e2, pt)
+		{
+			//e1 will be to the left of e2 BELOW the intersection. Therefore e1 is before
+			//e2 in AEL except when e1 is being inserted at the intersection point ...
+			var e1Contributing = (e1.OutIdx >= 0);
+			var e2Contributing = (e2.OutIdx >= 0);
+
+			if (ClipperLib.use_xyz)
+				this.SetZ(pt, e1, e2);
+
+			if (ClipperLib.use_lines)
+			{
+				//if either edge is on an OPEN path ...
+				if (e1.WindDelta === 0 || e2.WindDelta === 0)
+				{
+					//ignore subject-subject open path intersections UNLESS they
+					//are both open paths, AND they are both 'contributing maximas' ...
+					if (e1.WindDelta === 0 && e2.WindDelta === 0) return;
+					//if intersecting a subj line with a subj poly ...
+					else if (e1.PolyTyp === e2.PolyTyp &&
+						e1.WindDelta !== e2.WindDelta && this.m_ClipType === ClipperLib.ClipType.ctUnion)
+					{
+						if (e1.WindDelta === 0)
+						{
+							if (e2Contributing)
+							{
+								this.AddOutPt(e1, pt);
+								if (e1Contributing)
+									e1.OutIdx = -1;
+							}
+						}
+						else
+						{
+							if (e1Contributing)
+							{
+								this.AddOutPt(e2, pt);
+								if (e2Contributing)
+									e2.OutIdx = -1;
+							}
+						}
+					}
+					else if (e1.PolyTyp !== e2.PolyTyp)
+					{
+						if ((e1.WindDelta === 0) && Math.abs(e2.WindCnt) === 1 &&
+							(this.m_ClipType !== ClipperLib.ClipType.ctUnion || e2.WindCnt2 === 0))
+						{
+							this.AddOutPt(e1, pt);
+							if (e1Contributing)
+								e1.OutIdx = -1;
+						}
+						else if ((e2.WindDelta === 0) && (Math.abs(e1.WindCnt) === 1) &&
+							(this.m_ClipType !== ClipperLib.ClipType.ctUnion || e1.WindCnt2 === 0))
+						{
+							this.AddOutPt(e2, pt);
+							if (e2Contributing)
+								e2.OutIdx = -1;
+						}
+					}
+					return;
+				}
+			}
+			//update winding counts...
+			//assumes that e1 will be to the Right of e2 ABOVE the intersection
+			if (e1.PolyTyp === e2.PolyTyp)
+			{
+				if (this.IsEvenOddFillType(e1))
+				{
+					var oldE1WindCnt = e1.WindCnt;
+					e1.WindCnt = e2.WindCnt;
+					e2.WindCnt = oldE1WindCnt;
+				}
+				else
+				{
+					if (e1.WindCnt + e2.WindDelta === 0)
+						e1.WindCnt = -e1.WindCnt;
+					else
+						e1.WindCnt += e2.WindDelta;
+					if (e2.WindCnt - e1.WindDelta === 0)
+						e2.WindCnt = -e2.WindCnt;
+					else
+						e2.WindCnt -= e1.WindDelta;
+				}
+			}
+			else
+			{
+				if (!this.IsEvenOddFillType(e2))
+					e1.WindCnt2 += e2.WindDelta;
+				else
+					e1.WindCnt2 = (e1.WindCnt2 === 0) ? 1 : 0;
+				if (!this.IsEvenOddFillType(e1))
+					e2.WindCnt2 -= e1.WindDelta;
+				else
+					e2.WindCnt2 = (e2.WindCnt2 === 0) ? 1 : 0;
+			}
+			var e1FillType, e2FillType, e1FillType2, e2FillType2;
+			if (e1.PolyTyp === ClipperLib.PolyType.ptSubject)
+			{
+				e1FillType = this.m_SubjFillType;
+				e1FillType2 = this.m_ClipFillType;
+			}
+			else
+			{
+				e1FillType = this.m_ClipFillType;
+				e1FillType2 = this.m_SubjFillType;
+			}
+			if (e2.PolyTyp === ClipperLib.PolyType.ptSubject)
+			{
+				e2FillType = this.m_SubjFillType;
+				e2FillType2 = this.m_ClipFillType;
+			}
+			else
+			{
+				e2FillType = this.m_ClipFillType;
+				e2FillType2 = this.m_SubjFillType;
+			}
+			var e1Wc, e2Wc;
+			switch (e1FillType)
+			{
+			case ClipperLib.PolyFillType.pftPositive:
+				e1Wc = e1.WindCnt;
+				break;
+			case ClipperLib.PolyFillType.pftNegative:
+				e1Wc = -e1.WindCnt;
+				break;
+			default:
+				e1Wc = Math.abs(e1.WindCnt);
+				break;
+			}
+			switch (e2FillType)
+			{
+			case ClipperLib.PolyFillType.pftPositive:
+				e2Wc = e2.WindCnt;
+				break;
+			case ClipperLib.PolyFillType.pftNegative:
+				e2Wc = -e2.WindCnt;
+				break;
+			default:
+				e2Wc = Math.abs(e2.WindCnt);
+				break;
+			}
+			if (e1Contributing && e2Contributing)
+			{
+				if ((e1Wc !== 0 && e1Wc !== 1) || (e2Wc !== 0 && e2Wc !== 1) ||
+					(e1.PolyTyp !== e2.PolyTyp && this.m_ClipType !== ClipperLib.ClipType.ctXor))
+				{
+					this.AddLocalMaxPoly(e1, e2, pt);
+				}
+				else
+				{
+					this.AddOutPt(e1, pt);
+					this.AddOutPt(e2, pt);
+					ClipperLib.Clipper.SwapSides(e1, e2);
+					ClipperLib.Clipper.SwapPolyIndexes(e1, e2);
+				}
+			}
+			else if (e1Contributing)
+			{
+				if (e2Wc === 0 || e2Wc === 1)
+				{
+					this.AddOutPt(e1, pt);
+					ClipperLib.Clipper.SwapSides(e1, e2);
+					ClipperLib.Clipper.SwapPolyIndexes(e1, e2);
+				}
+			}
+			else if (e2Contributing)
+			{
+				if (e1Wc === 0 || e1Wc === 1)
+				{
+					this.AddOutPt(e2, pt);
+					ClipperLib.Clipper.SwapSides(e1, e2);
+					ClipperLib.Clipper.SwapPolyIndexes(e1, e2);
+				}
+			}
+			else if ((e1Wc === 0 || e1Wc === 1) && (e2Wc === 0 || e2Wc === 1))
+			{
+				//neither edge is currently contributing ...
+				var e1Wc2, e2Wc2;
+				switch (e1FillType2)
+				{
+				case ClipperLib.PolyFillType.pftPositive:
+					e1Wc2 = e1.WindCnt2;
+					break;
+				case ClipperLib.PolyFillType.pftNegative:
+					e1Wc2 = -e1.WindCnt2;
+					break;
+				default:
+					e1Wc2 = Math.abs(e1.WindCnt2);
+					break;
+				}
+				switch (e2FillType2)
+				{
+				case ClipperLib.PolyFillType.pftPositive:
+					e2Wc2 = e2.WindCnt2;
+					break;
+				case ClipperLib.PolyFillType.pftNegative:
+					e2Wc2 = -e2.WindCnt2;
+					break;
+				default:
+					e2Wc2 = Math.abs(e2.WindCnt2);
+					break;
+				}
+				if (e1.PolyTyp !== e2.PolyTyp)
+				{
+					this.AddLocalMinPoly(e1, e2, pt);
+				}
+				else if (e1Wc === 1 && e2Wc === 1)
+					switch (this.m_ClipType)
+					{
+					case ClipperLib.ClipType.ctIntersection:
+						if (e1Wc2 > 0 && e2Wc2 > 0)
+							this.AddLocalMinPoly(e1, e2, pt);
+						break;
+					case ClipperLib.ClipType.ctUnion:
+						if (e1Wc2 <= 0 && e2Wc2 <= 0)
+							this.AddLocalMinPoly(e1, e2, pt);
+						break;
+					case ClipperLib.ClipType.ctDifference:
+						if (((e1.PolyTyp === ClipperLib.PolyType.ptClip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
+							((e1.PolyTyp === ClipperLib.PolyType.ptSubject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
+							this.AddLocalMinPoly(e1, e2, pt);
+						break;
+					case ClipperLib.ClipType.ctXor:
+						this.AddLocalMinPoly(e1, e2, pt);
+						break;
+					}
+				else
+					ClipperLib.Clipper.SwapSides(e1, e2);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.DeleteFromSEL = function (e)
+		{
+			var SelPrev = e.PrevInSEL;
+			var SelNext = e.NextInSEL;
+			if (SelPrev === null && SelNext === null && (e !== this.m_SortedEdges))
+				return;
+			//already deleted
+			if (SelPrev !== null)
+				SelPrev.NextInSEL = SelNext;
+			else
+				this.m_SortedEdges = SelNext;
+			if (SelNext !== null)
+				SelNext.PrevInSEL = SelPrev;
+			e.NextInSEL = null;
+			e.PrevInSEL = null;
+		};
+
+		ClipperLib.Clipper.prototype.ProcessHorizontals = function ()
+		{
+			var horzEdge = {}; //m_SortedEdges;
+			while (this.PopEdgeFromSEL(horzEdge))
+			{
+				this.ProcessHorizontal(horzEdge.v);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.GetHorzDirection = function (HorzEdge, $var)
+		{
+			if (HorzEdge.Bot.X < HorzEdge.Top.X)
+			{
+				$var.Left = HorzEdge.Bot.X;
+				$var.Right = HorzEdge.Top.X;
+				$var.Dir = ClipperLib.Direction.dLeftToRight;
+			}
+			else
+			{
+				$var.Left = HorzEdge.Top.X;
+				$var.Right = HorzEdge.Bot.X;
+				$var.Dir = ClipperLib.Direction.dRightToLeft;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.ProcessHorizontal = function (horzEdge)
+		{
+			var $var = {
+				Dir: null,
+				Left: null,
+				Right: null
+			};
+
+			this.GetHorzDirection(horzEdge, $var);
+			var dir = $var.Dir;
+			var horzLeft = $var.Left;
+			var horzRight = $var.Right;
+
+			var IsOpen = horzEdge.WindDelta === 0;
+
+			var eLastHorz = horzEdge,
+				eMaxPair = null;
+			while (eLastHorz.NextInLML !== null && ClipperLib.ClipperBase.IsHorizontal(eLastHorz.NextInLML))
+				eLastHorz = eLastHorz.NextInLML;
+			if (eLastHorz.NextInLML === null)
+				eMaxPair = this.GetMaximaPair(eLastHorz);
+
+			var currMax = this.m_Maxima;
+			if (currMax !== null)
+			{
+				//get the first maxima in range (X) ...
+				if (dir === ClipperLib.Direction.dLeftToRight)
+				{
+					while (currMax !== null && currMax.X <= horzEdge.Bot.X)
+					{
+						currMax = currMax.Next;
+					}
+					if (currMax !== null && currMax.X >= eLastHorz.Top.X)
+					{
+						currMax = null;
+					}
+				}
+				else
+				{
+					while (currMax.Next !== null && currMax.Next.X < horzEdge.Bot.X)
+					{
+						currMax = currMax.Next;
+					}
+					if (currMax.X <= eLastHorz.Top.X)
+					{
+						currMax = null;
+					}
+				}
+			}
+			var op1 = null;
+			for (;;) //loop through consec. horizontal edges
+			{
+				var IsLastHorz = (horzEdge === eLastHorz);
+				var e = this.GetNextInAEL(horzEdge, dir);
+				while (e !== null)
+				{
+					//this code block inserts extra coords into horizontal edges (in output
+					//polygons) whereever maxima touch these horizontal edges. This helps
+					//'simplifying' polygons (ie if the Simplify property is set).
+					if (currMax !== null)
+					{
+						if (dir === ClipperLib.Direction.dLeftToRight)
+						{
+							while (currMax !== null && currMax.X < e.Curr.X)
+							{
+								if (horzEdge.OutIdx >= 0 && !IsOpen)
+								{
+									this.AddOutPt(horzEdge, new ClipperLib.IntPoint2(currMax.X, horzEdge.Bot.Y));
+								}
+								currMax = currMax.Next;
+							}
+						}
+						else
+						{
+							while (currMax !== null && currMax.X > e.Curr.X)
+							{
+								if (horzEdge.OutIdx >= 0 && !IsOpen)
+								{
+									this.AddOutPt(horzEdge, new ClipperLib.IntPoint2(currMax.X, horzEdge.Bot.Y));
+								}
+								currMax = currMax.Prev;
+							}
+						}
+					}
+
+					if ((dir === ClipperLib.Direction.dLeftToRight && e.Curr.X > horzRight) || (dir === ClipperLib.Direction.dRightToLeft && e.Curr.X < horzLeft))
+					{
+						break;
+					}
+
+					//Also break if we've got to the end of an intermediate horizontal edge ...
+					//nb: Smaller Dx's are to the right of larger Dx's ABOVE the horizontal.
+					if (e.Curr.X === horzEdge.Top.X && horzEdge.NextInLML !== null && e.Dx < horzEdge.NextInLML.Dx)
+						break;
+
+					if (horzEdge.OutIdx >= 0 && !IsOpen) //note: may be done multiple times
+					{
+						if (ClipperLib.use_xyz)
+						{
+							if (dir === ClipperLib.Direction.dLeftToRight)
+								this.SetZ(e.Curr, horzEdge, e);
+							else this.SetZ(e.Curr, e, horzEdge);
+						}
+
+						op1 = this.AddOutPt(horzEdge, e.Curr);
+						var eNextHorz = this.m_SortedEdges;
+						while (eNextHorz !== null)
+						{
+							if (eNextHorz.OutIdx >= 0 && this.HorzSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
+							{
+								var op2 = this.GetLastOutPt(eNextHorz);
+								this.AddJoin(op2, op1, eNextHorz.Top);
+							}
+							eNextHorz = eNextHorz.NextInSEL;
+						}
+						this.AddGhostJoin(op1, horzEdge.Bot);
+					}
+
+					//OK, so far we're still in range of the horizontal Edge  but make sure
+					//we're at the last of consec. horizontals when matching with eMaxPair
+					if (e === eMaxPair && IsLastHorz)
+					{
+						if (horzEdge.OutIdx >= 0)
+						{
+							this.AddLocalMaxPoly(horzEdge, eMaxPair, horzEdge.Top);
+						}
+						this.DeleteFromAEL(horzEdge);
+						this.DeleteFromAEL(eMaxPair);
+						return;
+					}
+
+					if (dir === ClipperLib.Direction.dLeftToRight)
+					{
+						var Pt = new ClipperLib.IntPoint2(e.Curr.X, horzEdge.Curr.Y);
+						this.IntersectEdges(horzEdge, e, Pt);
+					}
+					else
+					{
+						var Pt = new ClipperLib.IntPoint2(e.Curr.X, horzEdge.Curr.Y);
+						this.IntersectEdges(e, horzEdge, Pt);
+					}
+					var eNext = this.GetNextInAEL(e, dir);
+					this.SwapPositionsInAEL(horzEdge, e);
+					e = eNext;
+				} //end while(e !== null)
+
+				//Break out of loop if HorzEdge.NextInLML is not also horizontal ...
+				if (horzEdge.NextInLML === null || !ClipperLib.ClipperBase.IsHorizontal(horzEdge.NextInLML))
+				{
+					break;
+				}
+
+				horzEdge = this.UpdateEdgeIntoAEL(horzEdge);
+				if (horzEdge.OutIdx >= 0)
+				{
+					this.AddOutPt(horzEdge, horzEdge.Bot);
+				}
+
+				$var = {
+					Dir: dir,
+					Left: horzLeft,
+					Right: horzRight
+				};
+
+				this.GetHorzDirection(horzEdge, $var);
+				dir = $var.Dir;
+				horzLeft = $var.Left;
+				horzRight = $var.Right;
+
+			} //end for (;;)
+
+			if (horzEdge.OutIdx >= 0 && op1 === null)
+			{
+				op1 = this.GetLastOutPt(horzEdge);
+				var eNextHorz = this.m_SortedEdges;
+				while (eNextHorz !== null)
+				{
+					if (eNextHorz.OutIdx >= 0 && this.HorzSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
+					{
+						var op2 = this.GetLastOutPt(eNextHorz);
+						this.AddJoin(op2, op1, eNextHorz.Top);
+					}
+					eNextHorz = eNextHorz.NextInSEL;
+				}
+				this.AddGhostJoin(op1, horzEdge.Top);
+			}
+
+			if (horzEdge.NextInLML !== null)
+			{
+				if (horzEdge.OutIdx >= 0)
+				{
+					op1 = this.AddOutPt(horzEdge, horzEdge.Top);
+
+					horzEdge = this.UpdateEdgeIntoAEL(horzEdge);
+					if (horzEdge.WindDelta === 0)
+					{
+						return;
+					}
+					//nb: HorzEdge is no longer horizontal here
+					var ePrev = horzEdge.PrevInAEL;
+					var eNext = horzEdge.NextInAEL;
+					if (ePrev !== null && ePrev.Curr.X === horzEdge.Bot.X && ePrev.Curr.Y === horzEdge.Bot.Y && ePrev.WindDelta === 0 && (ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y && ClipperLib.ClipperBase.SlopesEqual3(horzEdge, ePrev, this.m_UseFullRange)))
+					{
+						var op2 = this.AddOutPt(ePrev, horzEdge.Bot);
+						this.AddJoin(op1, op2, horzEdge.Top);
+					}
+					else if (eNext !== null && eNext.Curr.X === horzEdge.Bot.X && eNext.Curr.Y === horzEdge.Bot.Y && eNext.WindDelta !== 0 && eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y && ClipperLib.ClipperBase.SlopesEqual3(horzEdge, eNext, this.m_UseFullRange))
+					{
+						var op2 = this.AddOutPt(eNext, horzEdge.Bot);
+						this.AddJoin(op1, op2, horzEdge.Top);
+					}
+				}
+				else
+				{
+					horzEdge = this.UpdateEdgeIntoAEL(horzEdge);
+				}
+			}
+			else
+			{
+				if (horzEdge.OutIdx >= 0)
+				{
+					this.AddOutPt(horzEdge, horzEdge.Top);
+				}
+				this.DeleteFromAEL(horzEdge);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.GetNextInAEL = function (e, Direction)
+		{
+			return Direction === ClipperLib.Direction.dLeftToRight ? e.NextInAEL : e.PrevInAEL;
+		};
+
+		ClipperLib.Clipper.prototype.IsMinima = function (e)
+		{
+			return e !== null && (e.Prev.NextInLML !== e) && (e.Next.NextInLML !== e);
+		};
+
+		ClipperLib.Clipper.prototype.IsMaxima = function (e, Y)
+		{
+			return (e !== null && e.Top.Y === Y && e.NextInLML === null);
+		};
+
+		ClipperLib.Clipper.prototype.IsIntermediate = function (e, Y)
+		{
+			return (e.Top.Y === Y && e.NextInLML !== null);
+		};
+
+		ClipperLib.Clipper.prototype.GetMaximaPair = function (e)
+		{
+			if ((ClipperLib.IntPoint.op_Equality(e.Next.Top, e.Top)) && e.Next.NextInLML === null)
+			{
+				return e.Next;
+			}
+			else
+			{
+				if ((ClipperLib.IntPoint.op_Equality(e.Prev.Top, e.Top)) && e.Prev.NextInLML === null)
+				{
+					return e.Prev;
+				}
+				else
+				{
+					return null;
+				}
+			}
+		};
+
+		ClipperLib.Clipper.prototype.GetMaximaPairEx = function (e)
+		{
+			//as above but returns null if MaxPair isn't in AEL (unless it's horizontal)
+			var result = this.GetMaximaPair(e);
+			if (result === null || result.OutIdx === ClipperLib.ClipperBase.Skip ||
+				((result.NextInAEL === result.PrevInAEL) && !ClipperLib.ClipperBase.IsHorizontal(result)))
+			{
+				return null;
+			}
+			return result;
+		};
+
+		ClipperLib.Clipper.prototype.ProcessIntersections = function (topY)
+		{
+			if (this.m_ActiveEdges === null)
+				return true;
+			try
+			{
+				this.BuildIntersectList(topY);
+				if (this.m_IntersectList.length === 0)
+					return true;
+				if (this.m_IntersectList.length === 1 || this.FixupIntersectionOrder())
+					this.ProcessIntersectList();
+				else
+					return false;
+			}
+			catch ($$e2)
+			{
+				this.m_SortedEdges = null;
+				this.m_IntersectList.length = 0;
+				ClipperLib.Error("ProcessIntersections error");
+			}
+			this.m_SortedEdges = null;
+			return true;
+		};
+
+		ClipperLib.Clipper.prototype.BuildIntersectList = function (topY)
+		{
+			if (this.m_ActiveEdges === null)
+				return;
+			//prepare for sorting ...
+			var e = this.m_ActiveEdges;
+			//console.log(JSON.stringify(JSON.decycle( e )));
+			this.m_SortedEdges = e;
+			while (e !== null)
+			{
+				e.PrevInSEL = e.PrevInAEL;
+				e.NextInSEL = e.NextInAEL;
+				e.Curr.X = ClipperLib.Clipper.TopX(e, topY);
+				e = e.NextInAEL;
+			}
+			//bubblesort ...
+			var isModified = true;
+			while (isModified && this.m_SortedEdges !== null)
+			{
+				isModified = false;
+				e = this.m_SortedEdges;
+				while (e.NextInSEL !== null)
+				{
+					var eNext = e.NextInSEL;
+					var pt = new ClipperLib.IntPoint0();
+					//console.log("e.Curr.X: " + e.Curr.X + " eNext.Curr.X" + eNext.Curr.X);
+					if (e.Curr.X > eNext.Curr.X)
+					{
+						this.IntersectPoint(e, eNext, pt);
+						if (pt.Y < topY)
+						{
+							pt = new ClipperLib.IntPoint2(ClipperLib.Clipper.TopX(e, topY), topY);
+						}
+						var newNode = new ClipperLib.IntersectNode();
+						newNode.Edge1 = e;
+						newNode.Edge2 = eNext;
+						//newNode.Pt = pt;
+						newNode.Pt.X = pt.X;
+						newNode.Pt.Y = pt.Y;
+						if (ClipperLib.use_xyz) newNode.Pt.Z = pt.Z;
+						this.m_IntersectList.push(newNode);
+						this.SwapPositionsInSEL(e, eNext);
+						isModified = true;
+					}
+					else
+						e = eNext;
+				}
+				if (e.PrevInSEL !== null)
+					e.PrevInSEL.NextInSEL = null;
+				else
+					break;
+			}
+			this.m_SortedEdges = null;
+		};
+
+		ClipperLib.Clipper.prototype.EdgesAdjacent = function (inode)
+		{
+			return (inode.Edge1.NextInSEL === inode.Edge2) || (inode.Edge1.PrevInSEL === inode.Edge2);
+		};
+
+		ClipperLib.Clipper.IntersectNodeSort = function (node1, node2)
+		{
+			//the following typecast is safe because the differences in Pt.Y will
+			//be limited to the height of the scanbeam.
+			return (node2.Pt.Y - node1.Pt.Y);
+		};
+
+		ClipperLib.Clipper.prototype.FixupIntersectionOrder = function ()
+		{
+			//pre-condition: intersections are sorted bottom-most first.
+			//Now it's crucial that intersections are made only between adjacent edges,
+			//so to ensure this the order of intersections may need adjusting ...
+			this.m_IntersectList.sort(this.m_IntersectNodeComparer);
+			this.CopyAELToSEL();
+			var cnt = this.m_IntersectList.length;
+			for (var i = 0; i < cnt; i++)
+			{
+				if (!this.EdgesAdjacent(this.m_IntersectList[i]))
+				{
+					var j = i + 1;
+					while (j < cnt && !this.EdgesAdjacent(this.m_IntersectList[j]))
+						j++;
+					if (j === cnt)
+						return false;
+					var tmp = this.m_IntersectList[i];
+					this.m_IntersectList[i] = this.m_IntersectList[j];
+					this.m_IntersectList[j] = tmp;
+				}
+				this.SwapPositionsInSEL(this.m_IntersectList[i].Edge1, this.m_IntersectList[i].Edge2);
+			}
+			return true;
+		};
+
+		ClipperLib.Clipper.prototype.ProcessIntersectList = function ()
+		{
+			for (var i = 0, ilen = this.m_IntersectList.length; i < ilen; i++)
+			{
+				var iNode = this.m_IntersectList[i];
+				this.IntersectEdges(iNode.Edge1, iNode.Edge2, iNode.Pt);
+				this.SwapPositionsInAEL(iNode.Edge1, iNode.Edge2);
+			}
+			this.m_IntersectList.length = 0;
+		};
+
+		/*
+		--------------------------------
+		Round speedtest: http://jsperf.com/fastest-round
+		--------------------------------
+		*/
+		var R1 = function (a)
+		{
+			return a < 0 ? Math.ceil(a - 0.5) : Math.round(a)
+		};
+
+		var R2 = function (a)
+		{
+			return a < 0 ? Math.ceil(a - 0.5) : Math.floor(a + 0.5)
+		};
+
+		var R3 = function (a)
+		{
+			return a < 0 ? -Math.round(Math.abs(a)) : Math.round(a)
+		};
+
+		var R4 = function (a)
+		{
+			if (a < 0)
+			{
+				a -= 0.5;
+				return a < -2147483648 ? Math.ceil(a) : a | 0;
+			}
+			else
+			{
+				a += 0.5;
+				return a > 2147483647 ? Math.floor(a) : a | 0;
+			}
+		};
+
+		if (browser.msie) ClipperLib.Clipper.Round = R1;
+		else if (browser.chromium) ClipperLib.Clipper.Round = R3;
+		else if (browser.safari) ClipperLib.Clipper.Round = R4;
+		else ClipperLib.Clipper.Round = R2; // eg. browser.chrome || browser.firefox || browser.opera
+		ClipperLib.Clipper.TopX = function (edge, currentY)
+		{
+			//if (edge.Bot == edge.Curr) alert ("edge.Bot = edge.Curr");
+			//if (edge.Bot == edge.Top) alert ("edge.Bot = edge.Top");
+			if (currentY === edge.Top.Y)
+				return edge.Top.X;
+			return edge.Bot.X + ClipperLib.Clipper.Round(edge.Dx * (currentY - edge.Bot.Y));
+		};
+
+		ClipperLib.Clipper.prototype.IntersectPoint = function (edge1, edge2, ip)
+		{
+			ip.X = 0;
+			ip.Y = 0;
+			var b1, b2;
+			//nb: with very large coordinate values, it's possible for SlopesEqual() to
+			//return false but for the edge.Dx value be equal due to double precision rounding.
+			if (edge1.Dx === edge2.Dx)
+			{
+				ip.Y = edge1.Curr.Y;
+				ip.X = ClipperLib.Clipper.TopX(edge1, ip.Y);
+				return;
+			}
+			if (edge1.Delta.X === 0)
+			{
+				ip.X = edge1.Bot.X;
+				if (ClipperLib.ClipperBase.IsHorizontal(edge2))
+				{
+					ip.Y = edge2.Bot.Y;
+				}
+				else
+				{
+					b2 = edge2.Bot.Y - (edge2.Bot.X / edge2.Dx);
+					ip.Y = ClipperLib.Clipper.Round(ip.X / edge2.Dx + b2);
+				}
+			}
+			else if (edge2.Delta.X === 0)
+			{
+				ip.X = edge2.Bot.X;
+				if (ClipperLib.ClipperBase.IsHorizontal(edge1))
+				{
+					ip.Y = edge1.Bot.Y;
+				}
+				else
+				{
+					b1 = edge1.Bot.Y - (edge1.Bot.X / edge1.Dx);
+					ip.Y = ClipperLib.Clipper.Round(ip.X / edge1.Dx + b1);
+				}
+			}
+			else
+			{
+				b1 = edge1.Bot.X - edge1.Bot.Y * edge1.Dx;
+				b2 = edge2.Bot.X - edge2.Bot.Y * edge2.Dx;
+				var q = (b2 - b1) / (edge1.Dx - edge2.Dx);
+				ip.Y = ClipperLib.Clipper.Round(q);
+				if (Math.abs(edge1.Dx) < Math.abs(edge2.Dx))
+					ip.X = ClipperLib.Clipper.Round(edge1.Dx * q + b1);
+				else
+					ip.X = ClipperLib.Clipper.Round(edge2.Dx * q + b2);
+			}
+			if (ip.Y < edge1.Top.Y || ip.Y < edge2.Top.Y)
+			{
+				if (edge1.Top.Y > edge2.Top.Y)
+				{
+					ip.Y = edge1.Top.Y;
+					ip.X = ClipperLib.Clipper.TopX(edge2, edge1.Top.Y);
+					return ip.X < edge1.Top.X;
+				}
+				else
+					ip.Y = edge2.Top.Y;
+				if (Math.abs(edge1.Dx) < Math.abs(edge2.Dx))
+					ip.X = ClipperLib.Clipper.TopX(edge1, ip.Y);
+				else
+					ip.X = ClipperLib.Clipper.TopX(edge2, ip.Y);
+			}
+			//finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
+			if (ip.Y > edge1.Curr.Y)
+			{
+				ip.Y = edge1.Curr.Y;
+				//better to use the more vertical edge to derive X ...
+				if (Math.abs(edge1.Dx) > Math.abs(edge2.Dx))
+					ip.X = ClipperLib.Clipper.TopX(edge2, ip.Y);
+				else
+					ip.X = ClipperLib.Clipper.TopX(edge1, ip.Y);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.ProcessEdgesAtTopOfScanbeam = function (topY)
+		{
+			var e = this.m_ActiveEdges;
+
+			while (e !== null)
+			{
+				//1. process maxima, treating them as if they're 'bent' horizontal edges,
+				//   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
+				var IsMaximaEdge = this.IsMaxima(e, topY);
+				if (IsMaximaEdge)
+				{
+					var eMaxPair = this.GetMaximaPairEx(e);
+					IsMaximaEdge = (eMaxPair === null || !ClipperLib.ClipperBase.IsHorizontal(eMaxPair));
+				}
+				if (IsMaximaEdge)
+				{
+					if (this.StrictlySimple)
+					{
+						this.InsertMaxima(e.Top.X);
+					}
+					var ePrev = e.PrevInAEL;
+					this.DoMaxima(e);
+					if (ePrev === null)
+						e = this.m_ActiveEdges;
+					else
+						e = ePrev.NextInAEL;
+				}
+				else
+				{
+					//2. promote horizontal edges, otherwise update Curr.X and Curr.Y ...
+					if (this.IsIntermediate(e, topY) && ClipperLib.ClipperBase.IsHorizontal(e.NextInLML))
+					{
+						e = this.UpdateEdgeIntoAEL(e);
+						if (e.OutIdx >= 0)
+							this.AddOutPt(e, e.Bot);
+						this.AddEdgeToSEL(e);
+					}
+					else
+					{
+						e.Curr.X = ClipperLib.Clipper.TopX(e, topY);
+						e.Curr.Y = topY;
+					}
+
+					if (ClipperLib.use_xyz)
+					{
+						if (e.Top.Y === topY) e.Curr.Z = e.Top.Z;
+						else if (e.Bot.Y === topY) e.Curr.Z = e.Bot.Z;
+						else e.Curr.Z = 0;
+					}
+
+					//When StrictlySimple and 'e' is being touched by another edge, then
+					//make sure both edges have a vertex here ...
+					if (this.StrictlySimple)
+					{
+						var ePrev = e.PrevInAEL;
+						if ((e.OutIdx >= 0) && (e.WindDelta !== 0) && ePrev !== null &&
+							(ePrev.OutIdx >= 0) && (ePrev.Curr.X === e.Curr.X) &&
+							(ePrev.WindDelta !== 0))
+						{
+							var ip = new ClipperLib.IntPoint1(e.Curr);
+
+							if (ClipperLib.use_xyz)
+							{
+								this.SetZ(ip, ePrev, e);
+							}
+
+							var op = this.AddOutPt(ePrev, ip);
+							var op2 = this.AddOutPt(e, ip);
+							this.AddJoin(op, op2, ip); //StrictlySimple (type-3) join
+						}
+					}
+					e = e.NextInAEL;
+				}
+			}
+			//3. Process horizontals at the Top of the scanbeam ...
+			this.ProcessHorizontals();
+			this.m_Maxima = null;
+			//4. Promote intermediate vertices ...
+			e = this.m_ActiveEdges;
+			while (e !== null)
+			{
+				if (this.IsIntermediate(e, topY))
+				{
+					var op = null;
+					if (e.OutIdx >= 0)
+						op = this.AddOutPt(e, e.Top);
+					e = this.UpdateEdgeIntoAEL(e);
+					//if output polygons share an edge, they'll need joining later ...
+					var ePrev = e.PrevInAEL;
+					var eNext = e.NextInAEL;
+
+					if (ePrev !== null && ePrev.Curr.X === e.Bot.X && ePrev.Curr.Y === e.Bot.Y && op !== null && ePrev.OutIdx >= 0 && ePrev.Curr.Y === ePrev.Top.Y && ClipperLib.ClipperBase.SlopesEqual5(e.Curr, e.Top, ePrev.Curr, ePrev.Top, this.m_UseFullRange) && (e.WindDelta !== 0) && (ePrev.WindDelta !== 0))
+					{
+						var op2 = this.AddOutPt(ePrev2, e.Bot);
+						this.AddJoin(op, op2, e.Top);
+					}
+					else if (eNext !== null && eNext.Curr.X === e.Bot.X && eNext.Curr.Y === e.Bot.Y && op !== null && eNext.OutIdx >= 0 && eNext.Curr.Y === eNext.Top.Y && ClipperLib.ClipperBase.SlopesEqual5(e.Curr, e.Top, eNext.Curr, eNext.Top, this.m_UseFullRange) && (e.WindDelta !== 0) && (eNext.WindDelta !== 0))
+					{
+						var op2 = this.AddOutPt(eNext, e.Bot);
+						this.AddJoin(op, op2, e.Top);
+					}
+				}
+				e = e.NextInAEL;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.DoMaxima = function (e)
+		{
+			var eMaxPair = this.GetMaximaPairEx(e);
+			if (eMaxPair === null)
+			{
+				if (e.OutIdx >= 0)
+					this.AddOutPt(e, e.Top);
+				this.DeleteFromAEL(e);
+				return;
+			}
+			var eNext = e.NextInAEL;
+			while (eNext !== null && eNext !== eMaxPair)
+			{
+				this.IntersectEdges(e, eNext, e.Top);
+				this.SwapPositionsInAEL(e, eNext);
+				eNext = e.NextInAEL;
+			}
+			if (e.OutIdx === -1 && eMaxPair.OutIdx === -1)
+			{
+				this.DeleteFromAEL(e);
+				this.DeleteFromAEL(eMaxPair);
+			}
+			else if (e.OutIdx >= 0 && eMaxPair.OutIdx >= 0)
+			{
+				if (e.OutIdx >= 0) this.AddLocalMaxPoly(e, eMaxPair, e.Top);
+				this.DeleteFromAEL(e);
+				this.DeleteFromAEL(eMaxPair);
+			}
+			else if (ClipperLib.use_lines && e.WindDelta === 0)
+			{
+				if (e.OutIdx >= 0)
+				{
+					this.AddOutPt(e, e.Top);
+					e.OutIdx = ClipperLib.ClipperBase.Unassigned;
+				}
+				this.DeleteFromAEL(e);
+				if (eMaxPair.OutIdx >= 0)
+				{
+					this.AddOutPt(eMaxPair, e.Top);
+					eMaxPair.OutIdx = ClipperLib.ClipperBase.Unassigned;
+				}
+				this.DeleteFromAEL(eMaxPair);
+			}
+			else
+				ClipperLib.Error("DoMaxima error");
+		};
+
+		ClipperLib.Clipper.ReversePaths = function (polys)
+		{
+			for (var i = 0, len = polys.length; i < len; i++)
+				polys[i].reverse();
+		};
+
+		ClipperLib.Clipper.Orientation = function (poly)
+		{
+			return ClipperLib.Clipper.Area(poly) >= 0;
+		};
+
+		ClipperLib.Clipper.prototype.PointCount = function (pts)
+		{
+			if (pts === null)
+				return 0;
+			var result = 0;
+			var p = pts;
+			do {
+				result++;
+				p = p.Next;
+			}
+			while (p !== pts)
+			return result;
+		};
+
+		ClipperLib.Clipper.prototype.BuildResult = function (polyg)
+		{
+			ClipperLib.Clear(polyg);
+			for (var i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+			{
+				var outRec = this.m_PolyOuts[i];
+				if (outRec.Pts === null)
+					continue;
+				var p = outRec.Pts.Prev;
+				var cnt = this.PointCount(p);
+				if (cnt < 2)
+					continue;
+				var pg = new Array(cnt);
+				for (var j = 0; j < cnt; j++)
+				{
+					pg[j] = p.Pt;
+					p = p.Prev;
+				}
+				polyg.push(pg);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.BuildResult2 = function (polytree)
+		{
+			polytree.Clear();
+			//add each output polygon/contour to polytree ...
+			//polytree.m_AllPolys.set_Capacity(this.m_PolyOuts.length);
+			for (var i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+			{
+				var outRec = this.m_PolyOuts[i];
+				var cnt = this.PointCount(outRec.Pts);
+				if ((outRec.IsOpen && cnt < 2) || (!outRec.IsOpen && cnt < 3))
+					continue;
+				this.FixHoleLinkage(outRec);
+				var pn = new ClipperLib.PolyNode();
+				polytree.m_AllPolys.push(pn);
+				outRec.PolyNode = pn;
+				pn.m_polygon.length = cnt;
+				var op = outRec.Pts.Prev;
+				for (var j = 0; j < cnt; j++)
+				{
+					pn.m_polygon[j] = op.Pt;
+					op = op.Prev;
+				}
+			}
+			//fixup PolyNode links etc ...
+			//polytree.m_Childs.set_Capacity(this.m_PolyOuts.length);
+			for (var i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+			{
+				var outRec = this.m_PolyOuts[i];
+				if (outRec.PolyNode === null)
+					continue;
+				else if (outRec.IsOpen)
+				{
+					outRec.PolyNode.IsOpen = true;
+					polytree.AddChild(outRec.PolyNode);
+				}
+				else if (outRec.FirstLeft !== null && outRec.FirstLeft.PolyNode !== null)
+					outRec.FirstLeft.PolyNode.AddChild(outRec.PolyNode);
+				else
+					polytree.AddChild(outRec.PolyNode);
+			}
+		};
+
+		ClipperLib.Clipper.prototype.FixupOutPolyline = function (outRec)
+		{
+			var pp = outRec.Pts;
+			var lastPP = pp.Prev;
+			while (pp !== lastPP)
+			{
+				pp = pp.Next;
+				if (ClipperLib.IntPoint.op_Equality(pp.Pt, pp.Prev.Pt))
+				{
+					if (pp === lastPP)
+					{
+						lastPP = pp.Prev;
+					}
+					var tmpPP = pp.Prev;
+					tmpPP.Next = pp.Next;
+					pp.Next.Prev = tmpPP;
+					pp = tmpPP;
+				}
+			}
+			if (pp === pp.Prev)
+			{
+				outRec.Pts = null;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.FixupOutPolygon = function (outRec)
+		{
+			//FixupOutPolygon() - removes duplicate points and simplifies consecutive
+			//parallel edges by removing the middle vertex.
+			var lastOK = null;
+			outRec.BottomPt = null;
+			var pp = outRec.Pts;
+			var preserveCol = this.PreserveCollinear || this.StrictlySimple;
+			for (;;)
+			{
+				if (pp.Prev === pp || pp.Prev === pp.Next)
+				{
+					outRec.Pts = null;
+					return;
+				}
+
+				//test for duplicate points and collinear edges ...
+				if ((ClipperLib.IntPoint.op_Equality(pp.Pt, pp.Next.Pt)) || (ClipperLib.IntPoint.op_Equality(pp.Pt, pp.Prev.Pt)) || (ClipperLib.ClipperBase.SlopesEqual4(pp.Prev.Pt, pp.Pt, pp.Next.Pt, this.m_UseFullRange) && (!preserveCol || !this.Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
+				{
+					lastOK = null;
+					pp.Prev.Next = pp.Next;
+					pp.Next.Prev = pp.Prev;
+					pp = pp.Prev;
+				}
+				else if (pp === lastOK)
+					break;
+				else
+				{
+					if (lastOK === null)
+						lastOK = pp;
+					pp = pp.Next;
+				}
+			}
+			outRec.Pts = pp;
+		};
+
+		ClipperLib.Clipper.prototype.DupOutPt = function (outPt, InsertAfter)
+		{
+			var result = new ClipperLib.OutPt();
+			//result.Pt = outPt.Pt;
+			result.Pt.X = outPt.Pt.X;
+			result.Pt.Y = outPt.Pt.Y;
+			if (ClipperLib.use_xyz) result.Pt.Z = outPt.Pt.Z;
+			result.Idx = outPt.Idx;
+			if (InsertAfter)
+			{
+				result.Next = outPt.Next;
+				result.Prev = outPt;
+				outPt.Next.Prev = result;
+				outPt.Next = result;
+			}
+			else
+			{
+				result.Prev = outPt.Prev;
+				result.Next = outPt;
+				outPt.Prev.Next = result;
+				outPt.Prev = result;
+			}
+			return result;
+		};
+
+		ClipperLib.Clipper.prototype.GetOverlap = function (a1, a2, b1, b2, $val)
+		{
+			if (a1 < a2)
+			{
+				if (b1 < b2)
+				{
+					$val.Left = Math.max(a1, b1);
+					$val.Right = Math.min(a2, b2);
+				}
+				else
+				{
+					$val.Left = Math.max(a1, b2);
+					$val.Right = Math.min(a2, b1);
+				}
+			}
+			else
+			{
+				if (b1 < b2)
+				{
+					$val.Left = Math.max(a2, b1);
+					$val.Right = Math.min(a1, b2);
+				}
+				else
+				{
+					$val.Left = Math.max(a2, b2);
+					$val.Right = Math.min(a1, b1);
+				}
+			}
+			return $val.Left < $val.Right;
+		};
+
+		ClipperLib.Clipper.prototype.JoinHorz = function (op1, op1b, op2, op2b, Pt, DiscardLeft)
+		{
+			var Dir1 = (op1.Pt.X > op1b.Pt.X ? ClipperLib.Direction.dRightToLeft : ClipperLib.Direction.dLeftToRight);
+			var Dir2 = (op2.Pt.X > op2b.Pt.X ? ClipperLib.Direction.dRightToLeft : ClipperLib.Direction.dLeftToRight);
+			if (Dir1 === Dir2)
+				return false;
+			//When DiscardLeft, we want Op1b to be on the Left of Op1, otherwise we
+			//want Op1b to be on the Right. (And likewise with Op2 and Op2b.)
+			//So, to facilitate this while inserting Op1b and Op2b ...
+			//when DiscardLeft, make sure we're AT or RIGHT of Pt before adding Op1b,
+			//otherwise make sure we're AT or LEFT of Pt. (Likewise with Op2b.)
+			if (Dir1 === ClipperLib.Direction.dLeftToRight)
+			{
+				while (op1.Next.Pt.X <= Pt.X &&
+					op1.Next.Pt.X >= op1.Pt.X && op1.Next.Pt.Y === Pt.Y)
+					op1 = op1.Next;
+				if (DiscardLeft && (op1.Pt.X !== Pt.X))
+					op1 = op1.Next;
+				op1b = this.DupOutPt(op1, !DiscardLeft);
+				if (ClipperLib.IntPoint.op_Inequality(op1b.Pt, Pt))
+				{
+					op1 = op1b;
+					//op1.Pt = Pt;
+					op1.Pt.X = Pt.X;
+					op1.Pt.Y = Pt.Y;
+					if (ClipperLib.use_xyz) op1.Pt.Z = Pt.Z;
+					op1b = this.DupOutPt(op1, !DiscardLeft);
+				}
+			}
+			else
+			{
+				while (op1.Next.Pt.X >= Pt.X &&
+					op1.Next.Pt.X <= op1.Pt.X && op1.Next.Pt.Y === Pt.Y)
+					op1 = op1.Next;
+				if (!DiscardLeft && (op1.Pt.X !== Pt.X))
+					op1 = op1.Next;
+				op1b = this.DupOutPt(op1, DiscardLeft);
+				if (ClipperLib.IntPoint.op_Inequality(op1b.Pt, Pt))
+				{
+					op1 = op1b;
+					//op1.Pt = Pt;
+					op1.Pt.X = Pt.X;
+					op1.Pt.Y = Pt.Y;
+					if (ClipperLib.use_xyz) op1.Pt.Z = Pt.Z;
+					op1b = this.DupOutPt(op1, DiscardLeft);
+				}
+			}
+			if (Dir2 === ClipperLib.Direction.dLeftToRight)
+			{
+				while (op2.Next.Pt.X <= Pt.X &&
+					op2.Next.Pt.X >= op2.Pt.X && op2.Next.Pt.Y === Pt.Y)
+					op2 = op2.Next;
+				if (DiscardLeft && (op2.Pt.X !== Pt.X))
+					op2 = op2.Next;
+				op2b = this.DupOutPt(op2, !DiscardLeft);
+				if (ClipperLib.IntPoint.op_Inequality(op2b.Pt, Pt))
+				{
+					op2 = op2b;
+					//op2.Pt = Pt;
+					op2.Pt.X = Pt.X;
+					op2.Pt.Y = Pt.Y;
+					if (ClipperLib.use_xyz) op2.Pt.Z = Pt.Z;
+					op2b = this.DupOutPt(op2, !DiscardLeft);
+				}
+			}
+			else
+			{
+				while (op2.Next.Pt.X >= Pt.X &&
+					op2.Next.Pt.X <= op2.Pt.X && op2.Next.Pt.Y === Pt.Y)
+					op2 = op2.Next;
+				if (!DiscardLeft && (op2.Pt.X !== Pt.X))
+					op2 = op2.Next;
+				op2b = this.DupOutPt(op2, DiscardLeft);
+				if (ClipperLib.IntPoint.op_Inequality(op2b.Pt, Pt))
+				{
+					op2 = op2b;
+					//op2.Pt = Pt;
+					op2.Pt.X = Pt.X;
+					op2.Pt.Y = Pt.Y;
+					if (ClipperLib.use_xyz) op2.Pt.Z = Pt.Z;
+					op2b = this.DupOutPt(op2, DiscardLeft);
+				}
+			}
+			if ((Dir1 === ClipperLib.Direction.dLeftToRight) === DiscardLeft)
+			{
+				op1.Prev = op2;
+				op2.Next = op1;
+				op1b.Next = op2b;
+				op2b.Prev = op1b;
+			}
+			else
+			{
+				op1.Next = op2;
+				op2.Prev = op1;
+				op1b.Prev = op2b;
+				op2b.Next = op1b;
+			}
+			return true;
+		};
+
+		ClipperLib.Clipper.prototype.JoinPoints = function (j, outRec1, outRec2)
+		{
+			var op1 = j.OutPt1,
+				op1b = new ClipperLib.OutPt();
+			var op2 = j.OutPt2,
+				op2b = new ClipperLib.OutPt();
+			//There are 3 kinds of joins for output polygons ...
+			//1. Horizontal joins where Join.OutPt1 & Join.OutPt2 are vertices anywhere
+			//along (horizontal) collinear edges (& Join.OffPt is on the same horizontal).
+			//2. Non-horizontal joins where Join.OutPt1 & Join.OutPt2 are at the same
+			//location at the Bottom of the overlapping segment (& Join.OffPt is above).
+			//3. StrictlySimple joins where edges touch but are not collinear and where
+			//Join.OutPt1, Join.OutPt2 & Join.OffPt all share the same point.
+			var isHorizontal = (j.OutPt1.Pt.Y === j.OffPt.Y);
+			if (isHorizontal && (ClipperLib.IntPoint.op_Equality(j.OffPt, j.OutPt1.Pt)) && (ClipperLib.IntPoint.op_Equality(j.OffPt, j.OutPt2.Pt)))
+			{
+				//Strictly Simple join ...
+				if (outRec1 !== outRec2) return false;
+
+				op1b = j.OutPt1.Next;
+				while (op1b !== op1 && (ClipperLib.IntPoint.op_Equality(op1b.Pt, j.OffPt)))
+					op1b = op1b.Next;
+				var reverse1 = (op1b.Pt.Y > j.OffPt.Y);
+				op2b = j.OutPt2.Next;
+				while (op2b !== op2 && (ClipperLib.IntPoint.op_Equality(op2b.Pt, j.OffPt)))
+					op2b = op2b.Next;
+				var reverse2 = (op2b.Pt.Y > j.OffPt.Y);
+				if (reverse1 === reverse2)
+					return false;
+				if (reverse1)
+				{
+					op1b = this.DupOutPt(op1, false);
+					op2b = this.DupOutPt(op2, true);
+					op1.Prev = op2;
+					op2.Next = op1;
+					op1b.Next = op2b;
+					op2b.Prev = op1b;
+					j.OutPt1 = op1;
+					j.OutPt2 = op1b;
+					return true;
+				}
+				else
+				{
+					op1b = this.DupOutPt(op1, true);
+					op2b = this.DupOutPt(op2, false);
+					op1.Next = op2;
+					op2.Prev = op1;
+					op1b.Prev = op2b;
+					op2b.Next = op1b;
+					j.OutPt1 = op1;
+					j.OutPt2 = op1b;
+					return true;
+				}
+			}
+			else if (isHorizontal)
+			{
+				//treat horizontal joins differently to non-horizontal joins since with
+				//them we're not yet sure where the overlapping is. OutPt1.Pt & OutPt2.Pt
+				//may be anywhere along the horizontal edge.
+				op1b = op1;
+				while (op1.Prev.Pt.Y === op1.Pt.Y && op1.Prev !== op1b && op1.Prev !== op2)
+					op1 = op1.Prev;
+				while (op1b.Next.Pt.Y === op1b.Pt.Y && op1b.Next !== op1 && op1b.Next !== op2)
+					op1b = op1b.Next;
+				if (op1b.Next === op1 || op1b.Next === op2)
+					return false;
+				//a flat 'polygon'
+				op2b = op2;
+				while (op2.Prev.Pt.Y === op2.Pt.Y && op2.Prev !== op2b && op2.Prev !== op1b)
+					op2 = op2.Prev;
+				while (op2b.Next.Pt.Y === op2b.Pt.Y && op2b.Next !== op2 && op2b.Next !== op1)
+					op2b = op2b.Next;
+				if (op2b.Next === op2 || op2b.Next === op1)
+					return false;
+				//a flat 'polygon'
+				//Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
+
+				var $val = {
+					Left: null,
+					Right: null
+				};
+
+				if (!this.GetOverlap(op1.Pt.X, op1b.Pt.X, op2.Pt.X, op2b.Pt.X, $val))
+					return false;
+				var Left = $val.Left;
+				var Right = $val.Right;
+
+				//DiscardLeftSide: when overlapping edges are joined, a spike will created
+				//which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
+				//on the discard Side as either may still be needed for other joins ...
+				var Pt = new ClipperLib.IntPoint0();
+				var DiscardLeftSide;
+				if (op1.Pt.X >= Left && op1.Pt.X <= Right)
+				{
+					//Pt = op1.Pt;
+					Pt.X = op1.Pt.X;
+					Pt.Y = op1.Pt.Y;
+					if (ClipperLib.use_xyz) Pt.Z = op1.Pt.Z;
+					DiscardLeftSide = (op1.Pt.X > op1b.Pt.X);
+				}
+				else if (op2.Pt.X >= Left && op2.Pt.X <= Right)
+				{
+					//Pt = op2.Pt;
+					Pt.X = op2.Pt.X;
+					Pt.Y = op2.Pt.Y;
+					if (ClipperLib.use_xyz) Pt.Z = op2.Pt.Z;
+					DiscardLeftSide = (op2.Pt.X > op2b.Pt.X);
+				}
+				else if (op1b.Pt.X >= Left && op1b.Pt.X <= Right)
+				{
+					//Pt = op1b.Pt;
+					Pt.X = op1b.Pt.X;
+					Pt.Y = op1b.Pt.Y;
+					if (ClipperLib.use_xyz) Pt.Z = op1b.Pt.Z;
+					DiscardLeftSide = op1b.Pt.X > op1.Pt.X;
+				}
+				else
+				{
+					//Pt = op2b.Pt;
+					Pt.X = op2b.Pt.X;
+					Pt.Y = op2b.Pt.Y;
+					if (ClipperLib.use_xyz) Pt.Z = op2b.Pt.Z;
+					DiscardLeftSide = (op2b.Pt.X > op2.Pt.X);
+				}
+				j.OutPt1 = op1;
+				j.OutPt2 = op2;
+				return this.JoinHorz(op1, op1b, op2, op2b, Pt, DiscardLeftSide);
+			}
+			else
+			{
+				//nb: For non-horizontal joins ...
+				//    1. Jr.OutPt1.Pt.Y == Jr.OutPt2.Pt.Y
+				//    2. Jr.OutPt1.Pt > Jr.OffPt.Y
+				//make sure the polygons are correctly oriented ...
+				op1b = op1.Next;
+				while ((ClipperLib.IntPoint.op_Equality(op1b.Pt, op1.Pt)) && (op1b !== op1))
+					op1b = op1b.Next;
+				var Reverse1 = ((op1b.Pt.Y > op1.Pt.Y) || !ClipperLib.ClipperBase.SlopesEqual4(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange));
+				if (Reverse1)
+				{
+					op1b = op1.Prev;
+					while ((ClipperLib.IntPoint.op_Equality(op1b.Pt, op1.Pt)) && (op1b !== op1))
+						op1b = op1b.Prev;
+
+					if ((op1b.Pt.Y > op1.Pt.Y) || !ClipperLib.ClipperBase.SlopesEqual4(op1.Pt, op1b.Pt, j.OffPt, this.m_UseFullRange))
+						return false;
+				}
+				op2b = op2.Next;
+				while ((ClipperLib.IntPoint.op_Equality(op2b.Pt, op2.Pt)) && (op2b !== op2))
+					op2b = op2b.Next;
+
+				var Reverse2 = ((op2b.Pt.Y > op2.Pt.Y) || !ClipperLib.ClipperBase.SlopesEqual4(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange));
+				if (Reverse2)
+				{
+					op2b = op2.Prev;
+					while ((ClipperLib.IntPoint.op_Equality(op2b.Pt, op2.Pt)) && (op2b !== op2))
+						op2b = op2b.Prev;
+
+					if ((op2b.Pt.Y > op2.Pt.Y) || !ClipperLib.ClipperBase.SlopesEqual4(op2.Pt, op2b.Pt, j.OffPt, this.m_UseFullRange))
+						return false;
+				}
+				if ((op1b === op1) || (op2b === op2) || (op1b === op2b) ||
+					((outRec1 === outRec2) && (Reverse1 === Reverse2)))
+					return false;
+				if (Reverse1)
+				{
+					op1b = this.DupOutPt(op1, false);
+					op2b = this.DupOutPt(op2, true);
+					op1.Prev = op2;
+					op2.Next = op1;
+					op1b.Next = op2b;
+					op2b.Prev = op1b;
+					j.OutPt1 = op1;
+					j.OutPt2 = op1b;
+					return true;
+				}
+				else
+				{
+					op1b = this.DupOutPt(op1, true);
+					op2b = this.DupOutPt(op2, false);
+					op1.Next = op2;
+					op2.Prev = op1;
+					op1b.Prev = op2b;
+					op2b.Next = op1b;
+					j.OutPt1 = op1;
+					j.OutPt2 = op1b;
+					return true;
+				}
+			}
+		};
+
+		ClipperLib.Clipper.GetBounds = function (paths)
+		{
+			var i = 0,
+				cnt = paths.length;
+			while (i < cnt && paths[i].length === 0) i++;
+			if (i === cnt) return new ClipperLib.IntRect(0, 0, 0, 0);
+			var result = new ClipperLib.IntRect();
+			result.left = paths[i][0].X;
+			result.right = result.left;
+			result.top = paths[i][0].Y;
+			result.bottom = result.top;
+			for (; i < cnt; i++)
+				for (var j = 0, jlen = paths[i].length; j < jlen; j++)
+				{
+					if (paths[i][j].X < result.left) result.left = paths[i][j].X;
+					else if (paths[i][j].X > result.right) result.right = paths[i][j].X;
+					if (paths[i][j].Y < result.top) result.top = paths[i][j].Y;
+					else if (paths[i][j].Y > result.bottom) result.bottom = paths[i][j].Y;
+				}
+			return result;
+		};
+		ClipperLib.Clipper.prototype.GetBounds2 = function (ops)
+		{
+			var opStart = ops;
+			var result = new ClipperLib.IntRect();
+			result.left = ops.Pt.X;
+			result.right = ops.Pt.X;
+			result.top = ops.Pt.Y;
+			result.bottom = ops.Pt.Y;
+			ops = ops.Next;
+			while (ops !== opStart)
+			{
+				if (ops.Pt.X < result.left)
+					result.left = ops.Pt.X;
+				if (ops.Pt.X > result.right)
+					result.right = ops.Pt.X;
+				if (ops.Pt.Y < result.top)
+					result.top = ops.Pt.Y;
+				if (ops.Pt.Y > result.bottom)
+					result.bottom = ops.Pt.Y;
+				ops = ops.Next;
+			}
+			return result;
+		};
+
+		ClipperLib.Clipper.PointInPolygon = function (pt, path)
+		{
+			//returns 0 if false, +1 if true, -1 if pt ON polygon boundary
+			//See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
+			//http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
+			var result = 0,
+				cnt = path.length;
+			if (cnt < 3)
+				return 0;
+			var ip = path[0];
+			for (var i = 1; i <= cnt; ++i)
+			{
+				var ipNext = (i === cnt ? path[0] : path[i]);
+				if (ipNext.Y === pt.Y)
+				{
+					if ((ipNext.X === pt.X) || (ip.Y === pt.Y && ((ipNext.X > pt.X) === (ip.X < pt.X))))
+						return -1;
+				}
+				if ((ip.Y < pt.Y) !== (ipNext.Y < pt.Y))
+				{
+					if (ip.X >= pt.X)
+					{
+						if (ipNext.X > pt.X)
+							result = 1 - result;
+						else
+						{
+							var d = (ip.X - pt.X) * (ipNext.Y - pt.Y) - (ipNext.X - pt.X) * (ip.Y - pt.Y);
+							if (d === 0)
+								return -1;
+							else if ((d > 0) === (ipNext.Y > ip.Y))
+								result = 1 - result;
+						}
+					}
+					else
+					{
+						if (ipNext.X > pt.X)
+						{
+							var d = (ip.X - pt.X) * (ipNext.Y - pt.Y) - (ipNext.X - pt.X) * (ip.Y - pt.Y);
+							if (d === 0)
+								return -1;
+							else if ((d > 0) === (ipNext.Y > ip.Y))
+								result = 1 - result;
+						}
+					}
+				}
+				ip = ipNext;
+			}
+			return result;
+		};
+
+		ClipperLib.Clipper.prototype.PointInPolygon = function (pt, op)
+		{
+			//returns 0 if false, +1 if true, -1 if pt ON polygon boundary
+			var result = 0;
+			var startOp = op;
+			var ptx = pt.X,
+				pty = pt.Y;
+			var poly0x = op.Pt.X,
+				poly0y = op.Pt.Y;
+			do {
+				op = op.Next;
+				var poly1x = op.Pt.X,
+					poly1y = op.Pt.Y;
+				if (poly1y === pty)
+				{
+					if ((poly1x === ptx) || (poly0y === pty && ((poly1x > ptx) === (poly0x < ptx))))
+						return -1;
+				}
+				if ((poly0y < pty) !== (poly1y < pty))
+				{
+					if (poly0x >= ptx)
+					{
+						if (poly1x > ptx)
+							result = 1 - result;
+						else
+						{
+							var d = (poly0x - ptx) * (poly1y - pty) - (poly1x - ptx) * (poly0y - pty);
+							if (d === 0)
+								return -1;
+							if ((d > 0) === (poly1y > poly0y))
+								result = 1 - result;
+						}
+					}
+					else
+					{
+						if (poly1x > ptx)
+						{
+							var d = (poly0x - ptx) * (poly1y - pty) - (poly1x - ptx) * (poly0y - pty);
+							if (d === 0)
+								return -1;
+							if ((d > 0) === (poly1y > poly0y))
+								result = 1 - result;
+						}
+					}
+				}
+				poly0x = poly1x;
+				poly0y = poly1y;
+			} while (startOp !== op);
+
+			return result;
+		};
+
+		ClipperLib.Clipper.prototype.Poly2ContainsPoly1 = function (outPt1, outPt2)
+		{
+			var op = outPt1;
+			do {
+				//nb: PointInPolygon returns 0 if false, +1 if true, -1 if pt on polygon
+				var res = this.PointInPolygon(op.Pt, outPt2);
+				if (res >= 0)
+					return res > 0;
+				op = op.Next;
+			}
+			while (op !== outPt1)
+			return true;
+		};
+
+		ClipperLib.Clipper.prototype.FixupFirstLefts1 = function (OldOutRec, NewOutRec)
+		{
+			var outRec, firstLeft;
+			for (var i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+			{
+				outRec = this.m_PolyOuts[i];
+				firstLeft = ClipperLib.Clipper.ParseFirstLeft(outRec.FirstLeft);
+				if (outRec.Pts !== null && firstLeft === OldOutRec)
+				{
+					if (this.Poly2ContainsPoly1(outRec.Pts, NewOutRec.Pts))
+						outRec.FirstLeft = NewOutRec;
+				}
+			}
+		};
+
+		ClipperLib.Clipper.prototype.FixupFirstLefts2 = function (innerOutRec, outerOutRec)
+		{
+			//A polygon has split into two such that one is now the inner of the other.
+			//It's possible that these polygons now wrap around other polygons, so check
+			//every polygon that's also contained by OuterOutRec's FirstLeft container
+			//(including nil) to see if they've become inner to the new inner polygon ...
+			var orfl = outerOutRec.FirstLeft;
+			var outRec, firstLeft;
+			for (var i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+			{
+				outRec = this.m_PolyOuts[i];
+				if (outRec.Pts === null || outRec === outerOutRec || outRec === innerOutRec)
+					continue;
+				firstLeft = ClipperLib.Clipper.ParseFirstLeft(outRec.FirstLeft);
+				if (firstLeft !== orfl && firstLeft !== innerOutRec && firstLeft !== outerOutRec)
+					continue;
+				if (this.Poly2ContainsPoly1(outRec.Pts, innerOutRec.Pts))
+					outRec.FirstLeft = innerOutRec;
+				else if (this.Poly2ContainsPoly1(outRec.Pts, outerOutRec.Pts))
+					outRec.FirstLeft = outerOutRec;
+				else if (outRec.FirstLeft === innerOutRec || outRec.FirstLeft === outerOutRec)
+					outRec.FirstLeft = orfl;
+			}
+		};
+
+		ClipperLib.Clipper.prototype.FixupFirstLefts3 = function (OldOutRec, NewOutRec)
+		{
+			//same as FixupFirstLefts1 but doesn't call Poly2ContainsPoly1()
+			var outRec;
+			var firstLeft;
+			for (var i = 0, ilen = this.m_PolyOuts.length; i < ilen; i++)
+			{
+				outRec = this.m_PolyOuts[i];
+				firstLeft = ClipperLib.Clipper.ParseFirstLeft(outRec.FirstLeft);
+				if (outRec.Pts !== null && firstLeft === OldOutRec)
+					outRec.FirstLeft = NewOutRec;
+			}
+		};
+
+		ClipperLib.Clipper.ParseFirstLeft = function (FirstLeft)
+		{
+			while (FirstLeft !== null && FirstLeft.Pts === null)
+				FirstLeft = FirstLeft.FirstLeft;
+			return FirstLeft;
+		};
+
+		ClipperLib.Clipper.prototype.JoinCommonEdges = function ()
+		{
+			for (var i = 0, ilen = this.m_Joins.length; i < ilen; i++)
+			{
+				var join = this.m_Joins[i];
+				var outRec1 = this.GetOutRec(join.OutPt1.Idx);
+				var outRec2 = this.GetOutRec(join.OutPt2.Idx);
+				if (outRec1.Pts === null || outRec2.Pts === null)
+					continue;
+
+				if (outRec1.IsOpen || outRec2.IsOpen)
+				{
+					continue;
+				}
+
+				//get the polygon fragment with the correct hole state (FirstLeft)
+				//before calling JoinPoints() ...
+				var holeStateRec;
+				if (outRec1 === outRec2)
+					holeStateRec = outRec1;
+				else if (this.OutRec1RightOfOutRec2(outRec1, outRec2))
+					holeStateRec = outRec2;
+				else if (this.OutRec1RightOfOutRec2(outRec2, outRec1))
+					holeStateRec = outRec1;
+				else
+					holeStateRec = this.GetLowermostRec(outRec1, outRec2);
+
+				if (!this.JoinPoints(join, outRec1, outRec2)) continue;
+
+				if (outRec1 === outRec2)
+				{
+					//instead of joining two polygons, we've just created a new one by
+					//splitting one polygon into two.
+					outRec1.Pts = join.OutPt1;
+					outRec1.BottomPt = null;
+					outRec2 = this.CreateOutRec();
+					outRec2.Pts = join.OutPt2;
+					//update all OutRec2.Pts Idx's ...
+					this.UpdateOutPtIdxs(outRec2);
+
+					if (this.Poly2ContainsPoly1(outRec2.Pts, outRec1.Pts))
+					{
+						//outRec1 contains outRec2 ...
+						outRec2.IsHole = !outRec1.IsHole;
+						outRec2.FirstLeft = outRec1;
+						if (this.m_UsingPolyTree)
+							this.FixupFirstLefts2(outRec2, outRec1);
+						if ((outRec2.IsHole ^ this.ReverseSolution) == (this.Area$1(outRec2) > 0))
+							this.ReversePolyPtLinks(outRec2.Pts);
+					}
+					else if (this.Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts))
+					{
+						//outRec2 contains outRec1 ...
+						outRec2.IsHole = outRec1.IsHole;
+						outRec1.IsHole = !outRec2.IsHole;
+						outRec2.FirstLeft = outRec1.FirstLeft;
+						outRec1.FirstLeft = outRec2;
+						if (this.m_UsingPolyTree)
+							this.FixupFirstLefts2(outRec1, outRec2);
+
+						if ((outRec1.IsHole ^ this.ReverseSolution) == (this.Area$1(outRec1) > 0))
+							this.ReversePolyPtLinks(outRec1.Pts);
+					}
+					else
+					{
+						//the 2 polygons are completely separate ...
+						outRec2.IsHole = outRec1.IsHole;
+						outRec2.FirstLeft = outRec1.FirstLeft;
+						//fixup FirstLeft pointers that may need reassigning to OutRec2
+						if (this.m_UsingPolyTree)
+							this.FixupFirstLefts1(outRec1, outRec2);
+					}
+				}
+				else
+				{
+					//joined 2 polygons together ...
+					outRec2.Pts = null;
+					outRec2.BottomPt = null;
+					outRec2.Idx = outRec1.Idx;
+					outRec1.IsHole = holeStateRec.IsHole;
+					if (holeStateRec === outRec2)
+						outRec1.FirstLeft = outRec2.FirstLeft;
+					outRec2.FirstLeft = outRec1;
+					//fixup FirstLeft pointers that may need reassigning to OutRec1
+					if (this.m_UsingPolyTree)
+						this.FixupFirstLefts3(outRec2, outRec1);
+				}
+			}
+		};
+
+		ClipperLib.Clipper.prototype.UpdateOutPtIdxs = function (outrec)
+		{
+			var op = outrec.Pts;
+			do {
+				op.Idx = outrec.Idx;
+				op = op.Prev;
+			}
+			while (op !== outrec.Pts)
+		};
+
+		ClipperLib.Clipper.prototype.DoSimplePolygons = function ()
+		{
+			var i = 0;
+			while (i < this.m_PolyOuts.length)
+			{
+				var outrec = this.m_PolyOuts[i++];
+				var op = outrec.Pts;
+				if (op === null || outrec.IsOpen)
+					continue;
+				do //for each Pt in Polygon until duplicate found do ...
+				{
+					var op2 = op.Next;
+					while (op2 !== outrec.Pts)
+					{
+						if ((ClipperLib.IntPoint.op_Equality(op.Pt, op2.Pt)) && op2.Next !== op && op2.Prev !== op)
+						{
+							//split the polygon into two ...
+							var op3 = op.Prev;
+							var op4 = op2.Prev;
+							op.Prev = op4;
+							op4.Next = op;
+							op2.Prev = op3;
+							op3.Next = op2;
+							outrec.Pts = op;
+							var outrec2 = this.CreateOutRec();
+							outrec2.Pts = op2;
+							this.UpdateOutPtIdxs(outrec2);
+							if (this.Poly2ContainsPoly1(outrec2.Pts, outrec.Pts))
+							{
+								//OutRec2 is contained by OutRec1 ...
+								outrec2.IsHole = !outrec.IsHole;
+								outrec2.FirstLeft = outrec;
+								if (this.m_UsingPolyTree) this.FixupFirstLefts2(outrec2, outrec);
+
+							}
+							else if (this.Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
+							{
+								//OutRec1 is contained by OutRec2 ...
+								outrec2.IsHole = outrec.IsHole;
+								outrec.IsHole = !outrec2.IsHole;
+								outrec2.FirstLeft = outrec.FirstLeft;
+								outrec.FirstLeft = outrec2;
+								if (this.m_UsingPolyTree) this.FixupFirstLefts2(outrec, outrec2);
+							}
+							else
+							{
+								//the 2 polygons are separate ...
+								outrec2.IsHole = outrec.IsHole;
+								outrec2.FirstLeft = outrec.FirstLeft;
+								if (this.m_UsingPolyTree) this.FixupFirstLefts1(outrec, outrec2);
+							}
+							op2 = op;
+							//ie get ready for the next iteration
+						}
+						op2 = op2.Next;
+					}
+					op = op.Next;
+				}
+				while (op !== outrec.Pts)
+			}
+		};
+
+		ClipperLib.Clipper.Area = function (poly)
+		{
+			if (!Array.isArray(poly))
+				return 0;
+			var cnt = poly.length;
+			if (cnt < 3)
+				return 0;
+			var a = 0;
+			for (var i = 0, j = cnt - 1; i < cnt; ++i)
+			{
+				a += (poly[j].X + poly[i].X) * (poly[j].Y - poly[i].Y);
+				j = i;
+			}
+			return -a * 0.5;
+		};
+
+		ClipperLib.Clipper.prototype.Area = function (op)
+		{
+			var opFirst = op;
+			if (op === null) return 0;
+			var a = 0;
+			do {
+				a = a + (op.Prev.Pt.X + op.Pt.X) * (op.Prev.Pt.Y - op.Pt.Y);
+				op = op.Next;
+			} while (op !== opFirst); // && typeof op !== 'undefined');
+			return a * 0.5;
+		};
+
+		ClipperLib.Clipper.prototype.Area$1 = function (outRec)
+		{
+			return this.Area(outRec.Pts);
+		};
+
+		ClipperLib.Clipper.SimplifyPolygon = function (poly, fillType)
+		{
+			var result = new Array();
+			var c = new ClipperLib.Clipper(0);
+			c.StrictlySimple = true;
+			c.AddPath(poly, ClipperLib.PolyType.ptSubject, true);
+			c.Execute(ClipperLib.ClipType.ctUnion, result, fillType, fillType);
+			return result;
+		};
+
+		ClipperLib.Clipper.SimplifyPolygons = function (polys, fillType)
+		{
+			if (typeof (fillType) === "undefined") fillType = ClipperLib.PolyFillType.pftEvenOdd;
+			var result = new Array();
+			var c = new ClipperLib.Clipper(0);
+			c.StrictlySimple = true;
+			c.AddPaths(polys, ClipperLib.PolyType.ptSubject, true);
+			c.Execute(ClipperLib.ClipType.ctUnion, result, fillType, fillType);
+			return result;
+		};
+
+		ClipperLib.Clipper.DistanceSqrd = function (pt1, pt2)
+		{
+			var dx = (pt1.X - pt2.X);
+			var dy = (pt1.Y - pt2.Y);
+			return (dx * dx + dy * dy);
+		};
+
+		ClipperLib.Clipper.DistanceFromLineSqrd = function (pt, ln1, ln2)
+		{
+			//The equation of a line in general form (Ax + By + C = 0)
+			//given 2 points (x¹,y¹) & (x²,y²) is ...
+			//(y¹ - y²)x + (x² - x¹)y + (y² - y¹)x¹ - (x² - x¹)y¹ = 0
+			//A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
+			//perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
+			//see http://en.wikipedia.org/wiki/Perpendicular_distance
+			var A = ln1.Y - ln2.Y;
+			var B = ln2.X - ln1.X;
+			var C = A * ln1.X + B * ln1.Y;
+			C = A * pt.X + B * pt.Y - C;
+			return (C * C) / (A * A + B * B);
+		};
+
+		ClipperLib.Clipper.SlopesNearCollinear = function (pt1, pt2, pt3, distSqrd)
+		{
+			//this function is more accurate when the point that's GEOMETRICALLY
+			//between the other 2 points is the one that's tested for distance.
+			//nb: with 'spikes', either pt1 or pt3 is geometrically between the other pts
+			if (Math.abs(pt1.X - pt2.X) > Math.abs(pt1.Y - pt2.Y))
+			{
+				if ((pt1.X > pt2.X) === (pt1.X < pt3.X))
+					return ClipperLib.Clipper.DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
+				else if ((pt2.X > pt1.X) === (pt2.X < pt3.X))
+					return ClipperLib.Clipper.DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
+				else
+					return ClipperLib.Clipper.DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
+			}
+			else
+			{
+				if ((pt1.Y > pt2.Y) === (pt1.Y < pt3.Y))
+					return ClipperLib.Clipper.DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
+				else if ((pt2.Y > pt1.Y) === (pt2.Y < pt3.Y))
+					return ClipperLib.Clipper.DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
+				else
+					return ClipperLib.Clipper.DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
+			}
+		};
+
+		ClipperLib.Clipper.PointsAreClose = function (pt1, pt2, distSqrd)
+		{
+			var dx = pt1.X - pt2.X;
+			var dy = pt1.Y - pt2.Y;
+			return ((dx * dx) + (dy * dy) <= distSqrd);
+		};
+
+		ClipperLib.Clipper.ExcludeOp = function (op)
+		{
+			var result = op.Prev;
+			result.Next = op.Next;
+			op.Next.Prev = result;
+			result.Idx = 0;
+			return result;
+		};
+
+		ClipperLib.Clipper.CleanPolygon = function (path, distance)
+		{
+			if (typeof (distance) === "undefined") distance = 1.415;
+			//distance = proximity in units/pixels below which vertices will be stripped.
+			//Default ~= sqrt(2) so when adjacent vertices or semi-adjacent vertices have
+			//both x & y coords within 1 unit, then the second vertex will be stripped.
+			var cnt = path.length;
+			if (cnt === 0)
+				return new Array();
+			var outPts = new Array(cnt);
+			for (var i = 0; i < cnt; ++i)
+				outPts[i] = new ClipperLib.OutPt();
+			for (var i = 0; i < cnt; ++i)
+			{
+				outPts[i].Pt = path[i];
+				outPts[i].Next = outPts[(i + 1) % cnt];
+				outPts[i].Next.Prev = outPts[i];
+				outPts[i].Idx = 0;
+			}
+			var distSqrd = distance * distance;
+			var op = outPts[0];
+			while (op.Idx === 0 && op.Next !== op.Prev)
+			{
+				if (ClipperLib.Clipper.PointsAreClose(op.Pt, op.Prev.Pt, distSqrd))
+				{
+					op = ClipperLib.Clipper.ExcludeOp(op);
+					cnt--;
+				}
+				else if (ClipperLib.Clipper.PointsAreClose(op.Prev.Pt, op.Next.Pt, distSqrd))
+				{
+					ClipperLib.Clipper.ExcludeOp(op.Next);
+					op = ClipperLib.Clipper.ExcludeOp(op);
+					cnt -= 2;
+				}
+				else if (ClipperLib.Clipper.SlopesNearCollinear(op.Prev.Pt, op.Pt, op.Next.Pt, distSqrd))
+				{
+					op = ClipperLib.Clipper.ExcludeOp(op);
+					cnt--;
+				}
+				else
+				{
+					op.Idx = 1;
+					op = op.Next;
+				}
+			}
+			if (cnt < 3)
+				cnt = 0;
+			var result = new Array(cnt);
+			for (var i = 0; i < cnt; ++i)
+			{
+				result[i] = new ClipperLib.IntPoint1(op.Pt);
+				op = op.Next;
+			}
+			outPts = null;
+			return result;
+		};
+
+		ClipperLib.Clipper.CleanPolygons = function (polys, distance)
+		{
+			var result = new Array(polys.length);
+			for (var i = 0, ilen = polys.length; i < ilen; i++)
+				result[i] = ClipperLib.Clipper.CleanPolygon(polys[i], distance);
+			return result;
+		};
+
+		ClipperLib.Clipper.Minkowski = function (pattern, path, IsSum, IsClosed)
+		{
+			var delta = (IsClosed ? 1 : 0);
+			var polyCnt = pattern.length;
+			var pathCnt = path.length;
+			var result = new Array();
+			if (IsSum)
+				for (var i = 0; i < pathCnt; i++)
+				{
+					var p = new Array(polyCnt);
+					for (var j = 0, jlen = pattern.length, ip = pattern[j]; j < jlen; j++, ip = pattern[j])
+						p[j] = new ClipperLib.IntPoint2(path[i].X + ip.X, path[i].Y + ip.Y);
+					result.push(p);
+				}
+			else
+				for (var i = 0; i < pathCnt; i++)
+				{
+					var p = new Array(polyCnt);
+					for (var j = 0, jlen = pattern.length, ip = pattern[j]; j < jlen; j++, ip = pattern[j])
+						p[j] = new ClipperLib.IntPoint2(path[i].X - ip.X, path[i].Y - ip.Y);
+					result.push(p);
+				}
+			var quads = new Array();
+			for (var i = 0; i < pathCnt - 1 + delta; i++)
+				for (var j = 0; j < polyCnt; j++)
+				{
+					var quad = new Array();
+					quad.push(result[i % pathCnt][j % polyCnt]);
+					quad.push(result[(i + 1) % pathCnt][j % polyCnt]);
+					quad.push(result[(i + 1) % pathCnt][(j + 1) % polyCnt]);
+					quad.push(result[i % pathCnt][(j + 1) % polyCnt]);
+					if (!ClipperLib.Clipper.Orientation(quad))
+						quad.reverse();
+					quads.push(quad);
+				}
+			return quads;
+		};
+
+		ClipperLib.Clipper.MinkowskiSum = function (pattern, path_or_paths, pathIsClosed)
+		{
+			if (!(path_or_paths[0] instanceof Array))
+			{
+				var path = path_or_paths;
+				var paths = ClipperLib.Clipper.Minkowski(pattern, path, true, pathIsClosed);
+				var c = new ClipperLib.Clipper();
+				c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
+				c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+				return paths;
+			}
+			else
+			{
+				var paths = path_or_paths;
+				var solution = new ClipperLib.Paths();
+				var c = new ClipperLib.Clipper();
+				for (var i = 0; i < paths.length; ++i)
+				{
+					var tmp = ClipperLib.Clipper.Minkowski(pattern, paths[i], true, pathIsClosed);
+					c.AddPaths(tmp, ClipperLib.PolyType.ptSubject, true);
+					if (pathIsClosed)
+					{
+						var path = ClipperLib.Clipper.TranslatePath(paths[i], pattern[0]);
+						c.AddPath(path, ClipperLib.PolyType.ptClip, true);
+					}
+				}
+				c.Execute(ClipperLib.ClipType.ctUnion, solution,
+					ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+				return solution;
+			}
+		};
+
+		ClipperLib.Clipper.TranslatePath = function (path, delta)
+		{
+			var outPath = new ClipperLib.Path();
+			for (var i = 0; i < path.length; i++)
+				outPath.push(new ClipperLib.IntPoint2(path[i].X + delta.X, path[i].Y + delta.Y));
+			return outPath;
+		};
+
+		ClipperLib.Clipper.MinkowskiDiff = function (poly1, poly2)
+		{
+			var paths = ClipperLib.Clipper.Minkowski(poly1, poly2, false, true);
+			var c = new ClipperLib.Clipper();
+			c.AddPaths(paths, ClipperLib.PolyType.ptSubject, true);
+			c.Execute(ClipperLib.ClipType.ctUnion, paths, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+			return paths;
+		};
+
+		ClipperLib.Clipper.PolyTreeToPaths = function (polytree)
+		{
+			var result = new Array();
+			//result.set_Capacity(polytree.get_Total());
+			ClipperLib.Clipper.AddPolyNodeToPaths(polytree, ClipperLib.Clipper.NodeType.ntAny, result);
+			return result;
+		};
+
+		ClipperLib.Clipper.AddPolyNodeToPaths = function (polynode, nt, paths)
+		{
+			var match = true;
+			switch (nt)
+			{
+			case ClipperLib.Clipper.NodeType.ntOpen:
+				return;
+			case ClipperLib.Clipper.NodeType.ntClosed:
+				match = !polynode.IsOpen;
+				break;
+			default:
+				break;
+			}
+			if (polynode.m_polygon.length > 0 && match)
+				paths.push(polynode.m_polygon);
+			for (var $i3 = 0, $t3 = polynode.Childs(), $l3 = $t3.length, pn = $t3[$i3]; $i3 < $l3; $i3++, pn = $t3[$i3])
+				ClipperLib.Clipper.AddPolyNodeToPaths(pn, nt, paths);
+		};
+
+		ClipperLib.Clipper.OpenPathsFromPolyTree = function (polytree)
+		{
+			var result = new ClipperLib.Paths();
+			//result.set_Capacity(polytree.ChildCount());
+			for (var i = 0, ilen = polytree.ChildCount(); i < ilen; i++)
+				if (polytree.Childs()[i].IsOpen)
+					result.push(polytree.Childs()[i].m_polygon);
+			return result;
+		};
+
+		ClipperLib.Clipper.ClosedPathsFromPolyTree = function (polytree)
+		{
+			var result = new ClipperLib.Paths();
+			//result.set_Capacity(polytree.Total());
+			ClipperLib.Clipper.AddPolyNodeToPaths(polytree, ClipperLib.Clipper.NodeType.ntClosed, result);
+			return result;
+		};
+
+		Inherit(ClipperLib.Clipper, ClipperLib.ClipperBase);
+		ClipperLib.Clipper.NodeType = {
+			ntAny: 0,
+			ntOpen: 1,
+			ntClosed: 2
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.ClipperOffset = function (miterLimit, arcTolerance)
+		{
+			if (typeof (miterLimit) === "undefined") miterLimit = 2;
+			if (typeof (arcTolerance) === "undefined") arcTolerance = ClipperLib.ClipperOffset.def_arc_tolerance;
+			this.m_destPolys = new ClipperLib.Paths();
+			this.m_srcPoly = new ClipperLib.Path();
+			this.m_destPoly = new ClipperLib.Path();
+			this.m_normals = new Array();
+			this.m_delta = 0;
+			this.m_sinA = 0;
+			this.m_sin = 0;
+			this.m_cos = 0;
+			this.m_miterLim = 0;
+			this.m_StepsPerRad = 0;
+			this.m_lowest = new ClipperLib.IntPoint0();
+			this.m_polyNodes = new ClipperLib.PolyNode();
+			this.MiterLimit = miterLimit;
+			this.ArcTolerance = arcTolerance;
+			this.m_lowest.X = -1;
+		};
+
+		ClipperLib.ClipperOffset.two_pi = 6.28318530717959;
+		ClipperLib.ClipperOffset.def_arc_tolerance = 0.25;
+		ClipperLib.ClipperOffset.prototype.Clear = function ()
+		{
+			ClipperLib.Clear(this.m_polyNodes.Childs());
+			this.m_lowest.X = -1;
+		};
+
+		ClipperLib.ClipperOffset.Round = ClipperLib.Clipper.Round;
+		ClipperLib.ClipperOffset.prototype.AddPath = function (path, joinType, endType)
+		{
+			var highI = path.length - 1;
+			if (highI < 0)
+				return;
+			var newNode = new ClipperLib.PolyNode();
+			newNode.m_jointype = joinType;
+			newNode.m_endtype = endType;
+			//strip duplicate points from path and also get index to the lowest point ...
+			if (endType === ClipperLib.EndType.etClosedLine || endType === ClipperLib.EndType.etClosedPolygon)
+				while (highI > 0 && ClipperLib.IntPoint.op_Equality(path[0], path[highI]))
+					highI--;
+			//newNode.m_polygon.set_Capacity(highI + 1);
+			newNode.m_polygon.push(path[0]);
+			var j = 0,
+				k = 0;
+			for (var i = 1; i <= highI; i++)
+				if (ClipperLib.IntPoint.op_Inequality(newNode.m_polygon[j], path[i]))
+				{
+					j++;
+					newNode.m_polygon.push(path[i]);
+					if (path[i].Y > newNode.m_polygon[k].Y || (path[i].Y === newNode.m_polygon[k].Y && path[i].X < newNode.m_polygon[k].X))
+						k = j;
+				}
+			if (endType === ClipperLib.EndType.etClosedPolygon && j < 2) return;
+
+			this.m_polyNodes.AddChild(newNode);
+			//if this path's lowest pt is lower than all the others then update m_lowest
+			if (endType !== ClipperLib.EndType.etClosedPolygon)
+				return;
+			if (this.m_lowest.X < 0)
+				this.m_lowest = new ClipperLib.IntPoint2(this.m_polyNodes.ChildCount() - 1, k);
+			else
+			{
+				var ip = this.m_polyNodes.Childs()[this.m_lowest.X].m_polygon[this.m_lowest.Y];
+				if (newNode.m_polygon[k].Y > ip.Y || (newNode.m_polygon[k].Y === ip.Y && newNode.m_polygon[k].X < ip.X))
+					this.m_lowest = new ClipperLib.IntPoint2(this.m_polyNodes.ChildCount() - 1, k);
+			}
+		};
+
+		ClipperLib.ClipperOffset.prototype.AddPaths = function (paths, joinType, endType)
+		{
+			for (var i = 0, ilen = paths.length; i < ilen; i++)
+				this.AddPath(paths[i], joinType, endType);
+		};
+
+		ClipperLib.ClipperOffset.prototype.FixOrientations = function ()
+		{
+			//fixup orientations of all closed paths if the orientation of the
+			//closed path with the lowermost vertex is wrong ...
+			if (this.m_lowest.X >= 0 && !ClipperLib.Clipper.Orientation(this.m_polyNodes.Childs()[this.m_lowest.X].m_polygon))
+			{
+				for (var i = 0; i < this.m_polyNodes.ChildCount(); i++)
+				{
+					var node = this.m_polyNodes.Childs()[i];
+					if (node.m_endtype === ClipperLib.EndType.etClosedPolygon || (node.m_endtype === ClipperLib.EndType.etClosedLine && ClipperLib.Clipper.Orientation(node.m_polygon)))
+						node.m_polygon.reverse();
+				}
+			}
+			else
+			{
+				for (var i = 0; i < this.m_polyNodes.ChildCount(); i++)
+				{
+					var node = this.m_polyNodes.Childs()[i];
+					if (node.m_endtype === ClipperLib.EndType.etClosedLine && !ClipperLib.Clipper.Orientation(node.m_polygon))
+						node.m_polygon.reverse();
+				}
+			}
+		};
+
+		ClipperLib.ClipperOffset.GetUnitNormal = function (pt1, pt2)
+		{
+			var dx = (pt2.X - pt1.X);
+			var dy = (pt2.Y - pt1.Y);
+			if ((dx === 0) && (dy === 0))
+				return new ClipperLib.DoublePoint2(0, 0);
+			var f = 1 / Math.sqrt(dx * dx + dy * dy);
+			dx *= f;
+			dy *= f;
+			return new ClipperLib.DoublePoint2(dy, -dx);
+		};
+
+		ClipperLib.ClipperOffset.prototype.DoOffset = function (delta)
+		{
+			this.m_destPolys = new Array();
+			this.m_delta = delta;
+			//if Zero offset, just copy any CLOSED polygons to m_p and return ...
+			if (ClipperLib.ClipperBase.near_zero(delta))
+			{
+				//this.m_destPolys.set_Capacity(this.m_polyNodes.ChildCount);
+				for (var i = 0; i < this.m_polyNodes.ChildCount(); i++)
+				{
+					var node = this.m_polyNodes.Childs()[i];
+					if (node.m_endtype === ClipperLib.EndType.etClosedPolygon)
+						this.m_destPolys.push(node.m_polygon);
+				}
+				return;
+			}
+			//see offset_triginometry3.svg in the documentation folder ...
+			if (this.MiterLimit > 2)
+				this.m_miterLim = 2 / (this.MiterLimit * this.MiterLimit);
+			else
+				this.m_miterLim = 0.5;
+			var y;
+			if (this.ArcTolerance <= 0)
+				y = ClipperLib.ClipperOffset.def_arc_tolerance;
+			else if (this.ArcTolerance > Math.abs(delta) * ClipperLib.ClipperOffset.def_arc_tolerance)
+				y = Math.abs(delta) * ClipperLib.ClipperOffset.def_arc_tolerance;
+			else
+				y = this.ArcTolerance;
+			//see offset_triginometry2.svg in the documentation folder ...
+			var steps = 3.14159265358979 / Math.acos(1 - y / Math.abs(delta));
+			this.m_sin = Math.sin(ClipperLib.ClipperOffset.two_pi / steps);
+			this.m_cos = Math.cos(ClipperLib.ClipperOffset.two_pi / steps);
+			this.m_StepsPerRad = steps / ClipperLib.ClipperOffset.two_pi;
+			if (delta < 0)
+				this.m_sin = -this.m_sin;
+			//this.m_destPolys.set_Capacity(this.m_polyNodes.ChildCount * 2);
+			for (var i = 0; i < this.m_polyNodes.ChildCount(); i++)
+			{
+				var node = this.m_polyNodes.Childs()[i];
+				this.m_srcPoly = node.m_polygon;
+				var len = this.m_srcPoly.length;
+				if (len === 0 || (delta <= 0 && (len < 3 || node.m_endtype !== ClipperLib.EndType.etClosedPolygon)))
+					continue;
+				this.m_destPoly = new Array();
+				if (len === 1)
+				{
+					if (node.m_jointype === ClipperLib.JoinType.jtRound)
+					{
+						var X = 1,
+							Y = 0;
+						for (var j = 1; j <= steps; j++)
+						{
+							this.m_destPoly.push(new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].X + X * delta), ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].Y + Y * delta)));
+							var X2 = X;
+							X = X * this.m_cos - this.m_sin * Y;
+							Y = X2 * this.m_sin + Y * this.m_cos;
+						}
+					}
+					else
+					{
+						var X = -1,
+							Y = -1;
+						for (var j = 0; j < 4; ++j)
+						{
+							this.m_destPoly.push(new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].X + X * delta), ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].Y + Y * delta)));
+							if (X < 0)
+								X = 1;
+							else if (Y < 0)
+								Y = 1;
+							else
+								X = -1;
+						}
+					}
+					this.m_destPolys.push(this.m_destPoly);
+					continue;
+				}
+				//build m_normals ...
+				this.m_normals.length = 0;
+				//this.m_normals.set_Capacity(len);
+				for (var j = 0; j < len - 1; j++)
+					this.m_normals.push(ClipperLib.ClipperOffset.GetUnitNormal(this.m_srcPoly[j], this.m_srcPoly[j + 1]));
+				if (node.m_endtype === ClipperLib.EndType.etClosedLine || node.m_endtype === ClipperLib.EndType.etClosedPolygon)
+					this.m_normals.push(ClipperLib.ClipperOffset.GetUnitNormal(this.m_srcPoly[len - 1], this.m_srcPoly[0]));
+				else
+					this.m_normals.push(new ClipperLib.DoublePoint1(this.m_normals[len - 2]));
+				if (node.m_endtype === ClipperLib.EndType.etClosedPolygon)
+				{
+					var k = len - 1;
+					for (var j = 0; j < len; j++)
+						k = this.OffsetPoint(j, k, node.m_jointype);
+					this.m_destPolys.push(this.m_destPoly);
+				}
+				else if (node.m_endtype === ClipperLib.EndType.etClosedLine)
+				{
+					var k = len - 1;
+					for (var j = 0; j < len; j++)
+						k = this.OffsetPoint(j, k, node.m_jointype);
+					this.m_destPolys.push(this.m_destPoly);
+					this.m_destPoly = new Array();
+					//re-build m_normals ...
+					var n = this.m_normals[len - 1];
+					for (var j = len - 1; j > 0; j--)
+						this.m_normals[j] = new ClipperLib.DoublePoint2(-this.m_normals[j - 1].X, -this.m_normals[j - 1].Y);
+					this.m_normals[0] = new ClipperLib.DoublePoint2(-n.X, -n.Y);
+					k = 0;
+					for (var j = len - 1; j >= 0; j--)
+						k = this.OffsetPoint(j, k, node.m_jointype);
+					this.m_destPolys.push(this.m_destPoly);
+				}
+				else
+				{
+					var k = 0;
+					for (var j = 1; j < len - 1; ++j)
+						k = this.OffsetPoint(j, k, node.m_jointype);
+					var pt1;
+					if (node.m_endtype === ClipperLib.EndType.etOpenButt)
+					{
+						var j = len - 1;
+						pt1 = new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + this.m_normals[j].X * delta), ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + this.m_normals[j].Y * delta));
+						this.m_destPoly.push(pt1);
+						pt1 = new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X - this.m_normals[j].X * delta), ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y - this.m_normals[j].Y * delta));
+						this.m_destPoly.push(pt1);
+					}
+					else
+					{
+						var j = len - 1;
+						k = len - 2;
+						this.m_sinA = 0;
+						this.m_normals[j] = new ClipperLib.DoublePoint2(-this.m_normals[j].X, -this.m_normals[j].Y);
+						if (node.m_endtype === ClipperLib.EndType.etOpenSquare)
+							this.DoSquare(j, k);
+						else
+							this.DoRound(j, k);
+					}
+					//re-build m_normals ...
+					for (var j = len - 1; j > 0; j--)
+						this.m_normals[j] = new ClipperLib.DoublePoint2(-this.m_normals[j - 1].X, -this.m_normals[j - 1].Y);
+					this.m_normals[0] = new ClipperLib.DoublePoint2(-this.m_normals[1].X, -this.m_normals[1].Y);
+					k = len - 1;
+					for (var j = k - 1; j > 0; --j)
+						k = this.OffsetPoint(j, k, node.m_jointype);
+					if (node.m_endtype === ClipperLib.EndType.etOpenButt)
+					{
+						pt1 = new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].X - this.m_normals[0].X * delta), ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].Y - this.m_normals[0].Y * delta));
+						this.m_destPoly.push(pt1);
+						pt1 = new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].X + this.m_normals[0].X * delta), ClipperLib.ClipperOffset.Round(this.m_srcPoly[0].Y + this.m_normals[0].Y * delta));
+						this.m_destPoly.push(pt1);
+					}
+					else
+					{
+						k = 1;
+						this.m_sinA = 0;
+						if (node.m_endtype === ClipperLib.EndType.etOpenSquare)
+							this.DoSquare(0, 1);
+						else
+							this.DoRound(0, 1);
+					}
+					this.m_destPolys.push(this.m_destPoly);
+				}
+			}
+		};
+
+		ClipperLib.ClipperOffset.prototype.Execute = function ()
+		{
+			var a = arguments,
+				ispolytree = a[0] instanceof ClipperLib.PolyTree;
+			if (!ispolytree) // function (solution, delta)
+			{
+				var solution = a[0],
+					delta = a[1];
+				ClipperLib.Clear(solution);
+				this.FixOrientations();
+				this.DoOffset(delta);
+				//now clean up 'corners' ...
+				var clpr = new ClipperLib.Clipper(0);
+				clpr.AddPaths(this.m_destPolys, ClipperLib.PolyType.ptSubject, true);
+				if (delta > 0)
+				{
+					clpr.Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftPositive, ClipperLib.PolyFillType.pftPositive);
+				}
+				else
+				{
+					var r = ClipperLib.Clipper.GetBounds(this.m_destPolys);
+					var outer = new ClipperLib.Path();
+					outer.push(new ClipperLib.IntPoint2(r.left - 10, r.bottom + 10));
+					outer.push(new ClipperLib.IntPoint2(r.right + 10, r.bottom + 10));
+					outer.push(new ClipperLib.IntPoint2(r.right + 10, r.top - 10));
+					outer.push(new ClipperLib.IntPoint2(r.left - 10, r.top - 10));
+					clpr.AddPath(outer, ClipperLib.PolyType.ptSubject, true);
+					clpr.ReverseSolution = true;
+					clpr.Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftNegative, ClipperLib.PolyFillType.pftNegative);
+					if (solution.length > 0)
+						solution.splice(0, 1);
+				}
+				//console.log(JSON.stringify(solution));
+			}
+			else // function (polytree, delta)
+			{
+				var solution = a[0],
+					delta = a[1];
+				solution.Clear();
+				this.FixOrientations();
+				this.DoOffset(delta);
+				//now clean up 'corners' ...
+				var clpr = new ClipperLib.Clipper(0);
+				clpr.AddPaths(this.m_destPolys, ClipperLib.PolyType.ptSubject, true);
+				if (delta > 0)
+				{
+					clpr.Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftPositive, ClipperLib.PolyFillType.pftPositive);
+				}
+				else
+				{
+					var r = ClipperLib.Clipper.GetBounds(this.m_destPolys);
+					var outer = new ClipperLib.Path();
+					outer.push(new ClipperLib.IntPoint2(r.left - 10, r.bottom + 10));
+					outer.push(new ClipperLib.IntPoint2(r.right + 10, r.bottom + 10));
+					outer.push(new ClipperLib.IntPoint2(r.right + 10, r.top - 10));
+					outer.push(new ClipperLib.IntPoint2(r.left - 10, r.top - 10));
+					clpr.AddPath(outer, ClipperLib.PolyType.ptSubject, true);
+					clpr.ReverseSolution = true;
+					clpr.Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftNegative, ClipperLib.PolyFillType.pftNegative);
+					//remove the outer PolyNode rectangle ...
+					if (solution.ChildCount() === 1 && solution.Childs()[0].ChildCount() > 0)
+					{
+						var outerNode = solution.Childs()[0];
+						//solution.Childs.set_Capacity(outerNode.ChildCount);
+						solution.Childs()[0] = outerNode.Childs()[0];
+						solution.Childs()[0].m_Parent = solution;
+						for (var i = 1; i < outerNode.ChildCount(); i++)
+							solution.AddChild(outerNode.Childs()[i]);
+					}
+					else
+						solution.Clear();
+				}
+			}
+		};
+
+		ClipperLib.ClipperOffset.prototype.OffsetPoint = function (j, k, jointype)
+		{
+			//cross product ...
+			this.m_sinA = (this.m_normals[k].X * this.m_normals[j].Y - this.m_normals[j].X * this.m_normals[k].Y);
+
+			if (Math.abs(this.m_sinA * this.m_delta) < 1.0)
+			{
+				//dot product ...
+				var cosA = (this.m_normals[k].X * this.m_normals[j].X + this.m_normals[j].Y * this.m_normals[k].Y);
+				if (cosA > 0) // angle ==> 0 degrees
+				{
+					this.m_destPoly.push(new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + this.m_normals[k].X * this.m_delta),
+						ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + this.m_normals[k].Y * this.m_delta)));
+					return k;
+				}
+				//else angle ==> 180 degrees
+			}
+			else if (this.m_sinA > 1)
+				this.m_sinA = 1.0;
+			else if (this.m_sinA < -1)
+				this.m_sinA = -1.0;
+			if (this.m_sinA * this.m_delta < 0)
+			{
+				this.m_destPoly.push(new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + this.m_normals[k].X * this.m_delta),
+					ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + this.m_normals[k].Y * this.m_delta)));
+				this.m_destPoly.push(new ClipperLib.IntPoint1(this.m_srcPoly[j]));
+				this.m_destPoly.push(new ClipperLib.IntPoint2(ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + this.m_normals[j].X * this.m_delta),
+					ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + this.m_normals[j].Y * this.m_delta)));
+			}
+			else
+				switch (jointype)
+				{
+				case ClipperLib.JoinType.jtMiter:
+					{
+						var r = 1 + (this.m_normals[j].X * this.m_normals[k].X + this.m_normals[j].Y * this.m_normals[k].Y);
+						if (r >= this.m_miterLim)
+							this.DoMiter(j, k, r);
+						else
+							this.DoSquare(j, k);
+						break;
+					}
+				case ClipperLib.JoinType.jtSquare:
+					this.DoSquare(j, k);
+					break;
+				case ClipperLib.JoinType.jtRound:
+					this.DoRound(j, k);
+					break;
+				}
+			k = j;
+			return k;
+		};
+
+		ClipperLib.ClipperOffset.prototype.DoSquare = function (j, k)
+		{
+			var dx = Math.tan(Math.atan2(this.m_sinA,
+				this.m_normals[k].X * this.m_normals[j].X + this.m_normals[k].Y * this.m_normals[j].Y) / 4);
+			this.m_destPoly.push(new ClipperLib.IntPoint2(
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + this.m_delta * (this.m_normals[k].X - this.m_normals[k].Y * dx)),
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + this.m_delta * (this.m_normals[k].Y + this.m_normals[k].X * dx))));
+			this.m_destPoly.push(new ClipperLib.IntPoint2(
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + this.m_delta * (this.m_normals[j].X + this.m_normals[j].Y * dx)),
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + this.m_delta * (this.m_normals[j].Y - this.m_normals[j].X * dx))));
+		};
+
+		ClipperLib.ClipperOffset.prototype.DoMiter = function (j, k, r)
+		{
+			var q = this.m_delta / r;
+			this.m_destPoly.push(new ClipperLib.IntPoint2(
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + (this.m_normals[k].X + this.m_normals[j].X) * q),
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + (this.m_normals[k].Y + this.m_normals[j].Y) * q)));
+		};
+
+		ClipperLib.ClipperOffset.prototype.DoRound = function (j, k)
+		{
+			var a = Math.atan2(this.m_sinA,
+				this.m_normals[k].X * this.m_normals[j].X + this.m_normals[k].Y * this.m_normals[j].Y);
+
+			var steps = Math.max(ClipperLib.Cast_Int32(ClipperLib.ClipperOffset.Round(this.m_StepsPerRad * Math.abs(a))), 1);
+
+			var X = this.m_normals[k].X,
+				Y = this.m_normals[k].Y,
+				X2;
+			for (var i = 0; i < steps; ++i)
+			{
+				this.m_destPoly.push(new ClipperLib.IntPoint2(
+					ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + X * this.m_delta),
+					ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + Y * this.m_delta)));
+				X2 = X;
+				X = X * this.m_cos - this.m_sin * Y;
+				Y = X2 * this.m_sin + Y * this.m_cos;
+			}
+			this.m_destPoly.push(new ClipperLib.IntPoint2(
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].X + this.m_normals[j].X * this.m_delta),
+				ClipperLib.ClipperOffset.Round(this.m_srcPoly[j].Y + this.m_normals[j].Y * this.m_delta)));
+		};
+
+		ClipperLib.Error = function (message)
+		{
+			try
+			{
+				throw new Error(message);
+			}
+			catch (err)
+			{
+				alert(err.message);
+			}
+		};
+
+		// ---------------------------------------------
+
+		// JS extension by Timo 2013
+		ClipperLib.JS = {};
+
+		ClipperLib.JS.AreaOfPolygon = function (poly, scale)
+		{
+			if (!scale) scale = 1;
+			return ClipperLib.Clipper.Area(poly) / (scale * scale);
+		};
+
+		ClipperLib.JS.AreaOfPolygons = function (poly, scale)
+		{
+			if (!scale) scale = 1;
+			var area = 0;
+			for (var i = 0; i < poly.length; i++)
+			{
+				area += ClipperLib.Clipper.Area(poly[i]);
+			}
+			return area / (scale * scale);
+		};
+
+		ClipperLib.JS.BoundsOfPath = function (path, scale)
+		{
+			return ClipperLib.JS.BoundsOfPaths([path], scale);
+		};
+
+		ClipperLib.JS.BoundsOfPaths = function (paths, scale)
+		{
+			if (!scale) scale = 1;
+			var bounds = ClipperLib.Clipper.GetBounds(paths);
+			bounds.left /= scale;
+			bounds.bottom /= scale;
+			bounds.right /= scale;
+			bounds.top /= scale;
+			return bounds;
+		};
+
+		// Clean() joins vertices that are too near each other
+		// and causes distortion to offsetted polygons without cleaning
+		ClipperLib.JS.Clean = function (polygon, delta)
+		{
+			if (!(polygon instanceof Array)) return [];
+			var isPolygons = polygon[0] instanceof Array;
+			var polygon = ClipperLib.JS.Clone(polygon);
+			if (typeof delta !== "number" || delta === null)
+			{
+				ClipperLib.Error("Delta is not a number in Clean().");
+				return polygon;
+			}
+			if (polygon.length === 0 || (polygon.length === 1 && polygon[0].length === 0) || delta < 0) return polygon;
+			if (!isPolygons) polygon = [polygon];
+			var k_length = polygon.length;
+			var len, poly, result, d, p, j, i;
+			var results = [];
+			for (var k = 0; k < k_length; k++)
+			{
+				poly = polygon[k];
+				len = poly.length;
+				if (len === 0) continue;
+				else if (len < 3)
+				{
+					result = poly;
+					results.push(result);
+					continue;
+				}
+				result = poly;
+				d = delta * delta;
+				//d = Math.floor(c_delta * c_delta);
+				p = poly[0];
+				j = 1;
+				for (i = 1; i < len; i++)
+				{
+					if ((poly[i].X - p.X) * (poly[i].X - p.X) +
+						(poly[i].Y - p.Y) * (poly[i].Y - p.Y) <= d)
+						continue;
+					result[j] = poly[i];
+					p = poly[i];
+					j++;
+				}
+				p = poly[j - 1];
+				if ((poly[0].X - p.X) * (poly[0].X - p.X) +
+					(poly[0].Y - p.Y) * (poly[0].Y - p.Y) <= d)
+					j--;
+				if (j < len)
+					result.splice(j, len - j);
+				if (result.length) results.push(result);
+			}
+			if (!isPolygons && results.length) results = results[0];
+			else if (!isPolygons && results.length === 0) results = [];
+			else if (isPolygons && results.length === 0) results = [
+				[]
+			];
+			return results;
+		};
+		// Make deep copy of Polygons or Polygon
+		// so that also IntPoint objects are cloned and not only referenced
+		// This should be the fastest way
+		ClipperLib.JS.Clone = function (polygon)
+		{
+			if (!(polygon instanceof Array)) return [];
+			if (polygon.length === 0) return [];
+			else if (polygon.length === 1 && polygon[0].length === 0) return [
+				[]
+			];
+			var isPolygons = polygon[0] instanceof Array;
+			if (!isPolygons) polygon = [polygon];
+			var len = polygon.length,
+				plen, i, j, result;
+			var results = new Array(len);
+			for (i = 0; i < len; i++)
+			{
+				plen = polygon[i].length;
+				result = new Array(plen);
+				for (j = 0; j < plen; j++)
+				{
+					result[j] = {
+						X: polygon[i][j].X,
+						Y: polygon[i][j].Y
+					};
+
+				}
+				results[i] = result;
+			}
+			if (!isPolygons) results = results[0];
+			return results;
+		};
+
+		// Removes points that doesn't affect much to the visual appearance.
+		// If middle point is at or under certain distance (tolerance) of the line segment between
+		// start and end point, the middle point is removed.
+		ClipperLib.JS.Lighten = function (polygon, tolerance)
+		{
+			if (!(polygon instanceof Array)) return [];
+			if (typeof tolerance !== "number" || tolerance === null)
+			{
+				ClipperLib.Error("Tolerance is not a number in Lighten().");
+				return ClipperLib.JS.Clone(polygon);
+			}
+			if (polygon.length === 0 || (polygon.length === 1 && polygon[0].length === 0) || tolerance < 0)
+			{
+				return ClipperLib.JS.Clone(polygon);
+			}
+			var isPolygons = polygon[0] instanceof Array;
+			if (!isPolygons) polygon = [polygon];
+			var i, j, poly, k, poly2, plen, A, B, P, d, rem, addlast;
+			var bxax, byay, l, ax, ay;
+			var len = polygon.length;
+			var toleranceSq = tolerance * tolerance;
+			var results = [];
+			for (i = 0; i < len; i++)
+			{
+				poly = polygon[i];
+				plen = poly.length;
+				if (plen === 0) continue;
+				for (k = 0; k < 1000000; k++) // could be forever loop, but wiser to restrict max repeat count
+				{
+					poly2 = [];
+					plen = poly.length;
+					// the first have to added to the end, if first and last are not the same
+					// this way we ensure that also the actual last point can be removed if needed
+					if (poly[plen - 1].X !== poly[0].X || poly[plen - 1].Y !== poly[0].Y)
+					{
+						addlast = 1;
+						poly.push(
+						{
+							X: poly[0].X,
+							Y: poly[0].Y
+						});
+						plen = poly.length;
+					}
+					else addlast = 0;
+					rem = []; // Indexes of removed points
+					for (j = 0; j < plen - 2; j++)
+					{
+						A = poly[j]; // Start point of line segment
+						P = poly[j + 1]; // Middle point. This is the one to be removed.
+						B = poly[j + 2]; // End point of line segment
+						ax = A.X;
+						ay = A.Y;
+						bxax = B.X - ax;
+						byay = B.Y - ay;
+						if (bxax !== 0 || byay !== 0) // To avoid Nan, when A==P && P==B. And to avoid peaks (A==B && A!=P), which have lenght, but not area.
+						{
+							l = ((P.X - ax) * bxax + (P.Y - ay) * byay) / (bxax * bxax + byay * byay);
+							if (l > 1)
+							{
+								ax = B.X;
+								ay = B.Y;
+							}
+							else if (l > 0)
+							{
+								ax += bxax * l;
+								ay += byay * l;
+							}
+						}
+						bxax = P.X - ax;
+						byay = P.Y - ay;
+						d = bxax * bxax + byay * byay;
+						if (d <= toleranceSq)
+						{
+							rem[j + 1] = 1;
+							j++; // when removed, transfer the pointer to the next one
+						}
+					}
+					// add all unremoved points to poly2
+					poly2.push(
+					{
+						X: poly[0].X,
+						Y: poly[0].Y
+					});
+					for (j = 1; j < plen - 1; j++)
+						if (!rem[j]) poly2.push(
+						{
+							X: poly[j].X,
+							Y: poly[j].Y
+						});
+					poly2.push(
+					{
+						X: poly[plen - 1].X,
+						Y: poly[plen - 1].Y
+					});
+					// if the first point was added to the end, remove it
+					if (addlast) poly.pop();
+					// break, if there was not anymore removed points
+					if (!rem.length) break;
+					// else continue looping using poly2, to check if there are points to remove
+					else poly = poly2;
+				}
+				plen = poly2.length;
+				// remove duplicate from end, if needed
+				if (poly2[plen - 1].X === poly2[0].X && poly2[plen - 1].Y === poly2[0].Y)
+				{
+					poly2.pop();
+				}
+				if (poly2.length > 2) // to avoid two-point-polygons
+					results.push(poly2);
+			}
+			if (!isPolygons)
+			{
+				results = results[0];
+			}
+			if (typeof (results) === "undefined")
+			{
+				results = [];
+			}
+			return results;
+		};
+
+		ClipperLib.JS.PerimeterOfPath = function (path, closed, scale)
+		{
+			if (typeof (path) === "undefined") return 0;
+			var sqrt = Math.sqrt;
+			var perimeter = 0.0;
+			var p1, p2, p1x = 0.0,
+				p1y = 0.0,
+				p2x = 0.0,
+				p2y = 0.0;
+			var j = path.length;
+			if (j < 2) return 0;
+			if (closed)
+			{
+				path[j] = path[0];
+				j++;
+			}
+			while (--j)
+			{
+				p1 = path[j];
+				p1x = p1.X;
+				p1y = p1.Y;
+				p2 = path[j - 1];
+				p2x = p2.X;
+				p2y = p2.Y;
+				perimeter += sqrt((p1x - p2x) * (p1x - p2x) + (p1y - p2y) * (p1y - p2y));
+			}
+			if (closed) path.pop();
+			return perimeter / scale;
+		};
+
+		ClipperLib.JS.PerimeterOfPaths = function (paths, closed, scale)
+		{
+			if (!scale) scale = 1;
+			var perimeter = 0;
+			for (var i = 0; i < paths.length; i++)
+			{
+				perimeter += ClipperLib.JS.PerimeterOfPath(paths[i], closed, scale);
+			}
+			return perimeter;
+		};
+
+		ClipperLib.JS.ScaleDownPath = function (path, scale)
+		{
+			var i, p;
+			if (!scale) scale = 1;
+			i = path.length;
+			while (i--)
+			{
+				p = path[i];
+				p.X = p.X / scale;
+				p.Y = p.Y / scale;
+			}
+		};
+
+		ClipperLib.JS.ScaleDownPaths = function (paths, scale)
+		{
+			var i, j, p;
+			if (!scale) scale = 1;
+			i = paths.length;
+			while (i--)
+			{
+				j = paths[i].length;
+				while (j--)
+				{
+					p = paths[i][j];
+					p.X = p.X / scale;
+					p.Y = p.Y / scale;
+				}
+			}
+		};
+
+		ClipperLib.JS.ScaleUpPath = function (path, scale)
+		{
+			var i, p, round = Math.round;
+			if (!scale) scale = 1;
+			i = path.length;
+			while (i--)
+			{
+				p = path[i];
+				p.X = round(p.X * scale);
+				p.Y = round(p.Y * scale);
+			}
+		};
+
+		ClipperLib.JS.ScaleUpPaths = function (paths, scale)
+		{
+			var i, j, p, round = Math.round;
+			if (!scale) scale = 1;
+			i = paths.length;
+			while (i--)
+			{
+				j = paths[i].length;
+				while (j--)
+				{
+					p = paths[i][j];
+					p.X = round(p.X * scale);
+					p.Y = round(p.Y * scale);
+				}
+			}
+		};
+
+		/**
+		* @constructor
+		*/
+		ClipperLib.ExPolygons = function ()
+		{
+			return [];
+		};
+		/**
+		* @constructor
+		*/
+		ClipperLib.ExPolygon = function ()
+		{
+			this.outer = null;
+			this.holes = null;
+		};
+
+		ClipperLib.JS.AddOuterPolyNodeToExPolygons = function (polynode, expolygons)
+		{
+			var ep = new ClipperLib.ExPolygon();
+			ep.outer = polynode.Contour();
+			var childs = polynode.Childs();
+			var ilen = childs.length;
+			ep.holes = new Array(ilen);
+			var node, n, i, j, childs2, jlen;
+			for (i = 0; i < ilen; i++)
+			{
+				node = childs[i];
+				ep.holes[i] = node.Contour();
+				//Add outer polygons contained by (nested within) holes ...
+				for (j = 0, childs2 = node.Childs(), jlen = childs2.length; j < jlen; j++)
+				{
+					n = childs2[j];
+					ClipperLib.JS.AddOuterPolyNodeToExPolygons(n, expolygons);
+				}
+			}
+			expolygons.push(ep);
+		};
+
+		ClipperLib.JS.ExPolygonsToPaths = function (expolygons)
+		{
+			var a, i, alen, ilen;
+			var paths = new ClipperLib.Paths();
+			for (a = 0, alen = expolygons.length; a < alen; a++)
+			{
+				paths.push(expolygons[a].outer);
+				for (i = 0, ilen = expolygons[a].holes.length; i < ilen; i++)
+				{
+					paths.push(expolygons[a].holes[i]);
+				}
+			}
+			return paths;
+		};
+		ClipperLib.JS.PolyTreeToExPolygons = function (polytree)
+		{
+			var expolygons = new ClipperLib.ExPolygons();
+			var node, i, childs, ilen;
+			for (i = 0, childs = polytree.Childs(), ilen = childs.length; i < ilen; i++)
+			{
+				node = childs[i];
+				ClipperLib.JS.AddOuterPolyNodeToExPolygons(node, expolygons);
+			}
+			return expolygons;
+		};
+
+	})();
 	});
-	var pool_1 = pool.free;
-	var pool_2 = pool.freeUint8;
-	var pool_3 = pool.freeUint16;
-	var pool_4 = pool.freeUint32;
-	var pool_5 = pool.freeInt8;
-	var pool_6 = pool.freeInt16;
-	var pool_7 = pool.freeInt32;
-	var pool_8 = pool.freeFloat32;
-	var pool_9 = pool.freeFloat;
-	var pool_10 = pool.freeFloat64;
-	var pool_11 = pool.freeDouble;
-	var pool_12 = pool.freeUint8Clamped;
-	var pool_13 = pool.freeDataView;
-	var pool_14 = pool.freeArrayBuffer;
-	var pool_15 = pool.freeBuffer;
-	var pool_16 = pool.malloc;
-	var pool_17 = pool.mallocArrayBuffer;
-	var pool_18 = pool.mallocUint8;
-	var pool_19 = pool.mallocUint16;
-	var pool_20 = pool.mallocUint32;
-	var pool_21 = pool.mallocInt8;
-	var pool_22 = pool.mallocInt16;
-	var pool_23 = pool.mallocInt32;
-	var pool_24 = pool.mallocFloat32;
-	var pool_25 = pool.mallocFloat;
-	var pool_26 = pool.mallocFloat64;
-	var pool_27 = pool.mallocDouble;
-	var pool_28 = pool.mallocUint8Clamped;
-	var pool_29 = pool.mallocDataView;
-	var pool_30 = pool.mallocBuffer;
-	var pool_31 = pool.clearCache;
 
-	//This code is extracted from ndarray-sort
-	//It is inlined here as a temporary workaround
+	var module = createCommonjsModule(function (module, exports) {
 
-	var sort = wrapper;
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+	exports.setErrorCallback = undefined;
 
-	var INSERT_SORT_CUTOFF = 32;
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
-	function wrapper(data, n0) {
-	  if (n0 <= 4*INSERT_SORT_CUTOFF) {
-	    insertionSort(0, n0 - 1, data);
-	  } else {
-	    quickSort(0, n0 - 1, data);
-	  }
-	}
 
-	function insertionSort(left, right, data) {
-	  var ptr = 2*(left+1);
-	  for(var i=left+1; i<=right; ++i) {
-	    var a = data[ptr++];
-	    var b = data[ptr++];
-	    var j = i;
-	    var jptr = ptr-2;
-	    while(j-- > left) {
-	      var x = data[jptr-2];
-	      var y = data[jptr-1];
-	      if(x < a) {
-	        break
-	      } else if(x === a && y < b) {
-	        break
-	      }
-	      data[jptr]   = x;
-	      data[jptr+1] = y;
-	      jptr -= 2;
-	    }
-	    data[jptr]   = a;
-	    data[jptr+1] = b;
-	  }
-	}
 
-	function swap$2(i, j, data) {
-	  i *= 2;
-	  j *= 2;
-	  var x = data[i];
-	  var y = data[i+1];
-	  data[i] = data[j];
-	  data[i+1] = data[j+1];
-	  data[j] = x;
-	  data[j+1] = y;
-	}
+	var _clipperLib2 = _interopRequireDefault(clipper);
 
-	function move(i, j, data) {
-	  i *= 2;
-	  j *= 2;
-	  data[i] = data[j];
-	  data[i+1] = data[j+1];
-	}
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-	function rotate(i, j, k, data) {
-	  i *= 2;
-	  j *= 2;
-	  k *= 2;
-	  var x = data[i];
-	  var y = data[i+1];
-	  data[i] = data[j];
-	  data[i+1] = data[j+1];
-	  data[j] = data[k];
-	  data[j+1] = data[k+1];
-	  data[k] = x;
-	  data[k+1] = y;
-	}
+	function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
 
-	function shufflePivot(i, j, px, py, data) {
-	  i *= 2;
-	  j *= 2;
-	  data[i] = data[j];
-	  data[j] = px;
-	  data[i+1] = data[j+1];
-	  data[j+1] = py;
-	}
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-	function compare$2(i, j, data) {
-	  i *= 2;
-	  j *= 2;
-	  var x = data[i],
-	      y = data[j];
-	  if(x < y) {
-	    return false
-	  } else if(x === y) {
-	    return data[i+1] > data[j+1]
-	  }
-	  return true
-	}
-
-	function comparePivot(i, y, b, data) {
-	  i *= 2;
-	  var x = data[i];
-	  if(x < y) {
-	    return true
-	  } else if(x === y) {
-	    return data[i+1] < b
-	  }
-	  return false
-	}
-
-	function quickSort(left, right, data) {
-	  var sixth = (right - left + 1) / 6 | 0, 
-	      index1 = left + sixth, 
-	      index5 = right - sixth, 
-	      index3 = left + right >> 1, 
-	      index2 = index3 - sixth, 
-	      index4 = index3 + sixth, 
-	      el1 = index1, 
-	      el2 = index2, 
-	      el3 = index3, 
-	      el4 = index4, 
-	      el5 = index5, 
-	      less = left + 1, 
-	      great = right - 1, 
-	      tmp = 0;
-	  if(compare$2(el1, el2, data)) {
-	    tmp = el1;
-	    el1 = el2;
-	    el2 = tmp;
-	  }
-	  if(compare$2(el4, el5, data)) {
-	    tmp = el4;
-	    el4 = el5;
-	    el5 = tmp;
-	  }
-	  if(compare$2(el1, el3, data)) {
-	    tmp = el1;
-	    el1 = el3;
-	    el3 = tmp;
-	  }
-	  if(compare$2(el2, el3, data)) {
-	    tmp = el2;
-	    el2 = el3;
-	    el3 = tmp;
-	  }
-	  if(compare$2(el1, el4, data)) {
-	    tmp = el1;
-	    el1 = el4;
-	    el4 = tmp;
-	  }
-	  if(compare$2(el3, el4, data)) {
-	    tmp = el3;
-	    el3 = el4;
-	    el4 = tmp;
-	  }
-	  if(compare$2(el2, el5, data)) {
-	    tmp = el2;
-	    el2 = el5;
-	    el5 = tmp;
-	  }
-	  if(compare$2(el2, el3, data)) {
-	    tmp = el2;
-	    el2 = el3;
-	    el3 = tmp;
-	  }
-	  if(compare$2(el4, el5, data)) {
-	    tmp = el4;
-	    el4 = el5;
-	    el5 = tmp;
-	  }
-
-	  var pivot1X = data[2*el2];
-	  var pivot1Y = data[2*el2+1];
-	  var pivot2X = data[2*el4];
-	  var pivot2Y = data[2*el4+1];
-
-	  var ptr0 = 2 * el1;
-	  var ptr2 = 2 * el3;
-	  var ptr4 = 2 * el5;
-	  var ptr5 = 2 * index1;
-	  var ptr6 = 2 * index3;
-	  var ptr7 = 2 * index5;
-	  for (var i1 = 0; i1 < 2; ++i1) {
-	    var x = data[ptr0+i1];
-	    var y = data[ptr2+i1];
-	    var z = data[ptr4+i1];
-	    data[ptr5+i1] = x;
-	    data[ptr6+i1] = y;
-	    data[ptr7+i1] = z;
-	  }
-
-	  move(index2, left, data);
-	  move(index4, right, data);
-	  for (var k = less; k <= great; ++k) {
-	    if (comparePivot(k, pivot1X, pivot1Y, data)) {
-	      if (k !== less) {
-	        swap$2(k, less, data);
-	      }
-	      ++less;
-	    } else {
-	      if (!comparePivot(k, pivot2X, pivot2Y, data)) {
-	        while (true) {
-	          if (!comparePivot(great, pivot2X, pivot2Y, data)) {
-	            if (--great < k) {
-	              break;
-	            }
-	            continue;
-	          } else {
-	            if (comparePivot(great, pivot1X, pivot1Y, data)) {
-	              rotate(k, less, great, data);
-	              ++less;
-	              --great;
-	            } else {
-	              swap$2(k, great, data);
-	              --great;
-	            }
-	            break;
-	          }
-	        }
-	      }
-	    }
-	  }
-	  shufflePivot(left, less-1, pivot1X, pivot1Y, data);
-	  shufflePivot(right, great+1, pivot2X, pivot2Y, data);
-	  if (less - 2 - left <= INSERT_SORT_CUTOFF) {
-	    insertionSort(left, less - 2, data);
-	  } else {
-	    quickSort(left, less - 2, data);
-	  }
-	  if (right - (great + 2) <= INSERT_SORT_CUTOFF) {
-	    insertionSort(great + 2, right, data);
-	  } else {
-	    quickSort(great + 2, right, data);
-	  }
-	  if (great - less <= INSERT_SORT_CUTOFF) {
-	    insertionSort(less, great, data);
-	  } else {
-	    quickSort(less, great, data);
-	  }
-	}
-
-	var sweep = {
-	  init:           sqInit,
-	  sweepBipartite: sweepBipartite,
-	  sweepComplete:  sweepComplete,
-	  scanBipartite:  scanBipartite,
-	  scanComplete:   scanComplete
+	var errorCallback = void 0;
+	var setErrorCallback = exports.setErrorCallback = function setErrorCallback(callback) {
+	  errorCallback = callback;
+	};
+	_clipperLib2.default.Error = function (message) {
+	  if (errorCallback) errorCallback(message);
 	};
 
+	var CLIPPER = new _clipperLib2.default.Clipper();
+	var CLIPPER_OFFSET = new _clipperLib2.default.ClipperOffset();
 
+	var Shape = function () {
+	  function Shape() {
+	    var paths = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : [];
+	    var closed = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : true;
+	    var capitalConversion = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+	    var integerConversion = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : false;
+	    var removeDuplicates = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : false;
 
+	    _classCallCheck(this, Shape);
 
-
-	//Flag for blue
-	var BLUE_FLAG = (1<<28);
-
-	//1D sweep event queue stuff (use pool to save space)
-	var INIT_CAPACITY      = 1024;
-	var RED_SWEEP_QUEUE    = pool.mallocInt32(INIT_CAPACITY);
-	var RED_SWEEP_INDEX    = pool.mallocInt32(INIT_CAPACITY);
-	var BLUE_SWEEP_QUEUE   = pool.mallocInt32(INIT_CAPACITY);
-	var BLUE_SWEEP_INDEX   = pool.mallocInt32(INIT_CAPACITY);
-	var COMMON_SWEEP_QUEUE = pool.mallocInt32(INIT_CAPACITY);
-	var COMMON_SWEEP_INDEX = pool.mallocInt32(INIT_CAPACITY);
-	var SWEEP_EVENTS       = pool.mallocDouble(INIT_CAPACITY * 8);
-
-	//Reserves memory for the 1D sweep data structures
-	function sqInit(count) {
-	  var rcount = twiddle.nextPow2(count);
-	  if(RED_SWEEP_QUEUE.length < rcount) {
-	    pool.free(RED_SWEEP_QUEUE);
-	    RED_SWEEP_QUEUE = pool.mallocInt32(rcount);
-	  }
-	  if(RED_SWEEP_INDEX.length < rcount) {
-	    pool.free(RED_SWEEP_INDEX);
-	    RED_SWEEP_INDEX = pool.mallocInt32(rcount);
-	  }
-	  if(BLUE_SWEEP_QUEUE.length < rcount) {
-	    pool.free(BLUE_SWEEP_QUEUE);
-	    BLUE_SWEEP_QUEUE = pool.mallocInt32(rcount);
-	  }
-	  if(BLUE_SWEEP_INDEX.length < rcount) {
-	    pool.free(BLUE_SWEEP_INDEX);
-	    BLUE_SWEEP_INDEX = pool.mallocInt32(rcount);
-	  }
-	  if(COMMON_SWEEP_QUEUE.length < rcount) {
-	    pool.free(COMMON_SWEEP_QUEUE);
-	    COMMON_SWEEP_QUEUE = pool.mallocInt32(rcount);
-	  }
-	  if(COMMON_SWEEP_INDEX.length < rcount) {
-	    pool.free(COMMON_SWEEP_INDEX);
-	    COMMON_SWEEP_INDEX = pool.mallocInt32(rcount);
-	  }
-	  var eventLength = 8 * rcount;
-	  if(SWEEP_EVENTS.length < eventLength) {
-	    pool.free(SWEEP_EVENTS);
-	    SWEEP_EVENTS = pool.mallocDouble(eventLength);
-	  }
-	}
-
-	//Remove an item from the active queue in O(1)
-	function sqPop(queue, index, count, item) {
-	  var idx = index[item];
-	  var top = queue[count-1];
-	  queue[idx] = top;
-	  index[top] = idx;
-	}
-
-	//Insert an item into the active queue in O(1)
-	function sqPush(queue, index, count, item) {
-	  queue[count] = item;
-	  index[item]  = count;
-	}
-
-	//Recursion base case: use 1D sweep algorithm
-	function sweepBipartite(
-	    d, visit,
-	    redStart,  redEnd, red, redIndex,
-	    blueStart, blueEnd, blue, blueIndex) {
-
-	  //store events as pairs [coordinate, idx]
-	  //
-	  //  red create:  -(idx+1)
-	  //  red destroy: idx
-	  //  blue create: -(idx+BLUE_FLAG)
-	  //  blue destroy: idx+BLUE_FLAG
-	  //
-	  var ptr      = 0;
-	  var elemSize = 2*d;
-	  var istart   = d-1;
-	  var iend     = elemSize-1;
-
-	  for(var i=redStart; i<redEnd; ++i) {
-	    var idx = redIndex[i];
-	    var redOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = red[redOffset+istart];
-	    SWEEP_EVENTS[ptr++] = -(idx+1);
-	    SWEEP_EVENTS[ptr++] = red[redOffset+iend];
-	    SWEEP_EVENTS[ptr++] = idx;
+	    this.paths = paths;
+	    if (capitalConversion) this.paths = this.paths.map(mapLowerToCapital);
+	    if (integerConversion) this.paths = this.paths.map(mapToRound);
+	    if (removeDuplicates) this.paths = this.paths.map(filterPathsDuplicates);
+	    this.closed = closed;
 	  }
 
-	  for(var i=blueStart; i<blueEnd; ++i) {
-	    var idx = blueIndex[i]+BLUE_FLAG;
-	    var blueOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = blue[blueOffset+istart];
-	    SWEEP_EVENTS[ptr++] = -idx;
-	    SWEEP_EVENTS[ptr++] = blue[blueOffset+iend];
-	    SWEEP_EVENTS[ptr++] = idx;
-	  }
+	  _createClass(Shape, [{
+	    key: '_clip',
+	    value: function _clip(type) {
+	      var solution = new _clipperLib2.default.PolyTree();
 
-	  //process events from left->right
-	  var n = ptr >>> 1;
-	  sort(SWEEP_EVENTS, n);
-	  
-	  var redActive  = 0;
-	  var blueActive = 0;
-	  for(var i=0; i<n; ++i) {
-	    var e = SWEEP_EVENTS[2*i+1]|0;
-	    if(e >= BLUE_FLAG) {
-	      //blue destroy event
-	      e = (e-BLUE_FLAG)|0;
-	      sqPop(BLUE_SWEEP_QUEUE, BLUE_SWEEP_INDEX, blueActive--, e);
-	    } else if(e >= 0) {
-	      //red destroy event
-	      sqPop(RED_SWEEP_QUEUE, RED_SWEEP_INDEX, redActive--, e);
-	    } else if(e <= -BLUE_FLAG) {
-	      //blue create event
-	      e = (-e-BLUE_FLAG)|0;
-	      for(var j=0; j<redActive; ++j) {
-	        var retval = visit(RED_SWEEP_QUEUE[j], e);
-	        if(retval !== void 0) {
-	          return retval
-	        }
+	      CLIPPER.Clear();
+	      CLIPPER.AddPaths(this.paths, _clipperLib2.default.PolyType.ptSubject, this.closed);
+
+	      for (var _len = arguments.length, clipShapes = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+	        clipShapes[_key - 1] = arguments[_key];
 	      }
-	      sqPush(BLUE_SWEEP_QUEUE, BLUE_SWEEP_INDEX, blueActive++, e);
-	    } else {
-	      //red create event
-	      e = (-e-1)|0;
-	      for(var j=0; j<blueActive; ++j) {
-	        var retval = visit(e, BLUE_SWEEP_QUEUE[j]);
-	        if(retval !== void 0) {
-	          return retval
-	        }
+
+	      for (var i = 0; i < clipShapes.length; i++) {
+	        var clipShape = clipShapes[i];
+	        CLIPPER.AddPaths(clipShape.paths, _clipperLib2.default.PolyType.ptClip, clipShape.closed);
 	      }
-	      sqPush(RED_SWEEP_QUEUE, RED_SWEEP_INDEX, redActive++, e);
+	      CLIPPER.Execute(type, solution);
+
+	      var newShape = _clipperLib2.default.Clipper.PolyTreeToPaths(solution);
+	      return new Shape(newShape, this.closed);
 	    }
-	  }
-	}
+	  }, {
+	    key: 'union',
+	    value: function union() {
+	      for (var _len2 = arguments.length, clipShapes = Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+	        clipShapes[_key2] = arguments[_key2];
+	      }
 
-	//Complete sweep
-	function sweepComplete(d, visit, 
-	  redStart, redEnd, red, redIndex,
-	  blueStart, blueEnd, blue, blueIndex) {
-
-	  var ptr      = 0;
-	  var elemSize = 2*d;
-	  var istart   = d-1;
-	  var iend     = elemSize-1;
-
-	  for(var i=redStart; i<redEnd; ++i) {
-	    var idx = (redIndex[i]+1)<<1;
-	    var redOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = red[redOffset+istart];
-	    SWEEP_EVENTS[ptr++] = -idx;
-	    SWEEP_EVENTS[ptr++] = red[redOffset+iend];
-	    SWEEP_EVENTS[ptr++] = idx;
-	  }
-
-	  for(var i=blueStart; i<blueEnd; ++i) {
-	    var idx = (blueIndex[i]+1)<<1;
-	    var blueOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = blue[blueOffset+istart];
-	    SWEEP_EVENTS[ptr++] = (-idx)|1;
-	    SWEEP_EVENTS[ptr++] = blue[blueOffset+iend];
-	    SWEEP_EVENTS[ptr++] = idx|1;
-	  }
-
-	  //process events from left->right
-	  var n = ptr >>> 1;
-	  sort(SWEEP_EVENTS, n);
-	  
-	  var redActive    = 0;
-	  var blueActive   = 0;
-	  var commonActive = 0;
-	  for(var i=0; i<n; ++i) {
-	    var e     = SWEEP_EVENTS[2*i+1]|0;
-	    var color = e&1;
-	    if(i < n-1 && (e>>1) === (SWEEP_EVENTS[2*i+3]>>1)) {
-	      color = 2;
-	      i += 1;
+	      return this._clip.apply(this, [_clipperLib2.default.ClipType.ctUnion].concat(clipShapes));
 	    }
-	    
-	    if(e < 0) {
-	      //Create event
-	      var id = -(e>>1) - 1;
-
-	      //Intersect with common
-	      for(var j=0; j<commonActive; ++j) {
-	        var retval = visit(COMMON_SWEEP_QUEUE[j], id);
-	        if(retval !== void 0) {
-	          return retval
-	        }
+	  }, {
+	    key: 'difference',
+	    value: function difference() {
+	      for (var _len3 = arguments.length, clipShapes = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+	        clipShapes[_key3] = arguments[_key3];
 	      }
 
-	      if(color !== 0) {
-	        //Intersect with red
-	        for(var j=0; j<redActive; ++j) {
-	          var retval = visit(RED_SWEEP_QUEUE[j], id);
-	          if(retval !== void 0) {
-	            return retval
-	          }
-	        }
-	      }
-
-	      if(color !== 1) {
-	        //Intersect with blue
-	        for(var j=0; j<blueActive; ++j) {
-	          var retval = visit(BLUE_SWEEP_QUEUE[j], id);
-	          if(retval !== void 0) {
-	            return retval
-	          }
-	        }
-	      }
-
-	      if(color === 0) {
-	        //Red
-	        sqPush(RED_SWEEP_QUEUE, RED_SWEEP_INDEX, redActive++, id);
-	      } else if(color === 1) {
-	        //Blue
-	        sqPush(BLUE_SWEEP_QUEUE, BLUE_SWEEP_INDEX, blueActive++, id);
-	      } else if(color === 2) {
-	        //Both
-	        sqPush(COMMON_SWEEP_QUEUE, COMMON_SWEEP_INDEX, commonActive++, id);
-	      }
-	    } else {
-	      //Destroy event
-	      var id = (e>>1) - 1;
-	      if(color === 0) {
-	        //Red
-	        sqPop(RED_SWEEP_QUEUE, RED_SWEEP_INDEX, redActive--, id);
-	      } else if(color === 1) {
-	        //Blue
-	        sqPop(BLUE_SWEEP_QUEUE, BLUE_SWEEP_INDEX, blueActive--, id);
-	      } else if(color === 2) {
-	        //Both
-	        sqPop(COMMON_SWEEP_QUEUE, COMMON_SWEEP_INDEX, commonActive--, id);
-	      }
+	      return this._clip.apply(this, [_clipperLib2.default.ClipType.ctDifference].concat(clipShapes));
 	    }
-	  }
-	}
+	  }, {
+	    key: 'intersect',
+	    value: function intersect() {
+	      for (var _len4 = arguments.length, clipShapes = Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+	        clipShapes[_key4] = arguments[_key4];
+	      }
 
-	//Sweep and prune/scanline algorithm:
-	//  Scan along axis, detect intersections
-	//  Brute force all boxes along axis
-	function scanBipartite(
-	  d, axis, visit, flip,
-	  redStart,  redEnd, red, redIndex,
-	  blueStart, blueEnd, blue, blueIndex) {
-	  
-	  var ptr      = 0;
-	  var elemSize = 2*d;
-	  var istart   = axis;
-	  var iend     = axis+d;
+	      return this._clip.apply(this, [_clipperLib2.default.ClipType.ctIntersection].concat(clipShapes));
+	    }
+	  }, {
+	    key: 'xor',
+	    value: function xor() {
+	      for (var _len5 = arguments.length, clipShapes = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
+	        clipShapes[_key5] = arguments[_key5];
+	      }
 
-	  var redShift  = 1;
-	  var blueShift = 1;
-	  if(flip) {
-	    blueShift = BLUE_FLAG;
-	  } else {
-	    redShift  = BLUE_FLAG;
-	  }
+	      return this._clip.apply(this, [_clipperLib2.default.ClipType.ctXor].concat(clipShapes));
+	    }
+	  }, {
+	    key: 'offset',
+	    value: function offset(_offset) {
+	      var options = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+	      var _options$jointType = options.jointType,
+	          jointType = _options$jointType === undefined ? 'jtSquare' : _options$jointType,
+	          _options$endType = options.endType,
+	          endType = _options$endType === undefined ? 'etClosedPolygon' : _options$endType,
+	          _options$miterLimit = options.miterLimit,
+	          miterLimit = _options$miterLimit === undefined ? 2.0 : _options$miterLimit,
+	          _options$roundPrecisi = options.roundPrecision,
+	          roundPrecision = _options$roundPrecisi === undefined ? 0.25 : _options$roundPrecisi;
 
-	  for(var i=redStart; i<redEnd; ++i) {
-	    var idx = i + redShift;
-	    var redOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = red[redOffset+istart];
-	    SWEEP_EVENTS[ptr++] = -idx;
-	    SWEEP_EVENTS[ptr++] = red[redOffset+iend];
-	    SWEEP_EVENTS[ptr++] = idx;
-	  }
-	  for(var i=blueStart; i<blueEnd; ++i) {
-	    var idx = i + blueShift;
-	    var blueOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = blue[blueOffset+istart];
-	    SWEEP_EVENTS[ptr++] = -idx;
-	  }
 
-	  //process events from left->right
-	  var n = ptr >>> 1;
-	  sort(SWEEP_EVENTS, n);
-	  
-	  var redActive    = 0;
-	  for(var i=0; i<n; ++i) {
-	    var e = SWEEP_EVENTS[2*i+1]|0;
-	    if(e < 0) {
-	      var idx   = -e;
-	      var isRed = false;
-	      if(idx >= BLUE_FLAG) {
-	        isRed = !flip;
-	        idx -= BLUE_FLAG; 
+	      CLIPPER_OFFSET.Clear();
+	      CLIPPER_OFFSET.ArcTolerance = roundPrecision;
+	      CLIPPER_OFFSET.MiterLimit = miterLimit;
+
+	      var offsetPaths = new _clipperLib2.default.Paths();
+	      CLIPPER_OFFSET.AddPaths(this.paths, _clipperLib2.default.JoinType[jointType], _clipperLib2.default.EndType[endType]);
+	      CLIPPER_OFFSET.Execute(offsetPaths, _offset);
+
+	      return new Shape(offsetPaths, true);
+	    }
+	  }, {
+	    key: 'scaleUp',
+	    value: function scaleUp(factor) {
+	      _clipperLib2.default.JS.ScaleUpPaths(this.paths, factor);
+
+	      return this;
+	    }
+	  }, {
+	    key: 'scaleDown',
+	    value: function scaleDown(factor) {
+	      _clipperLib2.default.JS.ScaleDownPaths(this.paths, factor);
+
+	      return this;
+	    }
+	  }, {
+	    key: 'firstPoint',
+	    value: function firstPoint() {
+	      var toLower = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+
+	      if (this.paths.length === 0) {
+	        return;
+	      }
+
+	      var firstPath = this.paths[0];
+	      var firstPoint = firstPath[0];
+	      if (toLower) {
+	        return vectorToLower(firstPoint);
 	      } else {
-	        isRed = !!flip;
-	        idx -= 1;
+	        return firstPoint;
 	      }
-	      if(isRed) {
-	        sqPush(RED_SWEEP_QUEUE, RED_SWEEP_INDEX, redActive++, idx);
+	    }
+	  }, {
+	    key: 'lastPoint',
+	    value: function lastPoint() {
+	      var toLower = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+
+	      if (this.paths.length === 0) {
+	        return;
+	      }
+
+	      var lastPath = this.paths[this.paths.length - 1];
+	      var lastPoint = this.closed ? lastPath[0] : lastPath[lastPath.length - 1];
+	      if (toLower) {
+	        return vectorToLower(lastPoint);
 	      } else {
-	        var blueId  = blueIndex[idx];
-	        var bluePtr = elemSize * idx;
-	        
-	        var b0 = blue[bluePtr+axis+1];
-	        var b1 = blue[bluePtr+axis+1+d];
+	        return lastPoint;
+	      }
+	    }
+	  }, {
+	    key: 'areas',
+	    value: function areas() {
+	      var _this = this;
 
-	red_loop:
-	        for(var j=0; j<redActive; ++j) {
-	          var oidx   = RED_SWEEP_QUEUE[j];
-	          var redPtr = elemSize * oidx;
+	      var areas = this.paths.map(function (path, i) {
+	        return _this.area(i);
+	      });
+	      return areas;
+	    }
+	  }, {
+	    key: 'area',
+	    value: function area(index) {
+	      var path = this.paths[index];
+	      var area = _clipperLib2.default.Clipper.Area(path);
+	      return area;
+	    }
+	  }, {
+	    key: 'totalArea',
+	    value: function totalArea() {
+	      return this.areas().reduce(function (totalArea, area) {
+	        return totalArea + area;
+	      }, 0);
+	    }
+	  }, {
+	    key: 'perimeter',
+	    value: function perimeter(index) {
+	      var path = this.paths[index];
+	      var perimeter = _clipperLib2.default.JS.PerimeterOfPath(path, this.closed, 1);
+	      return perimeter;
+	    }
+	  }, {
+	    key: 'perimeters',
+	    value: function perimeters() {
+	      var _this2 = this;
 
-	          if(b1 < red[redPtr+axis+1] || 
-	             red[redPtr+axis+1+d] < b0) {
-	            continue
-	          }
+	      return this.paths.map(function (path) {
+	        return _clipperLib2.default.JS.PerimeterOfPath(path, _this2.closed, 1);
+	      });
+	    }
+	  }, {
+	    key: 'totalPerimeter',
+	    value: function totalPerimeter() {
+	      var perimeter = _clipperLib2.default.JS.PerimeterOfPaths(this.paths, this.closed);
+	      return perimeter;
+	    }
+	  }, {
+	    key: 'reverse',
+	    value: function reverse() {
+	      _clipperLib2.default.Clipper.ReversePaths(this.paths);
 
-	          for(var k=axis+2; k<d; ++k) {
-	            if(blue[bluePtr + k + d] < red[redPtr + k] || 
-	               red[redPtr + k + d] < blue[bluePtr + k]) {
-	              continue red_loop
-	            }
-	          }
+	      return this;
+	    }
+	  }, {
+	    key: 'thresholdArea',
+	    value: function thresholdArea(minArea) {
+	      var _arr = [].concat(_toConsumableArray(this.paths));
 
-	          var redId  = redIndex[oidx];
-	          var retval;
-	          if(flip) {
-	            retval = visit(blueId, redId);
-	          } else {
-	            retval = visit(redId, blueId);
-	          }
-	          if(retval !== void 0) {
-	            return retval 
-	          }
+	      for (var _i = 0; _i < _arr.length; _i++) {
+	        var path = _arr[_i];
+	        var area = Math.abs(_clipperLib2.default.Clipper.Area(path));
+
+	        if (area < minArea) {
+	          var index = this.paths.indexOf(path);
+	          this.paths.splice(index, 1);
 	        }
 	      }
-	    } else {
-	      sqPop(RED_SWEEP_QUEUE, RED_SWEEP_INDEX, redActive--, e - redShift);
+	      return this;
 	    }
-	  }
-	}
+	  }, {
+	    key: 'join',
+	    value: function join(shape) {
+	      var _paths;
 
-	function scanComplete(
-	  d, axis, visit,
-	  redStart,  redEnd, red, redIndex,
-	  blueStart, blueEnd, blue, blueIndex) {
+	      (_paths = this.paths).splice.apply(_paths, [this.paths.length, 0].concat(_toConsumableArray(shape.paths)));
 
-	  var ptr      = 0;
-	  var elemSize = 2*d;
-	  var istart   = axis;
-	  var iend     = axis+d;
+	      return this;
+	    }
+	  }, {
+	    key: 'clone',
+	    value: function clone() {
+	      return new Shape(_clipperLib2.default.JS.Clone(this.paths), this.closed);
+	    }
+	  }, {
+	    key: 'shapeBounds',
+	    value: function shapeBounds() {
+	      return _clipperLib2.default.JS.BoundsOfPaths(this.paths);
+	    }
+	  }, {
+	    key: 'pathBounds',
+	    value: function pathBounds(index) {
+	      var path = this.paths[index];
 
-	  for(var i=redStart; i<redEnd; ++i) {
-	    var idx = i + BLUE_FLAG;
-	    var redOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = red[redOffset+istart];
-	    SWEEP_EVENTS[ptr++] = -idx;
-	    SWEEP_EVENTS[ptr++] = red[redOffset+iend];
-	    SWEEP_EVENTS[ptr++] = idx;
-	  }
-	  for(var i=blueStart; i<blueEnd; ++i) {
-	    var idx = i + 1;
-	    var blueOffset = elemSize*i;
-	    SWEEP_EVENTS[ptr++] = blue[blueOffset+istart];
-	    SWEEP_EVENTS[ptr++] = -idx;
-	  }
+	      return _clipperLib2.default.JS.BoundsOfPath(path);
+	    }
+	  }, {
+	    key: 'clean',
+	    value: function clean(cleanDelta) {
+	      return new Shape(_clipperLib2.default.Clipper.CleanPolygons(this.paths, cleanDelta), this.closed);
+	    }
+	  }, {
+	    key: 'orientation',
+	    value: function orientation(index) {
+	      var path = this.paths[index];
+	      return _clipperLib2.default.Clipper.Orientation(path);
+	    }
+	  }, {
+	    key: 'pointInShape',
+	    value: function pointInShape(point) {
+	      var capitalConversion = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
+	      var integerConversion = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
 
-	  //process events from left->right
-	  var n = ptr >>> 1;
-	  sort(SWEEP_EVENTS, n);
-	  
-	  var redActive    = 0;
-	  for(var i=0; i<n; ++i) {
-	    var e = SWEEP_EVENTS[2*i+1]|0;
-	    if(e < 0) {
-	      var idx   = -e;
-	      if(idx >= BLUE_FLAG) {
-	        RED_SWEEP_QUEUE[redActive++] = idx - BLUE_FLAG;
-	      } else {
-	        idx -= 1;
-	        var blueId  = blueIndex[idx];
-	        var bluePtr = elemSize * idx;
+	      if (capitalConversion) point = vectorToCapital(point);
+	      if (integerConversion) point = roundVector(point);
+	      for (var i = 0; i < this.paths.length; i++) {
+	        var pointInPath = this.pointInPath(i, point);
+	        var orientation = this.orientation(i);
 
-	        var b0 = blue[bluePtr+axis+1];
-	        var b1 = blue[bluePtr+axis+1+d];
-
-	red_loop:
-	        for(var j=0; j<redActive; ++j) {
-	          var oidx   = RED_SWEEP_QUEUE[j];
-	          var redId  = redIndex[oidx];
-
-	          if(redId === blueId) {
-	            break
-	          }
-
-	          var redPtr = elemSize * oidx;
-	          if(b1 < red[redPtr+axis+1] || 
-	            red[redPtr+axis+1+d] < b0) {
-	            continue
-	          }
-	          for(var k=axis+2; k<d; ++k) {
-	            if(blue[bluePtr + k + d] < red[redPtr + k] || 
-	               red[redPtr + k + d]   < blue[bluePtr + k]) {
-	              continue red_loop
-	            }
-	          }
-
-	          var retval = visit(redId, blueId);
-	          if(retval !== void 0) {
-	            return retval 
-	          }
+	        if (!pointInPath && orientation || pointInPath && !orientation) {
+	          return false;
 	        }
 	      }
-	    } else {
-	      var idx = e - BLUE_FLAG;
-	      for(var j=redActive-1; j>=0; --j) {
-	        if(RED_SWEEP_QUEUE[j] === idx) {
-	          for(var k=j+1; k<redActive; ++k) {
-	            RED_SWEEP_QUEUE[k-1] = RED_SWEEP_QUEUE[k];
-	          }
-	          break
-	        }
-	      }
-	      --redActive;
-	    }
-	  }
-	}
 
-	var DIMENSION   = 'd';
-	var AXIS        = 'ax';
-	var VISIT       = 'vv';
-	var FLIP        = 'fp';
-
-	var ELEM_SIZE   = 'es';
-
-	var RED_START   = 'rs';
-	var RED_END     = 're';
-	var RED_BOXES   = 'rb';
-	var RED_INDEX   = 'ri';
-	var RED_PTR     = 'rp';
-
-	var BLUE_START  = 'bs';
-	var BLUE_END    = 'be';
-	var BLUE_BOXES  = 'bb';
-	var BLUE_INDEX  = 'bi';
-	var BLUE_PTR    = 'bp';
-
-	var RETVAL      = 'rv';
-
-	var INNER_LABEL = 'Q';
-
-	var ARGS = [
-	  DIMENSION,
-	  AXIS,
-	  VISIT,
-	  RED_START,
-	  RED_END,
-	  RED_BOXES,
-	  RED_INDEX,
-	  BLUE_START,
-	  BLUE_END,
-	  BLUE_BOXES,
-	  BLUE_INDEX
-	];
-
-	function generateBruteForce(redMajor, flip, full) {
-	  var funcName = 'bruteForce' + 
-	    (redMajor ? 'Red' : 'Blue') + 
-	    (flip ? 'Flip' : '') +
-	    (full ? 'Full' : '');
-
-	  var code = ['function ', funcName, '(', ARGS.join(), '){',
-	    'var ', ELEM_SIZE, '=2*', DIMENSION, ';'];
-
-	  var redLoop = 
-	    'for(var i=' + RED_START + ',' + RED_PTR + '=' + ELEM_SIZE + '*' + RED_START + ';' +
-	        'i<' + RED_END +';' +
-	        '++i,' + RED_PTR + '+=' + ELEM_SIZE + '){' +
-	        'var x0=' + RED_BOXES + '[' + AXIS + '+' + RED_PTR + '],' +
-	            'x1=' + RED_BOXES + '[' + AXIS + '+' + RED_PTR + '+' + DIMENSION + '],' +
-	            'xi=' + RED_INDEX + '[i];';
-
-	  var blueLoop = 
-	    'for(var j=' + BLUE_START + ',' + BLUE_PTR + '=' + ELEM_SIZE + '*' + BLUE_START + ';' +
-	        'j<' + BLUE_END + ';' +
-	        '++j,' + BLUE_PTR + '+=' + ELEM_SIZE + '){' +
-	        'var y0=' + BLUE_BOXES + '[' + AXIS + '+' + BLUE_PTR + '],' +
-	            (full ? 'y1=' + BLUE_BOXES + '[' + AXIS + '+' + BLUE_PTR + '+' + DIMENSION + '],' : '') +
-	            'yi=' + BLUE_INDEX + '[j];';
-
-	  if(redMajor) {
-	    code.push(redLoop, INNER_LABEL, ':', blueLoop);
-	  } else {
-	    code.push(blueLoop, INNER_LABEL, ':', redLoop);
-	  }
-
-	  if(full) {
-	    code.push('if(y1<x0||x1<y0)continue;');
-	  } else if(flip) {
-	    code.push('if(y0<=x0||x1<y0)continue;');
-	  } else {
-	    code.push('if(y0<x0||x1<y0)continue;');
-	  }
-
-	  code.push('for(var k='+AXIS+'+1;k<'+DIMENSION+';++k){'+
-	    'var r0='+RED_BOXES+'[k+'+RED_PTR+'],'+
-	        'r1='+RED_BOXES+'[k+'+DIMENSION+'+'+RED_PTR+'],'+
-	        'b0='+BLUE_BOXES+'[k+'+BLUE_PTR+'],'+
-	        'b1='+BLUE_BOXES+'[k+'+DIMENSION+'+'+BLUE_PTR+'];'+
-	      'if(r1<b0||b1<r0)continue ' + INNER_LABEL + ';}' +
-	      'var ' + RETVAL + '=' + VISIT + '(');
-
-	  if(flip) {
-	    code.push('yi,xi');
-	  } else {
-	    code.push('xi,yi');
-	  }
-
-	  code.push(');if(' + RETVAL + '!==void 0)return ' + RETVAL + ';}}}');
-
-	  return {
-	    name: funcName, 
-	    code: code.join('')
-	  }
-	}
-
-	function bruteForcePlanner(full) {
-	  var funcName = 'bruteForce' + (full ? 'Full' : 'Partial');
-	  var prefix = [];
-	  var fargs = ARGS.slice();
-	  if(!full) {
-	    fargs.splice(3, 0, FLIP);
-	  }
-
-	  var code = ['function ' + funcName + '(' + fargs.join() + '){'];
-
-	  function invoke(redMajor, flip) {
-	    var res = generateBruteForce(redMajor, flip, full);
-	    prefix.push(res.code);
-	    code.push('return ' + res.name + '(' + ARGS.join() + ');');
-	  }
-
-	  code.push('if(' + RED_END + '-' + RED_START + '>' +
-	                    BLUE_END + '-' + BLUE_START + '){');
-
-	  if(full) {
-	    invoke(true, false);
-	    code.push('}else{');
-	    invoke(false, false);
-	  } else {
-	    code.push('if(' + FLIP + '){');
-	    invoke(true, true);
-	    code.push('}else{');
-	    invoke(true, false);
-	    code.push('}}else{if(' + FLIP + '){');
-	    invoke(false, true);
-	    code.push('}else{');
-	    invoke(false, false);
-	    code.push('}');
-	  }
-	  code.push('}}return ' + funcName);
-
-	  var codeStr = prefix.join('') + code.join('');
-	  var proc = new Function(codeStr);
-	  return proc()
-	}
-
-
-	var partial = bruteForcePlanner(false);
-	var full    = bruteForcePlanner(true);
-
-	var brute = {
-		partial: partial,
-		full: full
-	};
-
-	var partition = genPartition;
-
-	var code = 'for(var j=2*a,k=j*c,l=k,m=c,n=b,o=a+b,p=c;d>p;++p,k+=j){var _;if($)if(m===p)m+=1,l+=j;else{for(var s=0;j>s;++s){var t=e[k+s];e[k+s]=e[l],e[l++]=t}var u=f[p];f[p]=f[m],f[m++]=u}}return m';
-
-	function genPartition(predicate, args) {
-	  var fargs ='abcdef'.split('').concat(args);
-	  var reads = [];
-	  if(predicate.indexOf('lo') >= 0) {
-	    reads.push('lo=e[k+n]');
-	  }
-	  if(predicate.indexOf('hi') >= 0) {
-	    reads.push('hi=e[k+o]');
-	  }
-	  fargs.push(
-	    code.replace('_', reads.join())
-	        .replace('$', predicate));
-	  return Function.apply(void 0, fargs)
-	}
-
-	var median = findMedian;
-
-
-
-	var partitionStartLessThan = partition('lo<p0', ['p0']);
-
-	var PARTITION_THRESHOLD = 8;   //Cut off for using insertion sort in findMedian
-
-	//Base case for median finding:  Use insertion sort
-	function insertionSort$1(d, axis, start, end, boxes, ids) {
-	  var elemSize = 2 * d;
-	  var boxPtr = elemSize * (start+1) + axis;
-	  for(var i=start+1; i<end; ++i, boxPtr+=elemSize) {
-	    var x = boxes[boxPtr];
-	    for(var j=i, ptr=elemSize*(i-1); 
-	        j>start && boxes[ptr+axis] > x; 
-	        --j, ptr-=elemSize) {
-	      //Swap
-	      var aPtr = ptr;
-	      var bPtr = ptr+elemSize;
-	      for(var k=0; k<elemSize; ++k, ++aPtr, ++bPtr) {
-	        var y = boxes[aPtr];
-	        boxes[aPtr] = boxes[bPtr];
-	        boxes[bPtr] = y;
-	      }
-	      var tmp = ids[j];
-	      ids[j] = ids[j-1];
-	      ids[j-1] = tmp;
-	    }
-	  }
-	}
-
-	//Find median using quick select algorithm
-	//  takes O(n) time with high probability
-	function findMedian(d, axis, start, end, boxes, ids) {
-	  if(end <= start+1) {
-	    return start
-	  }
-
-	  var lo       = start;
-	  var hi       = end;
-	  var mid      = ((end + start) >>> 1);
-	  var elemSize = 2*d;
-	  var pivot    = mid;
-	  var value    = boxes[elemSize*mid+axis];
-	  
-	  while(lo < hi) {
-	    if(hi - lo < PARTITION_THRESHOLD) {
-	      insertionSort$1(d, axis, lo, hi, boxes, ids);
-	      value = boxes[elemSize*mid+axis];
-	      break
-	    }
-	    
-	    //Select pivot using median-of-3
-	    var count  = hi - lo;
-	    var pivot0 = (Math.random()*count+lo)|0;
-	    var value0 = boxes[elemSize*pivot0 + axis];
-	    var pivot1 = (Math.random()*count+lo)|0;
-	    var value1 = boxes[elemSize*pivot1 + axis];
-	    var pivot2 = (Math.random()*count+lo)|0;
-	    var value2 = boxes[elemSize*pivot2 + axis];
-	    if(value0 <= value1) {
-	      if(value2 >= value1) {
-	        pivot = pivot1;
-	        value = value1;
-	      } else if(value0 >= value2) {
-	        pivot = pivot0;
-	        value = value0;
-	      } else {
-	        pivot = pivot2;
-	        value = value2;
-	      }
-	    } else {
-	      if(value1 >= value2) {
-	        pivot = pivot1;
-	        value = value1;
-	      } else if(value2 >= value0) {
-	        pivot = pivot0;
-	        value = value0;
-	      } else {
-	        pivot = pivot2;
-	        value = value2;
-	      }
-	    }
-
-	    //Swap pivot to end of array
-	    var aPtr = elemSize * (hi-1);
-	    var bPtr = elemSize * pivot;
-	    for(var i=0; i<elemSize; ++i, ++aPtr, ++bPtr) {
-	      var x = boxes[aPtr];
-	      boxes[aPtr] = boxes[bPtr];
-	      boxes[bPtr] = x;
-	    }
-	    var y = ids[hi-1];
-	    ids[hi-1] = ids[pivot];
-	    ids[pivot] = y;
-
-	    //Partition using pivot
-	    pivot = partitionStartLessThan(
-	      d, axis, 
-	      lo, hi-1, boxes, ids,
-	      value);
-
-	    //Swap pivot back
-	    var aPtr = elemSize * (hi-1);
-	    var bPtr = elemSize * pivot;
-	    for(var i=0; i<elemSize; ++i, ++aPtr, ++bPtr) {
-	      var x = boxes[aPtr];
-	      boxes[aPtr] = boxes[bPtr];
-	      boxes[bPtr] = x;
-	    }
-	    var y = ids[hi-1];
-	    ids[hi-1] = ids[pivot];
-	    ids[pivot] = y;
-
-	    //Swap pivot to last pivot
-	    if(mid < pivot) {
-	      hi = pivot-1;
-	      while(lo < hi && 
-	        boxes[elemSize*(hi-1)+axis] === value) {
-	        hi -= 1;
-	      }
-	      hi += 1;
-	    } else if(pivot < mid) {
-	      lo = pivot + 1;
-	      while(lo < hi &&
-	        boxes[elemSize*lo+axis] === value) {
-	        lo += 1;
-	      }
-	    } else {
-	      break
-	    }
-	  }
-
-	  //Make sure pivot is at start
-	  return partitionStartLessThan(
-	    d, axis, 
-	    start, mid, boxes, ids,
-	    boxes[elemSize*mid+axis])
-	}
-
-	var intersect = boxIntersectIter;
-
-
-
-
-	var bruteForcePartial = brute.partial;
-	var bruteForceFull = brute.full;
-
-
-
-
-	//Twiddle parameters
-	var BRUTE_FORCE_CUTOFF    = 128;       //Cut off for brute force search
-	var SCAN_CUTOFF           = (1<<22);   //Cut off for two way scan
-	var SCAN_COMPLETE_CUTOFF  = (1<<22);  
-
-	//Partition functions
-	var partitionInteriorContainsInterval = partition(
-	  '!(lo>=p0)&&!(p1>=hi)', 
-	  ['p0', 'p1']);
-
-	var partitionStartEqual = partition(
-	  'lo===p0',
-	  ['p0']);
-
-	var partitionStartLessThan$1 = partition(
-	  'lo<p0',
-	  ['p0']);
-
-	var partitionEndLessThanEqual = partition(
-	  'hi<=p0',
-	  ['p0']);
-
-	var partitionContainsPoint = partition(
-	  'lo<=p0&&p0<=hi',
-	  ['p0']);
-
-	var partitionContainsPointProper = partition(
-	  'lo<p0&&p0<=hi',
-	  ['p0']);
-
-	//Frame size for iterative loop
-	var IFRAME_SIZE = 6;
-	var DFRAME_SIZE = 2;
-
-	//Data for box statck
-	var INIT_CAPACITY$1 = 1024;
-	var BOX_ISTACK  = pool.mallocInt32(INIT_CAPACITY$1);
-	var BOX_DSTACK  = pool.mallocDouble(INIT_CAPACITY$1);
-
-	//Initialize iterative loop queue
-	function iterInit(d, count) {
-	  var levels = (8 * twiddle.log2(count+1) * (d+1))|0;
-	  var maxInts = twiddle.nextPow2(IFRAME_SIZE*levels);
-	  if(BOX_ISTACK.length < maxInts) {
-	    pool.free(BOX_ISTACK);
-	    BOX_ISTACK = pool.mallocInt32(maxInts);
-	  }
-	  var maxDoubles = twiddle.nextPow2(DFRAME_SIZE*levels);
-	  if(BOX_DSTACK.length < maxDoubles) {
-	    pool.free(BOX_DSTACK);
-	    BOX_DSTACK = pool.mallocDouble(maxDoubles);
-	  }
-	}
-
-	//Append item to queue
-	function iterPush(ptr,
-	  axis, 
-	  redStart, redEnd, 
-	  blueStart, blueEnd, 
-	  state, 
-	  lo, hi) {
-
-	  var iptr = IFRAME_SIZE * ptr;
-	  BOX_ISTACK[iptr]   = axis;
-	  BOX_ISTACK[iptr+1] = redStart;
-	  BOX_ISTACK[iptr+2] = redEnd;
-	  BOX_ISTACK[iptr+3] = blueStart;
-	  BOX_ISTACK[iptr+4] = blueEnd;
-	  BOX_ISTACK[iptr+5] = state;
-
-	  var dptr = DFRAME_SIZE * ptr;
-	  BOX_DSTACK[dptr]   = lo;
-	  BOX_DSTACK[dptr+1] = hi;
-	}
-
-	//Special case:  Intersect single point with list of intervals
-	function onePointPartial(
-	  d, axis, visit, flip,
-	  redStart, redEnd, red, redIndex,
-	  blueOffset, blue, blueId) {
-
-	  var elemSize = 2 * d;
-	  var bluePtr  = blueOffset * elemSize;
-	  var blueX    = blue[bluePtr + axis];
-
-	red_loop:
-	  for(var i=redStart, redPtr=redStart*elemSize; i<redEnd; ++i, redPtr+=elemSize) {
-	    var r0 = red[redPtr+axis];
-	    var r1 = red[redPtr+axis+d];
-	    if(blueX < r0 || r1 < blueX) {
-	      continue
-	    }
-	    if(flip && blueX === r0) {
-	      continue
-	    }
-	    var redId = redIndex[i];
-	    for(var j=axis+1; j<d; ++j) {
-	      var r0 = red[redPtr+j];
-	      var r1 = red[redPtr+j+d];
-	      var b0 = blue[bluePtr+j];
-	      var b1 = blue[bluePtr+j+d];
-	      if(r1 < b0 || b1 < r0) {
-	        continue red_loop
-	      }
-	    }
-	    var retval;
-	    if(flip) {
-	      retval = visit(blueId, redId);
-	    } else {
-	      retval = visit(redId, blueId);
-	    }
-	    if(retval !== void 0) {
-	      return retval
-	    }
-	  }
-	}
-
-	//Special case:  Intersect one point with list of intervals
-	function onePointFull(
-	  d, axis, visit,
-	  redStart, redEnd, red, redIndex,
-	  blueOffset, blue, blueId) {
-
-	  var elemSize = 2 * d;
-	  var bluePtr  = blueOffset * elemSize;
-	  var blueX    = blue[bluePtr + axis];
-
-	red_loop:
-	  for(var i=redStart, redPtr=redStart*elemSize; i<redEnd; ++i, redPtr+=elemSize) {
-	    var redId = redIndex[i];
-	    if(redId === blueId) {
-	      continue
-	    }
-	    var r0 = red[redPtr+axis];
-	    var r1 = red[redPtr+axis+d];
-	    if(blueX < r0 || r1 < blueX) {
-	      continue
-	    }
-	    for(var j=axis+1; j<d; ++j) {
-	      var r0 = red[redPtr+j];
-	      var r1 = red[redPtr+j+d];
-	      var b0 = blue[bluePtr+j];
-	      var b1 = blue[bluePtr+j+d];
-	      if(r1 < b0 || b1 < r0) {
-	        continue red_loop
-	      }
-	    }
-	    var retval = visit(redId, blueId);
-	    if(retval !== void 0) {
-	      return retval
-	    }
-	  }
-	}
-
-	//The main box intersection routine
-	function boxIntersectIter(
-	  d, visit, initFull,
-	  xSize, xBoxes, xIndex,
-	  ySize, yBoxes, yIndex) {
-
-	  //Reserve memory for stack
-	  iterInit(d, xSize + ySize);
-
-	  var top  = 0;
-	  var elemSize = 2 * d;
-	  var retval;
-
-	  iterPush(top++,
-	      0,
-	      0, xSize,
-	      0, ySize,
-	      initFull ? 16 : 0, 
-	      -Infinity, Infinity);
-	  if(!initFull) {
-	    iterPush(top++,
-	      0,
-	      0, ySize,
-	      0, xSize,
-	      1, 
-	      -Infinity, Infinity);
-	  }
-
-	  while(top > 0) {
-	    top  -= 1;
-
-	    var iptr = top * IFRAME_SIZE;
-	    var axis      = BOX_ISTACK[iptr];
-	    var redStart  = BOX_ISTACK[iptr+1];
-	    var redEnd    = BOX_ISTACK[iptr+2];
-	    var blueStart = BOX_ISTACK[iptr+3];
-	    var blueEnd   = BOX_ISTACK[iptr+4];
-	    var state     = BOX_ISTACK[iptr+5];
-
-	    var dptr = top * DFRAME_SIZE;
-	    var lo        = BOX_DSTACK[dptr];
-	    var hi        = BOX_DSTACK[dptr+1];
-
-	    //Unpack state info
-	    var flip      = (state & 1);
-	    var full      = !!(state & 16);
-
-	    //Unpack indices
-	    var red       = xBoxes;
-	    var redIndex  = xIndex;
-	    var blue      = yBoxes;
-	    var blueIndex = yIndex;
-	    if(flip) {
-	      red         = yBoxes;
-	      redIndex    = yIndex;
-	      blue        = xBoxes;
-	      blueIndex   = xIndex;
-	    }
-
-	    if(state & 2) {
-	      redEnd = partitionStartLessThan$1(
-	        d, axis,
-	        redStart, redEnd, red, redIndex,
-	        hi);
-	      if(redStart >= redEnd) {
-	        continue
-	      }
-	    }
-	    if(state & 4) {
-	      redStart = partitionEndLessThanEqual(
-	        d, axis,
-	        redStart, redEnd, red, redIndex,
-	        lo);
-	      if(redStart >= redEnd) {
-	        continue
-	      }
-	    }
-	    
-	    var redCount  = redEnd  - redStart;
-	    var blueCount = blueEnd - blueStart;
-
-	    if(full) {
-	      if(d * redCount * (redCount + blueCount) < SCAN_COMPLETE_CUTOFF) {
-	        retval = sweep.scanComplete(
-	          d, axis, visit, 
-	          redStart, redEnd, red, redIndex,
-	          blueStart, blueEnd, blue, blueIndex);
-	        if(retval !== void 0) {
-	          return retval
-	        }
-	        continue
-	      }
-	    } else {
-	      if(d * Math.min(redCount, blueCount) < BRUTE_FORCE_CUTOFF) {
-	        //If input small, then use brute force
-	        retval = bruteForcePartial(
-	            d, axis, visit, flip,
-	            redStart,  redEnd,  red,  redIndex,
-	            blueStart, blueEnd, blue, blueIndex);
-	        if(retval !== void 0) {
-	          return retval
-	        }
-	        continue
-	      } else if(d * redCount * blueCount < SCAN_CUTOFF) {
-	        //If input medium sized, then use sweep and prune
-	        retval = sweep.scanBipartite(
-	          d, axis, visit, flip, 
-	          redStart, redEnd, red, redIndex,
-	          blueStart, blueEnd, blue, blueIndex);
-	        if(retval !== void 0) {
-	          return retval
-	        }
-	        continue
-	      }
-	    }
-	    
-	    //First, find all red intervals whose interior contains (lo,hi)
-	    var red0 = partitionInteriorContainsInterval(
-	      d, axis, 
-	      redStart, redEnd, red, redIndex,
-	      lo, hi);
-
-	    //Lower dimensional case
-	    if(redStart < red0) {
-
-	      if(d * (red0 - redStart) < BRUTE_FORCE_CUTOFF) {
-	        //Special case for small inputs: use brute force
-	        retval = bruteForceFull(
-	          d, axis+1, visit,
-	          redStart, red0, red, redIndex,
-	          blueStart, blueEnd, blue, blueIndex);
-	        if(retval !== void 0) {
-	          return retval
-	        }
-	      } else if(axis === d-2) {
-	        if(flip) {
-	          retval = sweep.sweepBipartite(
-	            d, visit,
-	            blueStart, blueEnd, blue, blueIndex,
-	            redStart, red0, red, redIndex);
-	        } else {
-	          retval = sweep.sweepBipartite(
-	            d, visit,
-	            redStart, red0, red, redIndex,
-	            blueStart, blueEnd, blue, blueIndex);
-	        }
-	        if(retval !== void 0) {
-	          return retval
-	        }
-	      } else {
-	        iterPush(top++,
-	          axis+1,
-	          redStart, red0,
-	          blueStart, blueEnd,
-	          flip,
-	          -Infinity, Infinity);
-	        iterPush(top++,
-	          axis+1,
-	          blueStart, blueEnd,
-	          redStart, red0,
-	          flip^1,
-	          -Infinity, Infinity);
-	      }
-	    }
-
-	    //Divide and conquer phase
-	    if(red0 < redEnd) {
-
-	      //Cut blue into 3 parts:
-	      //
-	      //  Points < mid point
-	      //  Points = mid point
-	      //  Points > mid point
-	      //
-	      var blue0 = median(
-	        d, axis, 
-	        blueStart, blueEnd, blue, blueIndex);
-	      var mid = blue[elemSize * blue0 + axis];
-	      var blue1 = partitionStartEqual(
-	        d, axis,
-	        blue0, blueEnd, blue, blueIndex,
-	        mid);
-
-	      //Right case
-	      if(blue1 < blueEnd) {
-	        iterPush(top++,
-	          axis,
-	          red0, redEnd,
-	          blue1, blueEnd,
-	          (flip|4) + (full ? 16 : 0),
-	          mid, hi);
-	      }
-
-	      //Left case
-	      if(blueStart < blue0) {
-	        iterPush(top++,
-	          axis,
-	          red0, redEnd,
-	          blueStart, blue0,
-	          (flip|2) + (full ? 16 : 0),
-	          lo, mid);
-	      }
-
-	      //Center case (the hard part)
-	      if(blue0 + 1 === blue1) {
-	        //Optimization: Range with exactly 1 point, use a brute force scan
-	        if(full) {
-	          retval = onePointFull(
-	            d, axis, visit,
-	            red0, redEnd, red, redIndex,
-	            blue0, blue, blueIndex[blue0]);
-	        } else {
-	          retval = onePointPartial(
-	            d, axis, visit, flip,
-	            red0, redEnd, red, redIndex,
-	            blue0, blue, blueIndex[blue0]);
-	        }
-	        if(retval !== void 0) {
-	          return retval
-	        }
-	      } else if(blue0 < blue1) {
-	        var red1;
-	        if(full) {
-	          //If full intersection, need to handle special case
-	          red1 = partitionContainsPoint(
-	            d, axis,
-	            red0, redEnd, red, redIndex,
-	            mid);
-	          if(red0 < red1) {
-	            var redX = partitionStartEqual(
-	              d, axis,
-	              red0, red1, red, redIndex,
-	              mid);
-	            if(axis === d-2) {
-	              //Degenerate sweep intersection:
-	              //  [red0, redX] with [blue0, blue1]
-	              if(red0 < redX) {
-	                retval = sweep.sweepComplete(
-	                  d, visit,
-	                  red0, redX, red, redIndex,
-	                  blue0, blue1, blue, blueIndex);
-	                if(retval !== void 0) {
-	                  return retval
-	                }
-	              }
-
-	              //Normal sweep intersection:
-	              //  [redX, red1] with [blue0, blue1]
-	              if(redX < red1) {
-	                retval = sweep.sweepBipartite(
-	                  d, visit,
-	                  redX, red1, red, redIndex,
-	                  blue0, blue1, blue, blueIndex);
-	                if(retval !== void 0) {
-	                  return retval
-	                }
-	              }
-	            } else {
-	              if(red0 < redX) {
-	                iterPush(top++,
-	                  axis+1,
-	                  red0, redX,
-	                  blue0, blue1,
-	                  16,
-	                  -Infinity, Infinity);
-	              }
-	              if(redX < red1) {
-	                iterPush(top++,
-	                  axis+1,
-	                  redX, red1,
-	                  blue0, blue1,
-	                  0,
-	                  -Infinity, Infinity);
-	                iterPush(top++,
-	                  axis+1,
-	                  blue0, blue1,
-	                  redX, red1,
-	                  1,
-	                  -Infinity, Infinity);
-	              }
-	            }
-	          }
-	        } else {
-	          if(flip) {
-	            red1 = partitionContainsPointProper(
-	              d, axis,
-	              red0, redEnd, red, redIndex,
-	              mid);
-	          } else {
-	            red1 = partitionContainsPoint(
-	              d, axis,
-	              red0, redEnd, red, redIndex,
-	              mid);
-	          }
-	          if(red0 < red1) {
-	            if(axis === d-2) {
-	              if(flip) {
-	                retval = sweep.sweepBipartite(
-	                  d, visit,
-	                  blue0, blue1, blue, blueIndex,
-	                  red0, red1, red, redIndex);
-	              } else {
-	                retval = sweep.sweepBipartite(
-	                  d, visit,
-	                  red0, red1, red, redIndex,
-	                  blue0, blue1, blue, blueIndex);
-	              }
-	            } else {
-	              iterPush(top++,
-	                axis+1,
-	                red0, red1,
-	                blue0, blue1,
-	                flip,
-	                -Infinity, Infinity);
-	              iterPush(top++,
-	                axis+1,
-	                blue0, blue1,
-	                red0, red1,
-	                flip^1,
-	                -Infinity, Infinity);
-	            }
-	          }
-	        }
-	      }
-	    }
-	  }
-	}
-
-	var boxIntersect_1 = boxIntersectWrapper;
-
-
-
-
-
-	function boxEmpty(d, box) {
-	  for(var j=0; j<d; ++j) {
-	    if(!(box[j] <= box[j+d])) {
-	      return true
-	    }
-	  }
-	  return false
-	}
-
-	//Unpack boxes into a flat typed array, remove empty boxes
-	function convertBoxes(boxes, d, data, ids) {
-	  var ptr = 0;
-	  var count = 0;
-	  for(var i=0, n=boxes.length; i<n; ++i) {
-	    var b = boxes[i];
-	    if(boxEmpty(d, b)) {
-	      continue
-	    }
-	    for(var j=0; j<2*d; ++j) {
-	      data[ptr++] = b[j];
-	    }
-	    ids[count++] = i;
-	  }
-	  return count
-	}
-
-	//Perform type conversions, check bounds
-	function boxIntersect(red, blue, visit, full) {
-	  var n = red.length;
-	  var m = blue.length;
-
-	  //If either array is empty, then we can skip this whole thing
-	  if(n <= 0 || m <= 0) {
-	    return
-	  }
-
-	  //Compute dimension, if it is 0 then we skip
-	  var d = (red[0].length)>>>1;
-	  if(d <= 0) {
-	    return
-	  }
-
-	  var retval;
-
-	  //Convert red boxes
-	  var redList  = pool.mallocDouble(2*d*n);
-	  var redIds   = pool.mallocInt32(n);
-	  n = convertBoxes(red, d, redList, redIds);
-
-	  if(n > 0) {
-	    if(d === 1 && full) {
-	      //Special case: 1d complete
-	      sweep.init(n);
-	      retval = sweep.sweepComplete(
-	        d, visit, 
-	        0, n, redList, redIds,
-	        0, n, redList, redIds);
-	    } else {
-
-	      //Convert blue boxes
-	      var blueList = pool.mallocDouble(2*d*m);
-	      var blueIds  = pool.mallocInt32(m);
-	      m = convertBoxes(blue, d, blueList, blueIds);
-
-	      if(m > 0) {
-	        sweep.init(n+m);
-
-	        if(d === 1) {
-	          //Special case: 1d bipartite
-	          retval = sweep.sweepBipartite(
-	            d, visit, 
-	            0, n, redList,  redIds,
-	            0, m, blueList, blueIds);
-	        } else {
-	          //General case:  d>1
-	          retval = intersect(
-	            d, visit,    full,
-	            n, redList,  redIds,
-	            m, blueList, blueIds);
-	        }
-
-	        pool.free(blueList);
-	        pool.free(blueIds);
-	      }
-	    }
-
-	    pool.free(redList);
-	    pool.free(redIds);
-	  }
-
-	  return retval
-	}
-
-
-	var RESULT;
-
-	function appendItem(i,j) {
-	  RESULT.push([i,j]);
-	}
-
-	function intersectFullArray(x) {
-	  RESULT = [];
-	  boxIntersect(x, x, appendItem, true);
-	  return RESULT
-	}
-
-	function intersectBipartiteArray(x, y) {
-	  RESULT = [];
-	  boxIntersect(x, y, appendItem, false);
-	  return RESULT
-	}
-
-	//User-friendly wrapper, handle full input and no-visitor cases
-	function boxIntersectWrapper(arg0, arg1, arg2) {
-	  switch(arguments.length) {
-	    case 1:
-	      return intersectFullArray(arg0)
-	    case 2:
-	      if(typeof arg1 === 'function') {
-	        return boxIntersect(arg0, arg0, arg1, true)
-	      } else {
-	        return intersectBipartiteArray(arg0, arg1)
-	      }
-	    case 3:
-	      return boxIntersect(arg0, arg1, arg2, false)
-	    default:
-	      throw new Error('box-intersect: Invalid arguments')
-	  }
-	}
-
-	var segseg = segmentsIntersect;
-
-	var orient$2 = orientation_1[3];
-
-	function checkCollinear(a0, a1, b0, b1) {
-
-	  for(var d=0; d<2; ++d) {
-	    var x0 = a0[d];
-	    var y0 = a1[d];
-	    var l0 = Math.min(x0, y0);
-	    var h0 = Math.max(x0, y0);    
-
-	    var x1 = b0[d];
-	    var y1 = b1[d];
-	    var l1 = Math.min(x1, y1);
-	    var h1 = Math.max(x1, y1);    
-
-	    if(h1 < l0 || h0 < l1) {
-	      return false
-	    }
-	  }
-
-	  return true
-	}
-
-	function segmentsIntersect(a0, a1, b0, b1) {
-	  var x0 = orient$2(a0, b0, b1);
-	  var y0 = orient$2(a1, b0, b1);
-	  if((x0 > 0 && y0 > 0) || (x0 < 0 && y0 < 0)) {
-	    return false
-	  }
-
-	  var x1 = orient$2(b0, a0, a1);
-	  var y1 = orient$2(b1, a0, a1);
-	  if((x1 > 0 && y1 > 0) || (x1 < 0 && y1 < 0)) {
-	    return false
-	  }
-
-	  //Check for degenerate collinear case
-	  if(x0 === 0 && y0 === 0 && x1 === 0 && y1 === 0) {
-	    return checkCollinear(a0, a1, b0, b1)
-	  }
-
-	  return true
-	}
-
-	var bn = createCommonjsModule(function (module) {
-	(function (module, exports) {
-
-	  // Utils
-	  function assert (val, msg) {
-	    if (!val) throw new Error(msg || 'Assertion failed');
-	  }
-
-	  // Could use `inherits` module, but don't want to move from single file
-	  // architecture yet.
-	  function inherits (ctor, superCtor) {
-	    ctor.super_ = superCtor;
-	    var TempCtor = function () {};
-	    TempCtor.prototype = superCtor.prototype;
-	    ctor.prototype = new TempCtor();
-	    ctor.prototype.constructor = ctor;
-	  }
-
-	  // BN
-
-	  function BN (number, base, endian) {
-	    if (BN.isBN(number)) {
-	      return number;
-	    }
-
-	    this.negative = 0;
-	    this.words = null;
-	    this.length = 0;
-
-	    // Reduction context
-	    this.red = null;
-
-	    if (number !== null) {
-	      if (base === 'le' || base === 'be') {
-	        endian = base;
-	        base = 10;
-	      }
-
-	      this._init(number || 0, base || 10, endian || 'be');
-	    }
-	  }
-	  if (typeof module === 'object') {
-	    module.exports = BN;
-	  } else {
-	    exports.BN = BN;
-	  }
-
-	  BN.BN = BN;
-	  BN.wordSize = 26;
-
-	  var Buffer;
-	  try {
-	    Buffer = bufferEs6.Buffer;
-	  } catch (e) {
-	  }
-
-	  BN.isBN = function isBN (num) {
-	    if (num instanceof BN) {
 	      return true;
 	    }
-
-	    return num !== null && typeof num === 'object' &&
-	      num.constructor.wordSize === BN.wordSize && Array.isArray(num.words);
-	  };
-
-	  BN.max = function max (left, right) {
-	    if (left.cmp(right) > 0) return left;
-	    return right;
-	  };
-
-	  BN.min = function min (left, right) {
-	    if (left.cmp(right) < 0) return left;
-	    return right;
-	  };
-
-	  BN.prototype._init = function init (number, base, endian) {
-	    if (typeof number === 'number') {
-	      return this._initNumber(number, base, endian);
-	    }
-
-	    if (typeof number === 'object') {
-	      return this._initArray(number, base, endian);
-	    }
-
-	    if (base === 'hex') {
-	      base = 16;
-	    }
-	    assert(base === (base | 0) && base >= 2 && base <= 36);
-
-	    number = number.toString().replace(/\s+/g, '');
-	    var start = 0;
-	    if (number[0] === '-') {
-	      start++;
-	    }
-
-	    if (base === 16) {
-	      this._parseHex(number, start);
-	    } else {
-	      this._parseBase(number, base, start);
-	    }
-
-	    if (number[0] === '-') {
-	      this.negative = 1;
-	    }
-
-	    this.strip();
-
-	    if (endian !== 'le') return;
-
-	    this._initArray(this.toArray(), base, endian);
-	  };
-
-	  BN.prototype._initNumber = function _initNumber (number, base, endian) {
-	    if (number < 0) {
-	      this.negative = 1;
-	      number = -number;
-	    }
-	    if (number < 0x4000000) {
-	      this.words = [ number & 0x3ffffff ];
-	      this.length = 1;
-	    } else if (number < 0x10000000000000) {
-	      this.words = [
-	        number & 0x3ffffff,
-	        (number / 0x4000000) & 0x3ffffff
-	      ];
-	      this.length = 2;
-	    } else {
-	      assert(number < 0x20000000000000); // 2 ^ 53 (unsafe)
-	      this.words = [
-	        number & 0x3ffffff,
-	        (number / 0x4000000) & 0x3ffffff,
-	        1
-	      ];
-	      this.length = 3;
-	    }
-
-	    if (endian !== 'le') return;
-
-	    // Reverse the bytes
-	    this._initArray(this.toArray(), base, endian);
-	  };
-
-	  BN.prototype._initArray = function _initArray (number, base, endian) {
-	    // Perhaps a Uint8Array
-	    assert(typeof number.length === 'number');
-	    if (number.length <= 0) {
-	      this.words = [ 0 ];
-	      this.length = 1;
-	      return this;
-	    }
-
-	    this.length = Math.ceil(number.length / 3);
-	    this.words = new Array(this.length);
-	    for (var i = 0; i < this.length; i++) {
-	      this.words[i] = 0;
-	    }
-
-	    var j, w;
-	    var off = 0;
-	    if (endian === 'be') {
-	      for (i = number.length - 1, j = 0; i >= 0; i -= 3) {
-	        w = number[i] | (number[i - 1] << 8) | (number[i - 2] << 16);
-	        this.words[j] |= (w << off) & 0x3ffffff;
-	        this.words[j + 1] = (w >>> (26 - off)) & 0x3ffffff;
-	        off += 24;
-	        if (off >= 26) {
-	          off -= 26;
-	          j++;
-	        }
-	      }
-	    } else if (endian === 'le') {
-	      for (i = 0, j = 0; i < number.length; i += 3) {
-	        w = number[i] | (number[i + 1] << 8) | (number[i + 2] << 16);
-	        this.words[j] |= (w << off) & 0x3ffffff;
-	        this.words[j + 1] = (w >>> (26 - off)) & 0x3ffffff;
-	        off += 24;
-	        if (off >= 26) {
-	          off -= 26;
-	          j++;
-	        }
-	      }
-	    }
-	    return this.strip();
-	  };
-
-	  function parseHex (str, start, end) {
-	    var r = 0;
-	    var len = Math.min(str.length, end);
-	    for (var i = start; i < len; i++) {
-	      var c = str.charCodeAt(i) - 48;
-
-	      r <<= 4;
-
-	      // 'a' - 'f'
-	      if (c >= 49 && c <= 54) {
-	        r |= c - 49 + 0xa;
-
-	      // 'A' - 'F'
-	      } else if (c >= 17 && c <= 22) {
-	        r |= c - 17 + 0xa;
-
-	      // '0' - '9'
-	      } else {
-	        r |= c & 0xf;
-	      }
-	    }
-	    return r;
-	  }
-
-	  BN.prototype._parseHex = function _parseHex (number, start) {
-	    // Create possibly bigger array to ensure that it fits the number
-	    this.length = Math.ceil((number.length - start) / 6);
-	    this.words = new Array(this.length);
-	    for (var i = 0; i < this.length; i++) {
-	      this.words[i] = 0;
-	    }
-
-	    var j, w;
-	    // Scan 24-bit chunks and add them to the number
-	    var off = 0;
-	    for (i = number.length - 6, j = 0; i >= start; i -= 6) {
-	      w = parseHex(number, i, i + 6);
-	      this.words[j] |= (w << off) & 0x3ffffff;
-	      // NOTE: `0x3fffff` is intentional here, 26bits max shift + 24bit hex limb
-	      this.words[j + 1] |= w >>> (26 - off) & 0x3fffff;
-	      off += 24;
-	      if (off >= 26) {
-	        off -= 26;
-	        j++;
-	      }
-	    }
-	    if (i + 6 !== start) {
-	      w = parseHex(number, start, i + 6);
-	      this.words[j] |= (w << off) & 0x3ffffff;
-	      this.words[j + 1] |= w >>> (26 - off) & 0x3fffff;
-	    }
-	    this.strip();
-	  };
-
-	  function parseBase (str, start, end, mul) {
-	    var r = 0;
-	    var len = Math.min(str.length, end);
-	    for (var i = start; i < len; i++) {
-	      var c = str.charCodeAt(i) - 48;
-
-	      r *= mul;
-
-	      // 'a'
-	      if (c >= 49) {
-	        r += c - 49 + 0xa;
-
-	      // 'A'
-	      } else if (c >= 17) {
-	        r += c - 17 + 0xa;
-
-	      // '0' - '9'
-	      } else {
-	        r += c;
-	      }
-	    }
-	    return r;
-	  }
-
-	  BN.prototype._parseBase = function _parseBase (number, base, start) {
-	    // Initialize as zero
-	    this.words = [ 0 ];
-	    this.length = 1;
-
-	    // Find length of limb in base
-	    for (var limbLen = 0, limbPow = 1; limbPow <= 0x3ffffff; limbPow *= base) {
-	      limbLen++;
-	    }
-	    limbLen--;
-	    limbPow = (limbPow / base) | 0;
-
-	    var total = number.length - start;
-	    var mod = total % limbLen;
-	    var end = Math.min(total, total - mod) + start;
-
-	    var word = 0;
-	    for (var i = start; i < end; i += limbLen) {
-	      word = parseBase(number, i, i + limbLen, base);
-
-	      this.imuln(limbPow);
-	      if (this.words[0] + word < 0x4000000) {
-	        this.words[0] += word;
-	      } else {
-	        this._iaddn(word);
-	      }
-	    }
-
-	    if (mod !== 0) {
-	      var pow = 1;
-	      word = parseBase(number, i, number.length, base);
-
-	      for (i = 0; i < mod; i++) {
-	        pow *= base;
-	      }
-
-	      this.imuln(pow);
-	      if (this.words[0] + word < 0x4000000) {
-	        this.words[0] += word;
-	      } else {
-	        this._iaddn(word);
-	      }
-	    }
-	  };
-
-	  BN.prototype.copy = function copy (dest) {
-	    dest.words = new Array(this.length);
-	    for (var i = 0; i < this.length; i++) {
-	      dest.words[i] = this.words[i];
-	    }
-	    dest.length = this.length;
-	    dest.negative = this.negative;
-	    dest.red = this.red;
-	  };
-
-	  BN.prototype.clone = function clone () {
-	    var r = new BN(null);
-	    this.copy(r);
-	    return r;
-	  };
-
-	  BN.prototype._expand = function _expand (size) {
-	    while (this.length < size) {
-	      this.words[this.length++] = 0;
-	    }
-	    return this;
-	  };
-
-	  // Remove leading `0` from `this`
-	  BN.prototype.strip = function strip () {
-	    while (this.length > 1 && this.words[this.length - 1] === 0) {
-	      this.length--;
-	    }
-	    return this._normSign();
-	  };
-
-	  BN.prototype._normSign = function _normSign () {
-	    // -0 = 0
-	    if (this.length === 1 && this.words[0] === 0) {
-	      this.negative = 0;
-	    }
-	    return this;
-	  };
-
-	  BN.prototype.inspect = function inspect () {
-	    return (this.red ? '<BN-R: ' : '<BN: ') + this.toString(16) + '>';
-	  };
-
-	  /*
-
-	  var zeros = [];
-	  var groupSizes = [];
-	  var groupBases = [];
-
-	  var s = '';
-	  var i = -1;
-	  while (++i < BN.wordSize) {
-	    zeros[i] = s;
-	    s += '0';
-	  }
-	  groupSizes[0] = 0;
-	  groupSizes[1] = 0;
-	  groupBases[0] = 0;
-	  groupBases[1] = 0;
-	  var base = 2 - 1;
-	  while (++base < 36 + 1) {
-	    var groupSize = 0;
-	    var groupBase = 1;
-	    while (groupBase < (1 << BN.wordSize) / base) {
-	      groupBase *= base;
-	      groupSize += 1;
-	    }
-	    groupSizes[base] = groupSize;
-	    groupBases[base] = groupBase;
-	  }
-
-	  */
-
-	  var zeros = [
-	    '',
-	    '0',
-	    '00',
-	    '000',
-	    '0000',
-	    '00000',
-	    '000000',
-	    '0000000',
-	    '00000000',
-	    '000000000',
-	    '0000000000',
-	    '00000000000',
-	    '000000000000',
-	    '0000000000000',
-	    '00000000000000',
-	    '000000000000000',
-	    '0000000000000000',
-	    '00000000000000000',
-	    '000000000000000000',
-	    '0000000000000000000',
-	    '00000000000000000000',
-	    '000000000000000000000',
-	    '0000000000000000000000',
-	    '00000000000000000000000',
-	    '000000000000000000000000',
-	    '0000000000000000000000000'
-	  ];
-
-	  var groupSizes = [
-	    0, 0,
-	    25, 16, 12, 11, 10, 9, 8,
-	    8, 7, 7, 7, 7, 6, 6,
-	    6, 6, 6, 6, 6, 5, 5,
-	    5, 5, 5, 5, 5, 5, 5,
-	    5, 5, 5, 5, 5, 5, 5
-	  ];
-
-	  var groupBases = [
-	    0, 0,
-	    33554432, 43046721, 16777216, 48828125, 60466176, 40353607, 16777216,
-	    43046721, 10000000, 19487171, 35831808, 62748517, 7529536, 11390625,
-	    16777216, 24137569, 34012224, 47045881, 64000000, 4084101, 5153632,
-	    6436343, 7962624, 9765625, 11881376, 14348907, 17210368, 20511149,
-	    24300000, 28629151, 33554432, 39135393, 45435424, 52521875, 60466176
-	  ];
-
-	  BN.prototype.toString = function toString (base, padding) {
-	    base = base || 10;
-	    padding = padding | 0 || 1;
-
-	    var out;
-	    if (base === 16 || base === 'hex') {
-	      out = '';
-	      var off = 0;
-	      var carry = 0;
-	      for (var i = 0; i < this.length; i++) {
-	        var w = this.words[i];
-	        var word = (((w << off) | carry) & 0xffffff).toString(16);
-	        carry = (w >>> (24 - off)) & 0xffffff;
-	        if (carry !== 0 || i !== this.length - 1) {
-	          out = zeros[6 - word.length] + word + out;
-	        } else {
-	          out = word + out;
-	        }
-	        off += 2;
-	        if (off >= 26) {
-	          off -= 26;
-	          i--;
-	        }
-	      }
-	      if (carry !== 0) {
-	        out = carry.toString(16) + out;
-	      }
-	      while (out.length % padding !== 0) {
-	        out = '0' + out;
-	      }
-	      if (this.negative !== 0) {
-	        out = '-' + out;
-	      }
-	      return out;
-	    }
-
-	    if (base === (base | 0) && base >= 2 && base <= 36) {
-	      // var groupSize = Math.floor(BN.wordSize * Math.LN2 / Math.log(base));
-	      var groupSize = groupSizes[base];
-	      // var groupBase = Math.pow(base, groupSize);
-	      var groupBase = groupBases[base];
-	      out = '';
-	      var c = this.clone();
-	      c.negative = 0;
-	      while (!c.isZero()) {
-	        var r = c.modn(groupBase).toString(base);
-	        c = c.idivn(groupBase);
-
-	        if (!c.isZero()) {
-	          out = zeros[groupSize - r.length] + r + out;
-	        } else {
-	          out = r + out;
-	        }
-	      }
-	      if (this.isZero()) {
-	        out = '0' + out;
-	      }
-	      while (out.length % padding !== 0) {
-	        out = '0' + out;
-	      }
-	      if (this.negative !== 0) {
-	        out = '-' + out;
-	      }
-	      return out;
-	    }
-
-	    assert(false, 'Base should be between 2 and 36');
-	  };
-
-	  BN.prototype.toNumber = function toNumber () {
-	    var ret = this.words[0];
-	    if (this.length === 2) {
-	      ret += this.words[1] * 0x4000000;
-	    } else if (this.length === 3 && this.words[2] === 0x01) {
-	      // NOTE: at this stage it is known that the top bit is set
-	      ret += 0x10000000000000 + (this.words[1] * 0x4000000);
-	    } else if (this.length > 2) {
-	      assert(false, 'Number can only safely store up to 53 bits');
-	    }
-	    return (this.negative !== 0) ? -ret : ret;
-	  };
-
-	  BN.prototype.toJSON = function toJSON () {
-	    return this.toString(16);
-	  };
-
-	  BN.prototype.toBuffer = function toBuffer (endian, length) {
-	    assert(typeof Buffer !== 'undefined');
-	    return this.toArrayLike(Buffer, endian, length);
-	  };
-
-	  BN.prototype.toArray = function toArray (endian, length) {
-	    return this.toArrayLike(Array, endian, length);
-	  };
-
-	  BN.prototype.toArrayLike = function toArrayLike (ArrayType, endian, length) {
-	    var byteLength = this.byteLength();
-	    var reqLength = length || Math.max(1, byteLength);
-	    assert(byteLength <= reqLength, 'byte array longer than desired length');
-	    assert(reqLength > 0, 'Requested array length <= 0');
-
-	    this.strip();
-	    var littleEndian = endian === 'le';
-	    var res = new ArrayType(reqLength);
-
-	    var b, i;
-	    var q = this.clone();
-	    if (!littleEndian) {
-	      // Assume big-endian
-	      for (i = 0; i < reqLength - byteLength; i++) {
-	        res[i] = 0;
-	      }
-
-	      for (i = 0; !q.isZero(); i++) {
-	        b = q.andln(0xff);
-	        q.iushrn(8);
-
-	        res[reqLength - i - 1] = b;
-	      }
-	    } else {
-	      for (i = 0; !q.isZero(); i++) {
-	        b = q.andln(0xff);
-	        q.iushrn(8);
-
-	        res[i] = b;
-	      }
-
-	      for (; i < reqLength; i++) {
-	        res[i] = 0;
-	      }
-	    }
-
-	    return res;
-	  };
-
-	  if (Math.clz32) {
-	    BN.prototype._countBits = function _countBits (w) {
-	      return 32 - Math.clz32(w);
-	    };
-	  } else {
-	    BN.prototype._countBits = function _countBits (w) {
-	      var t = w;
-	      var r = 0;
-	      if (t >= 0x1000) {
-	        r += 13;
-	        t >>>= 13;
-	      }
-	      if (t >= 0x40) {
-	        r += 7;
-	        t >>>= 7;
-	      }
-	      if (t >= 0x8) {
-	        r += 4;
-	        t >>>= 4;
-	      }
-	      if (t >= 0x02) {
-	        r += 2;
-	        t >>>= 2;
-	      }
-	      return r + t;
-	    };
-	  }
-
-	  BN.prototype._zeroBits = function _zeroBits (w) {
-	    // Short-cut
-	    if (w === 0) return 26;
-
-	    var t = w;
-	    var r = 0;
-	    if ((t & 0x1fff) === 0) {
-	      r += 13;
-	      t >>>= 13;
-	    }
-	    if ((t & 0x7f) === 0) {
-	      r += 7;
-	      t >>>= 7;
-	    }
-	    if ((t & 0xf) === 0) {
-	      r += 4;
-	      t >>>= 4;
-	    }
-	    if ((t & 0x3) === 0) {
-	      r += 2;
-	      t >>>= 2;
-	    }
-	    if ((t & 0x1) === 0) {
-	      r++;
-	    }
-	    return r;
-	  };
-
-	  // Return number of used bits in a BN
-	  BN.prototype.bitLength = function bitLength () {
-	    var w = this.words[this.length - 1];
-	    var hi = this._countBits(w);
-	    return (this.length - 1) * 26 + hi;
-	  };
-
-	  function toBitArray (num) {
-	    var w = new Array(num.bitLength());
-
-	    for (var bit = 0; bit < w.length; bit++) {
-	      var off = (bit / 26) | 0;
-	      var wbit = bit % 26;
-
-	      w[bit] = (num.words[off] & (1 << wbit)) >>> wbit;
-	    }
-
-	    return w;
-	  }
-
-	  // Number of trailing zero bits
-	  BN.prototype.zeroBits = function zeroBits () {
-	    if (this.isZero()) return 0;
-
-	    var r = 0;
-	    for (var i = 0; i < this.length; i++) {
-	      var b = this._zeroBits(this.words[i]);
-	      r += b;
-	      if (b !== 26) break;
-	    }
-	    return r;
-	  };
-
-	  BN.prototype.byteLength = function byteLength () {
-	    return Math.ceil(this.bitLength() / 8);
-	  };
-
-	  BN.prototype.toTwos = function toTwos (width) {
-	    if (this.negative !== 0) {
-	      return this.abs().inotn(width).iaddn(1);
-	    }
-	    return this.clone();
-	  };
-
-	  BN.prototype.fromTwos = function fromTwos (width) {
-	    if (this.testn(width - 1)) {
-	      return this.notn(width).iaddn(1).ineg();
-	    }
-	    return this.clone();
-	  };
-
-	  BN.prototype.isNeg = function isNeg () {
-	    return this.negative !== 0;
-	  };
-
-	  // Return negative clone of `this`
-	  BN.prototype.neg = function neg () {
-	    return this.clone().ineg();
-	  };
-
-	  BN.prototype.ineg = function ineg () {
-	    if (!this.isZero()) {
-	      this.negative ^= 1;
-	    }
-
-	    return this;
-	  };
-
-	  // Or `num` with `this` in-place
-	  BN.prototype.iuor = function iuor (num) {
-	    while (this.length < num.length) {
-	      this.words[this.length++] = 0;
-	    }
-
-	    for (var i = 0; i < num.length; i++) {
-	      this.words[i] = this.words[i] | num.words[i];
-	    }
-
-	    return this.strip();
-	  };
-
-	  BN.prototype.ior = function ior (num) {
-	    assert((this.negative | num.negative) === 0);
-	    return this.iuor(num);
-	  };
-
-	  // Or `num` with `this`
-	  BN.prototype.or = function or (num) {
-	    if (this.length > num.length) return this.clone().ior(num);
-	    return num.clone().ior(this);
-	  };
-
-	  BN.prototype.uor = function uor (num) {
-	    if (this.length > num.length) return this.clone().iuor(num);
-	    return num.clone().iuor(this);
-	  };
-
-	  // And `num` with `this` in-place
-	  BN.prototype.iuand = function iuand (num) {
-	    // b = min-length(num, this)
-	    var b;
-	    if (this.length > num.length) {
-	      b = num;
-	    } else {
-	      b = this;
-	    }
-
-	    for (var i = 0; i < b.length; i++) {
-	      this.words[i] = this.words[i] & num.words[i];
-	    }
-
-	    this.length = b.length;
-
-	    return this.strip();
-	  };
-
-	  BN.prototype.iand = function iand (num) {
-	    assert((this.negative | num.negative) === 0);
-	    return this.iuand(num);
-	  };
-
-	  // And `num` with `this`
-	  BN.prototype.and = function and (num) {
-	    if (this.length > num.length) return this.clone().iand(num);
-	    return num.clone().iand(this);
-	  };
-
-	  BN.prototype.uand = function uand (num) {
-	    if (this.length > num.length) return this.clone().iuand(num);
-	    return num.clone().iuand(this);
-	  };
-
-	  // Xor `num` with `this` in-place
-	  BN.prototype.iuxor = function iuxor (num) {
-	    // a.length > b.length
-	    var a;
-	    var b;
-	    if (this.length > num.length) {
-	      a = this;
-	      b = num;
-	    } else {
-	      a = num;
-	      b = this;
-	    }
-
-	    for (var i = 0; i < b.length; i++) {
-	      this.words[i] = a.words[i] ^ b.words[i];
-	    }
-
-	    if (this !== a) {
-	      for (; i < a.length; i++) {
-	        this.words[i] = a.words[i];
-	      }
-	    }
-
-	    this.length = a.length;
-
-	    return this.strip();
-	  };
-
-	  BN.prototype.ixor = function ixor (num) {
-	    assert((this.negative | num.negative) === 0);
-	    return this.iuxor(num);
-	  };
-
-	  // Xor `num` with `this`
-	  BN.prototype.xor = function xor (num) {
-	    if (this.length > num.length) return this.clone().ixor(num);
-	    return num.clone().ixor(this);
-	  };
-
-	  BN.prototype.uxor = function uxor (num) {
-	    if (this.length > num.length) return this.clone().iuxor(num);
-	    return num.clone().iuxor(this);
-	  };
-
-	  // Not ``this`` with ``width`` bitwidth
-	  BN.prototype.inotn = function inotn (width) {
-	    assert(typeof width === 'number' && width >= 0);
-
-	    var bytesNeeded = Math.ceil(width / 26) | 0;
-	    var bitsLeft = width % 26;
-
-	    // Extend the buffer with leading zeroes
-	    this._expand(bytesNeeded);
-
-	    if (bitsLeft > 0) {
-	      bytesNeeded--;
-	    }
-
-	    // Handle complete words
-	    for (var i = 0; i < bytesNeeded; i++) {
-	      this.words[i] = ~this.words[i] & 0x3ffffff;
-	    }
-
-	    // Handle the residue
-	    if (bitsLeft > 0) {
-	      this.words[i] = ~this.words[i] & (0x3ffffff >> (26 - bitsLeft));
-	    }
-
-	    // And remove leading zeroes
-	    return this.strip();
-	  };
-
-	  BN.prototype.notn = function notn (width) {
-	    return this.clone().inotn(width);
-	  };
-
-	  // Set `bit` of `this`
-	  BN.prototype.setn = function setn (bit, val) {
-	    assert(typeof bit === 'number' && bit >= 0);
-
-	    var off = (bit / 26) | 0;
-	    var wbit = bit % 26;
-
-	    this._expand(off + 1);
-
-	    if (val) {
-	      this.words[off] = this.words[off] | (1 << wbit);
-	    } else {
-	      this.words[off] = this.words[off] & ~(1 << wbit);
-	    }
-
-	    return this.strip();
-	  };
-
-	  // Add `num` to `this` in-place
-	  BN.prototype.iadd = function iadd (num) {
-	    var r;
-
-	    // negative + positive
-	    if (this.negative !== 0 && num.negative === 0) {
-	      this.negative = 0;
-	      r = this.isub(num);
-	      this.negative ^= 1;
-	      return this._normSign();
-
-	    // positive + negative
-	    } else if (this.negative === 0 && num.negative !== 0) {
-	      num.negative = 0;
-	      r = this.isub(num);
-	      num.negative = 1;
-	      return r._normSign();
-	    }
-
-	    // a.length > b.length
-	    var a, b;
-	    if (this.length > num.length) {
-	      a = this;
-	      b = num;
-	    } else {
-	      a = num;
-	      b = this;
-	    }
-
-	    var carry = 0;
-	    for (var i = 0; i < b.length; i++) {
-	      r = (a.words[i] | 0) + (b.words[i] | 0) + carry;
-	      this.words[i] = r & 0x3ffffff;
-	      carry = r >>> 26;
-	    }
-	    for (; carry !== 0 && i < a.length; i++) {
-	      r = (a.words[i] | 0) + carry;
-	      this.words[i] = r & 0x3ffffff;
-	      carry = r >>> 26;
-	    }
-
-	    this.length = a.length;
-	    if (carry !== 0) {
-	      this.words[this.length] = carry;
-	      this.length++;
-	    // Copy the rest of the words
-	    } else if (a !== this) {
-	      for (; i < a.length; i++) {
-	        this.words[i] = a.words[i];
-	      }
-	    }
-
-	    return this;
-	  };
-
-	  // Add `num` to `this`
-	  BN.prototype.add = function add (num) {
-	    var res;
-	    if (num.negative !== 0 && this.negative === 0) {
-	      num.negative = 0;
-	      res = this.sub(num);
-	      num.negative ^= 1;
-	      return res;
-	    } else if (num.negative === 0 && this.negative !== 0) {
-	      this.negative = 0;
-	      res = num.sub(this);
-	      this.negative = 1;
-	      return res;
-	    }
-
-	    if (this.length > num.length) return this.clone().iadd(num);
-
-	    return num.clone().iadd(this);
-	  };
-
-	  // Subtract `num` from `this` in-place
-	  BN.prototype.isub = function isub (num) {
-	    // this - (-num) = this + num
-	    if (num.negative !== 0) {
-	      num.negative = 0;
-	      var r = this.iadd(num);
-	      num.negative = 1;
-	      return r._normSign();
-
-	    // -this - num = -(this + num)
-	    } else if (this.negative !== 0) {
-	      this.negative = 0;
-	      this.iadd(num);
-	      this.negative = 1;
-	      return this._normSign();
-	    }
-
-	    // At this point both numbers are positive
-	    var cmp = this.cmp(num);
-
-	    // Optimization - zeroify
-	    if (cmp === 0) {
-	      this.negative = 0;
-	      this.length = 1;
-	      this.words[0] = 0;
-	      return this;
-	    }
-
-	    // a > b
-	    var a, b;
-	    if (cmp > 0) {
-	      a = this;
-	      b = num;
-	    } else {
-	      a = num;
-	      b = this;
-	    }
-
-	    var carry = 0;
-	    for (var i = 0; i < b.length; i++) {
-	      r = (a.words[i] | 0) - (b.words[i] | 0) + carry;
-	      carry = r >> 26;
-	      this.words[i] = r & 0x3ffffff;
-	    }
-	    for (; carry !== 0 && i < a.length; i++) {
-	      r = (a.words[i] | 0) + carry;
-	      carry = r >> 26;
-	      this.words[i] = r & 0x3ffffff;
-	    }
-
-	    // Copy rest of the words
-	    if (carry === 0 && i < a.length && a !== this) {
-	      for (; i < a.length; i++) {
-	        this.words[i] = a.words[i];
-	      }
-	    }
-
-	    this.length = Math.max(this.length, i);
-
-	    if (a !== this) {
-	      this.negative = 1;
-	    }
-
-	    return this.strip();
-	  };
-
-	  // Subtract `num` from `this`
-	  BN.prototype.sub = function sub (num) {
-	    return this.clone().isub(num);
-	  };
-
-	  function smallMulTo (self, num, out) {
-	    out.negative = num.negative ^ self.negative;
-	    var len = (self.length + num.length) | 0;
-	    out.length = len;
-	    len = (len - 1) | 0;
-
-	    // Peel one iteration (compiler can't do it, because of code complexity)
-	    var a = self.words[0] | 0;
-	    var b = num.words[0] | 0;
-	    var r = a * b;
-
-	    var lo = r & 0x3ffffff;
-	    var carry = (r / 0x4000000) | 0;
-	    out.words[0] = lo;
-
-	    for (var k = 1; k < len; k++) {
-	      // Sum all words with the same `i + j = k` and accumulate `ncarry`,
-	      // note that ncarry could be >= 0x3ffffff
-	      var ncarry = carry >>> 26;
-	      var rword = carry & 0x3ffffff;
-	      var maxJ = Math.min(k, num.length - 1);
-	      for (var j = Math.max(0, k - self.length + 1); j <= maxJ; j++) {
-	        var i = (k - j) | 0;
-	        a = self.words[i] | 0;
-	        b = num.words[j] | 0;
-	        r = a * b + rword;
-	        ncarry += (r / 0x4000000) | 0;
-	        rword = r & 0x3ffffff;
-	      }
-	      out.words[k] = rword | 0;
-	      carry = ncarry | 0;
-	    }
-	    if (carry !== 0) {
-	      out.words[k] = carry | 0;
-	    } else {
-	      out.length--;
-	    }
-
-	    return out.strip();
-	  }
-
-	  // TODO(indutny): it may be reasonable to omit it for users who don't need
-	  // to work with 256-bit numbers, otherwise it gives 20% improvement for 256-bit
-	  // multiplication (like elliptic secp256k1).
-	  var comb10MulTo = function comb10MulTo (self, num, out) {
-	    var a = self.words;
-	    var b = num.words;
-	    var o = out.words;
-	    var c = 0;
-	    var lo;
-	    var mid;
-	    var hi;
-	    var a0 = a[0] | 0;
-	    var al0 = a0 & 0x1fff;
-	    var ah0 = a0 >>> 13;
-	    var a1 = a[1] | 0;
-	    var al1 = a1 & 0x1fff;
-	    var ah1 = a1 >>> 13;
-	    var a2 = a[2] | 0;
-	    var al2 = a2 & 0x1fff;
-	    var ah2 = a2 >>> 13;
-	    var a3 = a[3] | 0;
-	    var al3 = a3 & 0x1fff;
-	    var ah3 = a3 >>> 13;
-	    var a4 = a[4] | 0;
-	    var al4 = a4 & 0x1fff;
-	    var ah4 = a4 >>> 13;
-	    var a5 = a[5] | 0;
-	    var al5 = a5 & 0x1fff;
-	    var ah5 = a5 >>> 13;
-	    var a6 = a[6] | 0;
-	    var al6 = a6 & 0x1fff;
-	    var ah6 = a6 >>> 13;
-	    var a7 = a[7] | 0;
-	    var al7 = a7 & 0x1fff;
-	    var ah7 = a7 >>> 13;
-	    var a8 = a[8] | 0;
-	    var al8 = a8 & 0x1fff;
-	    var ah8 = a8 >>> 13;
-	    var a9 = a[9] | 0;
-	    var al9 = a9 & 0x1fff;
-	    var ah9 = a9 >>> 13;
-	    var b0 = b[0] | 0;
-	    var bl0 = b0 & 0x1fff;
-	    var bh0 = b0 >>> 13;
-	    var b1 = b[1] | 0;
-	    var bl1 = b1 & 0x1fff;
-	    var bh1 = b1 >>> 13;
-	    var b2 = b[2] | 0;
-	    var bl2 = b2 & 0x1fff;
-	    var bh2 = b2 >>> 13;
-	    var b3 = b[3] | 0;
-	    var bl3 = b3 & 0x1fff;
-	    var bh3 = b3 >>> 13;
-	    var b4 = b[4] | 0;
-	    var bl4 = b4 & 0x1fff;
-	    var bh4 = b4 >>> 13;
-	    var b5 = b[5] | 0;
-	    var bl5 = b5 & 0x1fff;
-	    var bh5 = b5 >>> 13;
-	    var b6 = b[6] | 0;
-	    var bl6 = b6 & 0x1fff;
-	    var bh6 = b6 >>> 13;
-	    var b7 = b[7] | 0;
-	    var bl7 = b7 & 0x1fff;
-	    var bh7 = b7 >>> 13;
-	    var b8 = b[8] | 0;
-	    var bl8 = b8 & 0x1fff;
-	    var bh8 = b8 >>> 13;
-	    var b9 = b[9] | 0;
-	    var bl9 = b9 & 0x1fff;
-	    var bh9 = b9 >>> 13;
-
-	    out.negative = self.negative ^ num.negative;
-	    out.length = 19;
-	    /* k = 0 */
-	    lo = Math.imul(al0, bl0);
-	    mid = Math.imul(al0, bh0);
-	    mid = (mid + Math.imul(ah0, bl0)) | 0;
-	    hi = Math.imul(ah0, bh0);
-	    var w0 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w0 >>> 26)) | 0;
-	    w0 &= 0x3ffffff;
-	    /* k = 1 */
-	    lo = Math.imul(al1, bl0);
-	    mid = Math.imul(al1, bh0);
-	    mid = (mid + Math.imul(ah1, bl0)) | 0;
-	    hi = Math.imul(ah1, bh0);
-	    lo = (lo + Math.imul(al0, bl1)) | 0;
-	    mid = (mid + Math.imul(al0, bh1)) | 0;
-	    mid = (mid + Math.imul(ah0, bl1)) | 0;
-	    hi = (hi + Math.imul(ah0, bh1)) | 0;
-	    var w1 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w1 >>> 26)) | 0;
-	    w1 &= 0x3ffffff;
-	    /* k = 2 */
-	    lo = Math.imul(al2, bl0);
-	    mid = Math.imul(al2, bh0);
-	    mid = (mid + Math.imul(ah2, bl0)) | 0;
-	    hi = Math.imul(ah2, bh0);
-	    lo = (lo + Math.imul(al1, bl1)) | 0;
-	    mid = (mid + Math.imul(al1, bh1)) | 0;
-	    mid = (mid + Math.imul(ah1, bl1)) | 0;
-	    hi = (hi + Math.imul(ah1, bh1)) | 0;
-	    lo = (lo + Math.imul(al0, bl2)) | 0;
-	    mid = (mid + Math.imul(al0, bh2)) | 0;
-	    mid = (mid + Math.imul(ah0, bl2)) | 0;
-	    hi = (hi + Math.imul(ah0, bh2)) | 0;
-	    var w2 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w2 >>> 26)) | 0;
-	    w2 &= 0x3ffffff;
-	    /* k = 3 */
-	    lo = Math.imul(al3, bl0);
-	    mid = Math.imul(al3, bh0);
-	    mid = (mid + Math.imul(ah3, bl0)) | 0;
-	    hi = Math.imul(ah3, bh0);
-	    lo = (lo + Math.imul(al2, bl1)) | 0;
-	    mid = (mid + Math.imul(al2, bh1)) | 0;
-	    mid = (mid + Math.imul(ah2, bl1)) | 0;
-	    hi = (hi + Math.imul(ah2, bh1)) | 0;
-	    lo = (lo + Math.imul(al1, bl2)) | 0;
-	    mid = (mid + Math.imul(al1, bh2)) | 0;
-	    mid = (mid + Math.imul(ah1, bl2)) | 0;
-	    hi = (hi + Math.imul(ah1, bh2)) | 0;
-	    lo = (lo + Math.imul(al0, bl3)) | 0;
-	    mid = (mid + Math.imul(al0, bh3)) | 0;
-	    mid = (mid + Math.imul(ah0, bl3)) | 0;
-	    hi = (hi + Math.imul(ah0, bh3)) | 0;
-	    var w3 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w3 >>> 26)) | 0;
-	    w3 &= 0x3ffffff;
-	    /* k = 4 */
-	    lo = Math.imul(al4, bl0);
-	    mid = Math.imul(al4, bh0);
-	    mid = (mid + Math.imul(ah4, bl0)) | 0;
-	    hi = Math.imul(ah4, bh0);
-	    lo = (lo + Math.imul(al3, bl1)) | 0;
-	    mid = (mid + Math.imul(al3, bh1)) | 0;
-	    mid = (mid + Math.imul(ah3, bl1)) | 0;
-	    hi = (hi + Math.imul(ah3, bh1)) | 0;
-	    lo = (lo + Math.imul(al2, bl2)) | 0;
-	    mid = (mid + Math.imul(al2, bh2)) | 0;
-	    mid = (mid + Math.imul(ah2, bl2)) | 0;
-	    hi = (hi + Math.imul(ah2, bh2)) | 0;
-	    lo = (lo + Math.imul(al1, bl3)) | 0;
-	    mid = (mid + Math.imul(al1, bh3)) | 0;
-	    mid = (mid + Math.imul(ah1, bl3)) | 0;
-	    hi = (hi + Math.imul(ah1, bh3)) | 0;
-	    lo = (lo + Math.imul(al0, bl4)) | 0;
-	    mid = (mid + Math.imul(al0, bh4)) | 0;
-	    mid = (mid + Math.imul(ah0, bl4)) | 0;
-	    hi = (hi + Math.imul(ah0, bh4)) | 0;
-	    var w4 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w4 >>> 26)) | 0;
-	    w4 &= 0x3ffffff;
-	    /* k = 5 */
-	    lo = Math.imul(al5, bl0);
-	    mid = Math.imul(al5, bh0);
-	    mid = (mid + Math.imul(ah5, bl0)) | 0;
-	    hi = Math.imul(ah5, bh0);
-	    lo = (lo + Math.imul(al4, bl1)) | 0;
-	    mid = (mid + Math.imul(al4, bh1)) | 0;
-	    mid = (mid + Math.imul(ah4, bl1)) | 0;
-	    hi = (hi + Math.imul(ah4, bh1)) | 0;
-	    lo = (lo + Math.imul(al3, bl2)) | 0;
-	    mid = (mid + Math.imul(al3, bh2)) | 0;
-	    mid = (mid + Math.imul(ah3, bl2)) | 0;
-	    hi = (hi + Math.imul(ah3, bh2)) | 0;
-	    lo = (lo + Math.imul(al2, bl3)) | 0;
-	    mid = (mid + Math.imul(al2, bh3)) | 0;
-	    mid = (mid + Math.imul(ah2, bl3)) | 0;
-	    hi = (hi + Math.imul(ah2, bh3)) | 0;
-	    lo = (lo + Math.imul(al1, bl4)) | 0;
-	    mid = (mid + Math.imul(al1, bh4)) | 0;
-	    mid = (mid + Math.imul(ah1, bl4)) | 0;
-	    hi = (hi + Math.imul(ah1, bh4)) | 0;
-	    lo = (lo + Math.imul(al0, bl5)) | 0;
-	    mid = (mid + Math.imul(al0, bh5)) | 0;
-	    mid = (mid + Math.imul(ah0, bl5)) | 0;
-	    hi = (hi + Math.imul(ah0, bh5)) | 0;
-	    var w5 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w5 >>> 26)) | 0;
-	    w5 &= 0x3ffffff;
-	    /* k = 6 */
-	    lo = Math.imul(al6, bl0);
-	    mid = Math.imul(al6, bh0);
-	    mid = (mid + Math.imul(ah6, bl0)) | 0;
-	    hi = Math.imul(ah6, bh0);
-	    lo = (lo + Math.imul(al5, bl1)) | 0;
-	    mid = (mid + Math.imul(al5, bh1)) | 0;
-	    mid = (mid + Math.imul(ah5, bl1)) | 0;
-	    hi = (hi + Math.imul(ah5, bh1)) | 0;
-	    lo = (lo + Math.imul(al4, bl2)) | 0;
-	    mid = (mid + Math.imul(al4, bh2)) | 0;
-	    mid = (mid + Math.imul(ah4, bl2)) | 0;
-	    hi = (hi + Math.imul(ah4, bh2)) | 0;
-	    lo = (lo + Math.imul(al3, bl3)) | 0;
-	    mid = (mid + Math.imul(al3, bh3)) | 0;
-	    mid = (mid + Math.imul(ah3, bl3)) | 0;
-	    hi = (hi + Math.imul(ah3, bh3)) | 0;
-	    lo = (lo + Math.imul(al2, bl4)) | 0;
-	    mid = (mid + Math.imul(al2, bh4)) | 0;
-	    mid = (mid + Math.imul(ah2, bl4)) | 0;
-	    hi = (hi + Math.imul(ah2, bh4)) | 0;
-	    lo = (lo + Math.imul(al1, bl5)) | 0;
-	    mid = (mid + Math.imul(al1, bh5)) | 0;
-	    mid = (mid + Math.imul(ah1, bl5)) | 0;
-	    hi = (hi + Math.imul(ah1, bh5)) | 0;
-	    lo = (lo + Math.imul(al0, bl6)) | 0;
-	    mid = (mid + Math.imul(al0, bh6)) | 0;
-	    mid = (mid + Math.imul(ah0, bl6)) | 0;
-	    hi = (hi + Math.imul(ah0, bh6)) | 0;
-	    var w6 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w6 >>> 26)) | 0;
-	    w6 &= 0x3ffffff;
-	    /* k = 7 */
-	    lo = Math.imul(al7, bl0);
-	    mid = Math.imul(al7, bh0);
-	    mid = (mid + Math.imul(ah7, bl0)) | 0;
-	    hi = Math.imul(ah7, bh0);
-	    lo = (lo + Math.imul(al6, bl1)) | 0;
-	    mid = (mid + Math.imul(al6, bh1)) | 0;
-	    mid = (mid + Math.imul(ah6, bl1)) | 0;
-	    hi = (hi + Math.imul(ah6, bh1)) | 0;
-	    lo = (lo + Math.imul(al5, bl2)) | 0;
-	    mid = (mid + Math.imul(al5, bh2)) | 0;
-	    mid = (mid + Math.imul(ah5, bl2)) | 0;
-	    hi = (hi + Math.imul(ah5, bh2)) | 0;
-	    lo = (lo + Math.imul(al4, bl3)) | 0;
-	    mid = (mid + Math.imul(al4, bh3)) | 0;
-	    mid = (mid + Math.imul(ah4, bl3)) | 0;
-	    hi = (hi + Math.imul(ah4, bh3)) | 0;
-	    lo = (lo + Math.imul(al3, bl4)) | 0;
-	    mid = (mid + Math.imul(al3, bh4)) | 0;
-	    mid = (mid + Math.imul(ah3, bl4)) | 0;
-	    hi = (hi + Math.imul(ah3, bh4)) | 0;
-	    lo = (lo + Math.imul(al2, bl5)) | 0;
-	    mid = (mid + Math.imul(al2, bh5)) | 0;
-	    mid = (mid + Math.imul(ah2, bl5)) | 0;
-	    hi = (hi + Math.imul(ah2, bh5)) | 0;
-	    lo = (lo + Math.imul(al1, bl6)) | 0;
-	    mid = (mid + Math.imul(al1, bh6)) | 0;
-	    mid = (mid + Math.imul(ah1, bl6)) | 0;
-	    hi = (hi + Math.imul(ah1, bh6)) | 0;
-	    lo = (lo + Math.imul(al0, bl7)) | 0;
-	    mid = (mid + Math.imul(al0, bh7)) | 0;
-	    mid = (mid + Math.imul(ah0, bl7)) | 0;
-	    hi = (hi + Math.imul(ah0, bh7)) | 0;
-	    var w7 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w7 >>> 26)) | 0;
-	    w7 &= 0x3ffffff;
-	    /* k = 8 */
-	    lo = Math.imul(al8, bl0);
-	    mid = Math.imul(al8, bh0);
-	    mid = (mid + Math.imul(ah8, bl0)) | 0;
-	    hi = Math.imul(ah8, bh0);
-	    lo = (lo + Math.imul(al7, bl1)) | 0;
-	    mid = (mid + Math.imul(al7, bh1)) | 0;
-	    mid = (mid + Math.imul(ah7, bl1)) | 0;
-	    hi = (hi + Math.imul(ah7, bh1)) | 0;
-	    lo = (lo + Math.imul(al6, bl2)) | 0;
-	    mid = (mid + Math.imul(al6, bh2)) | 0;
-	    mid = (mid + Math.imul(ah6, bl2)) | 0;
-	    hi = (hi + Math.imul(ah6, bh2)) | 0;
-	    lo = (lo + Math.imul(al5, bl3)) | 0;
-	    mid = (mid + Math.imul(al5, bh3)) | 0;
-	    mid = (mid + Math.imul(ah5, bl3)) | 0;
-	    hi = (hi + Math.imul(ah5, bh3)) | 0;
-	    lo = (lo + Math.imul(al4, bl4)) | 0;
-	    mid = (mid + Math.imul(al4, bh4)) | 0;
-	    mid = (mid + Math.imul(ah4, bl4)) | 0;
-	    hi = (hi + Math.imul(ah4, bh4)) | 0;
-	    lo = (lo + Math.imul(al3, bl5)) | 0;
-	    mid = (mid + Math.imul(al3, bh5)) | 0;
-	    mid = (mid + Math.imul(ah3, bl5)) | 0;
-	    hi = (hi + Math.imul(ah3, bh5)) | 0;
-	    lo = (lo + Math.imul(al2, bl6)) | 0;
-	    mid = (mid + Math.imul(al2, bh6)) | 0;
-	    mid = (mid + Math.imul(ah2, bl6)) | 0;
-	    hi = (hi + Math.imul(ah2, bh6)) | 0;
-	    lo = (lo + Math.imul(al1, bl7)) | 0;
-	    mid = (mid + Math.imul(al1, bh7)) | 0;
-	    mid = (mid + Math.imul(ah1, bl7)) | 0;
-	    hi = (hi + Math.imul(ah1, bh7)) | 0;
-	    lo = (lo + Math.imul(al0, bl8)) | 0;
-	    mid = (mid + Math.imul(al0, bh8)) | 0;
-	    mid = (mid + Math.imul(ah0, bl8)) | 0;
-	    hi = (hi + Math.imul(ah0, bh8)) | 0;
-	    var w8 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w8 >>> 26)) | 0;
-	    w8 &= 0x3ffffff;
-	    /* k = 9 */
-	    lo = Math.imul(al9, bl0);
-	    mid = Math.imul(al9, bh0);
-	    mid = (mid + Math.imul(ah9, bl0)) | 0;
-	    hi = Math.imul(ah9, bh0);
-	    lo = (lo + Math.imul(al8, bl1)) | 0;
-	    mid = (mid + Math.imul(al8, bh1)) | 0;
-	    mid = (mid + Math.imul(ah8, bl1)) | 0;
-	    hi = (hi + Math.imul(ah8, bh1)) | 0;
-	    lo = (lo + Math.imul(al7, bl2)) | 0;
-	    mid = (mid + Math.imul(al7, bh2)) | 0;
-	    mid = (mid + Math.imul(ah7, bl2)) | 0;
-	    hi = (hi + Math.imul(ah7, bh2)) | 0;
-	    lo = (lo + Math.imul(al6, bl3)) | 0;
-	    mid = (mid + Math.imul(al6, bh3)) | 0;
-	    mid = (mid + Math.imul(ah6, bl3)) | 0;
-	    hi = (hi + Math.imul(ah6, bh3)) | 0;
-	    lo = (lo + Math.imul(al5, bl4)) | 0;
-	    mid = (mid + Math.imul(al5, bh4)) | 0;
-	    mid = (mid + Math.imul(ah5, bl4)) | 0;
-	    hi = (hi + Math.imul(ah5, bh4)) | 0;
-	    lo = (lo + Math.imul(al4, bl5)) | 0;
-	    mid = (mid + Math.imul(al4, bh5)) | 0;
-	    mid = (mid + Math.imul(ah4, bl5)) | 0;
-	    hi = (hi + Math.imul(ah4, bh5)) | 0;
-	    lo = (lo + Math.imul(al3, bl6)) | 0;
-	    mid = (mid + Math.imul(al3, bh6)) | 0;
-	    mid = (mid + Math.imul(ah3, bl6)) | 0;
-	    hi = (hi + Math.imul(ah3, bh6)) | 0;
-	    lo = (lo + Math.imul(al2, bl7)) | 0;
-	    mid = (mid + Math.imul(al2, bh7)) | 0;
-	    mid = (mid + Math.imul(ah2, bl7)) | 0;
-	    hi = (hi + Math.imul(ah2, bh7)) | 0;
-	    lo = (lo + Math.imul(al1, bl8)) | 0;
-	    mid = (mid + Math.imul(al1, bh8)) | 0;
-	    mid = (mid + Math.imul(ah1, bl8)) | 0;
-	    hi = (hi + Math.imul(ah1, bh8)) | 0;
-	    lo = (lo + Math.imul(al0, bl9)) | 0;
-	    mid = (mid + Math.imul(al0, bh9)) | 0;
-	    mid = (mid + Math.imul(ah0, bl9)) | 0;
-	    hi = (hi + Math.imul(ah0, bh9)) | 0;
-	    var w9 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w9 >>> 26)) | 0;
-	    w9 &= 0x3ffffff;
-	    /* k = 10 */
-	    lo = Math.imul(al9, bl1);
-	    mid = Math.imul(al9, bh1);
-	    mid = (mid + Math.imul(ah9, bl1)) | 0;
-	    hi = Math.imul(ah9, bh1);
-	    lo = (lo + Math.imul(al8, bl2)) | 0;
-	    mid = (mid + Math.imul(al8, bh2)) | 0;
-	    mid = (mid + Math.imul(ah8, bl2)) | 0;
-	    hi = (hi + Math.imul(ah8, bh2)) | 0;
-	    lo = (lo + Math.imul(al7, bl3)) | 0;
-	    mid = (mid + Math.imul(al7, bh3)) | 0;
-	    mid = (mid + Math.imul(ah7, bl3)) | 0;
-	    hi = (hi + Math.imul(ah7, bh3)) | 0;
-	    lo = (lo + Math.imul(al6, bl4)) | 0;
-	    mid = (mid + Math.imul(al6, bh4)) | 0;
-	    mid = (mid + Math.imul(ah6, bl4)) | 0;
-	    hi = (hi + Math.imul(ah6, bh4)) | 0;
-	    lo = (lo + Math.imul(al5, bl5)) | 0;
-	    mid = (mid + Math.imul(al5, bh5)) | 0;
-	    mid = (mid + Math.imul(ah5, bl5)) | 0;
-	    hi = (hi + Math.imul(ah5, bh5)) | 0;
-	    lo = (lo + Math.imul(al4, bl6)) | 0;
-	    mid = (mid + Math.imul(al4, bh6)) | 0;
-	    mid = (mid + Math.imul(ah4, bl6)) | 0;
-	    hi = (hi + Math.imul(ah4, bh6)) | 0;
-	    lo = (lo + Math.imul(al3, bl7)) | 0;
-	    mid = (mid + Math.imul(al3, bh7)) | 0;
-	    mid = (mid + Math.imul(ah3, bl7)) | 0;
-	    hi = (hi + Math.imul(ah3, bh7)) | 0;
-	    lo = (lo + Math.imul(al2, bl8)) | 0;
-	    mid = (mid + Math.imul(al2, bh8)) | 0;
-	    mid = (mid + Math.imul(ah2, bl8)) | 0;
-	    hi = (hi + Math.imul(ah2, bh8)) | 0;
-	    lo = (lo + Math.imul(al1, bl9)) | 0;
-	    mid = (mid + Math.imul(al1, bh9)) | 0;
-	    mid = (mid + Math.imul(ah1, bl9)) | 0;
-	    hi = (hi + Math.imul(ah1, bh9)) | 0;
-	    var w10 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w10 >>> 26)) | 0;
-	    w10 &= 0x3ffffff;
-	    /* k = 11 */
-	    lo = Math.imul(al9, bl2);
-	    mid = Math.imul(al9, bh2);
-	    mid = (mid + Math.imul(ah9, bl2)) | 0;
-	    hi = Math.imul(ah9, bh2);
-	    lo = (lo + Math.imul(al8, bl3)) | 0;
-	    mid = (mid + Math.imul(al8, bh3)) | 0;
-	    mid = (mid + Math.imul(ah8, bl3)) | 0;
-	    hi = (hi + Math.imul(ah8, bh3)) | 0;
-	    lo = (lo + Math.imul(al7, bl4)) | 0;
-	    mid = (mid + Math.imul(al7, bh4)) | 0;
-	    mid = (mid + Math.imul(ah7, bl4)) | 0;
-	    hi = (hi + Math.imul(ah7, bh4)) | 0;
-	    lo = (lo + Math.imul(al6, bl5)) | 0;
-	    mid = (mid + Math.imul(al6, bh5)) | 0;
-	    mid = (mid + Math.imul(ah6, bl5)) | 0;
-	    hi = (hi + Math.imul(ah6, bh5)) | 0;
-	    lo = (lo + Math.imul(al5, bl6)) | 0;
-	    mid = (mid + Math.imul(al5, bh6)) | 0;
-	    mid = (mid + Math.imul(ah5, bl6)) | 0;
-	    hi = (hi + Math.imul(ah5, bh6)) | 0;
-	    lo = (lo + Math.imul(al4, bl7)) | 0;
-	    mid = (mid + Math.imul(al4, bh7)) | 0;
-	    mid = (mid + Math.imul(ah4, bl7)) | 0;
-	    hi = (hi + Math.imul(ah4, bh7)) | 0;
-	    lo = (lo + Math.imul(al3, bl8)) | 0;
-	    mid = (mid + Math.imul(al3, bh8)) | 0;
-	    mid = (mid + Math.imul(ah3, bl8)) | 0;
-	    hi = (hi + Math.imul(ah3, bh8)) | 0;
-	    lo = (lo + Math.imul(al2, bl9)) | 0;
-	    mid = (mid + Math.imul(al2, bh9)) | 0;
-	    mid = (mid + Math.imul(ah2, bl9)) | 0;
-	    hi = (hi + Math.imul(ah2, bh9)) | 0;
-	    var w11 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w11 >>> 26)) | 0;
-	    w11 &= 0x3ffffff;
-	    /* k = 12 */
-	    lo = Math.imul(al9, bl3);
-	    mid = Math.imul(al9, bh3);
-	    mid = (mid + Math.imul(ah9, bl3)) | 0;
-	    hi = Math.imul(ah9, bh3);
-	    lo = (lo + Math.imul(al8, bl4)) | 0;
-	    mid = (mid + Math.imul(al8, bh4)) | 0;
-	    mid = (mid + Math.imul(ah8, bl4)) | 0;
-	    hi = (hi + Math.imul(ah8, bh4)) | 0;
-	    lo = (lo + Math.imul(al7, bl5)) | 0;
-	    mid = (mid + Math.imul(al7, bh5)) | 0;
-	    mid = (mid + Math.imul(ah7, bl5)) | 0;
-	    hi = (hi + Math.imul(ah7, bh5)) | 0;
-	    lo = (lo + Math.imul(al6, bl6)) | 0;
-	    mid = (mid + Math.imul(al6, bh6)) | 0;
-	    mid = (mid + Math.imul(ah6, bl6)) | 0;
-	    hi = (hi + Math.imul(ah6, bh6)) | 0;
-	    lo = (lo + Math.imul(al5, bl7)) | 0;
-	    mid = (mid + Math.imul(al5, bh7)) | 0;
-	    mid = (mid + Math.imul(ah5, bl7)) | 0;
-	    hi = (hi + Math.imul(ah5, bh7)) | 0;
-	    lo = (lo + Math.imul(al4, bl8)) | 0;
-	    mid = (mid + Math.imul(al4, bh8)) | 0;
-	    mid = (mid + Math.imul(ah4, bl8)) | 0;
-	    hi = (hi + Math.imul(ah4, bh8)) | 0;
-	    lo = (lo + Math.imul(al3, bl9)) | 0;
-	    mid = (mid + Math.imul(al3, bh9)) | 0;
-	    mid = (mid + Math.imul(ah3, bl9)) | 0;
-	    hi = (hi + Math.imul(ah3, bh9)) | 0;
-	    var w12 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w12 >>> 26)) | 0;
-	    w12 &= 0x3ffffff;
-	    /* k = 13 */
-	    lo = Math.imul(al9, bl4);
-	    mid = Math.imul(al9, bh4);
-	    mid = (mid + Math.imul(ah9, bl4)) | 0;
-	    hi = Math.imul(ah9, bh4);
-	    lo = (lo + Math.imul(al8, bl5)) | 0;
-	    mid = (mid + Math.imul(al8, bh5)) | 0;
-	    mid = (mid + Math.imul(ah8, bl5)) | 0;
-	    hi = (hi + Math.imul(ah8, bh5)) | 0;
-	    lo = (lo + Math.imul(al7, bl6)) | 0;
-	    mid = (mid + Math.imul(al7, bh6)) | 0;
-	    mid = (mid + Math.imul(ah7, bl6)) | 0;
-	    hi = (hi + Math.imul(ah7, bh6)) | 0;
-	    lo = (lo + Math.imul(al6, bl7)) | 0;
-	    mid = (mid + Math.imul(al6, bh7)) | 0;
-	    mid = (mid + Math.imul(ah6, bl7)) | 0;
-	    hi = (hi + Math.imul(ah6, bh7)) | 0;
-	    lo = (lo + Math.imul(al5, bl8)) | 0;
-	    mid = (mid + Math.imul(al5, bh8)) | 0;
-	    mid = (mid + Math.imul(ah5, bl8)) | 0;
-	    hi = (hi + Math.imul(ah5, bh8)) | 0;
-	    lo = (lo + Math.imul(al4, bl9)) | 0;
-	    mid = (mid + Math.imul(al4, bh9)) | 0;
-	    mid = (mid + Math.imul(ah4, bl9)) | 0;
-	    hi = (hi + Math.imul(ah4, bh9)) | 0;
-	    var w13 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w13 >>> 26)) | 0;
-	    w13 &= 0x3ffffff;
-	    /* k = 14 */
-	    lo = Math.imul(al9, bl5);
-	    mid = Math.imul(al9, bh5);
-	    mid = (mid + Math.imul(ah9, bl5)) | 0;
-	    hi = Math.imul(ah9, bh5);
-	    lo = (lo + Math.imul(al8, bl6)) | 0;
-	    mid = (mid + Math.imul(al8, bh6)) | 0;
-	    mid = (mid + Math.imul(ah8, bl6)) | 0;
-	    hi = (hi + Math.imul(ah8, bh6)) | 0;
-	    lo = (lo + Math.imul(al7, bl7)) | 0;
-	    mid = (mid + Math.imul(al7, bh7)) | 0;
-	    mid = (mid + Math.imul(ah7, bl7)) | 0;
-	    hi = (hi + Math.imul(ah7, bh7)) | 0;
-	    lo = (lo + Math.imul(al6, bl8)) | 0;
-	    mid = (mid + Math.imul(al6, bh8)) | 0;
-	    mid = (mid + Math.imul(ah6, bl8)) | 0;
-	    hi = (hi + Math.imul(ah6, bh8)) | 0;
-	    lo = (lo + Math.imul(al5, bl9)) | 0;
-	    mid = (mid + Math.imul(al5, bh9)) | 0;
-	    mid = (mid + Math.imul(ah5, bl9)) | 0;
-	    hi = (hi + Math.imul(ah5, bh9)) | 0;
-	    var w14 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w14 >>> 26)) | 0;
-	    w14 &= 0x3ffffff;
-	    /* k = 15 */
-	    lo = Math.imul(al9, bl6);
-	    mid = Math.imul(al9, bh6);
-	    mid = (mid + Math.imul(ah9, bl6)) | 0;
-	    hi = Math.imul(ah9, bh6);
-	    lo = (lo + Math.imul(al8, bl7)) | 0;
-	    mid = (mid + Math.imul(al8, bh7)) | 0;
-	    mid = (mid + Math.imul(ah8, bl7)) | 0;
-	    hi = (hi + Math.imul(ah8, bh7)) | 0;
-	    lo = (lo + Math.imul(al7, bl8)) | 0;
-	    mid = (mid + Math.imul(al7, bh8)) | 0;
-	    mid = (mid + Math.imul(ah7, bl8)) | 0;
-	    hi = (hi + Math.imul(ah7, bh8)) | 0;
-	    lo = (lo + Math.imul(al6, bl9)) | 0;
-	    mid = (mid + Math.imul(al6, bh9)) | 0;
-	    mid = (mid + Math.imul(ah6, bl9)) | 0;
-	    hi = (hi + Math.imul(ah6, bh9)) | 0;
-	    var w15 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w15 >>> 26)) | 0;
-	    w15 &= 0x3ffffff;
-	    /* k = 16 */
-	    lo = Math.imul(al9, bl7);
-	    mid = Math.imul(al9, bh7);
-	    mid = (mid + Math.imul(ah9, bl7)) | 0;
-	    hi = Math.imul(ah9, bh7);
-	    lo = (lo + Math.imul(al8, bl8)) | 0;
-	    mid = (mid + Math.imul(al8, bh8)) | 0;
-	    mid = (mid + Math.imul(ah8, bl8)) | 0;
-	    hi = (hi + Math.imul(ah8, bh8)) | 0;
-	    lo = (lo + Math.imul(al7, bl9)) | 0;
-	    mid = (mid + Math.imul(al7, bh9)) | 0;
-	    mid = (mid + Math.imul(ah7, bl9)) | 0;
-	    hi = (hi + Math.imul(ah7, bh9)) | 0;
-	    var w16 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w16 >>> 26)) | 0;
-	    w16 &= 0x3ffffff;
-	    /* k = 17 */
-	    lo = Math.imul(al9, bl8);
-	    mid = Math.imul(al9, bh8);
-	    mid = (mid + Math.imul(ah9, bl8)) | 0;
-	    hi = Math.imul(ah9, bh8);
-	    lo = (lo + Math.imul(al8, bl9)) | 0;
-	    mid = (mid + Math.imul(al8, bh9)) | 0;
-	    mid = (mid + Math.imul(ah8, bl9)) | 0;
-	    hi = (hi + Math.imul(ah8, bh9)) | 0;
-	    var w17 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w17 >>> 26)) | 0;
-	    w17 &= 0x3ffffff;
-	    /* k = 18 */
-	    lo = Math.imul(al9, bl9);
-	    mid = Math.imul(al9, bh9);
-	    mid = (mid + Math.imul(ah9, bl9)) | 0;
-	    hi = Math.imul(ah9, bh9);
-	    var w18 = (((c + lo) | 0) + ((mid & 0x1fff) << 13)) | 0;
-	    c = (((hi + (mid >>> 13)) | 0) + (w18 >>> 26)) | 0;
-	    w18 &= 0x3ffffff;
-	    o[0] = w0;
-	    o[1] = w1;
-	    o[2] = w2;
-	    o[3] = w3;
-	    o[4] = w4;
-	    o[5] = w5;
-	    o[6] = w6;
-	    o[7] = w7;
-	    o[8] = w8;
-	    o[9] = w9;
-	    o[10] = w10;
-	    o[11] = w11;
-	    o[12] = w12;
-	    o[13] = w13;
-	    o[14] = w14;
-	    o[15] = w15;
-	    o[16] = w16;
-	    o[17] = w17;
-	    o[18] = w18;
-	    if (c !== 0) {
-	      o[19] = c;
-	      out.length++;
-	    }
-	    return out;
-	  };
-
-	  // Polyfill comb
-	  if (!Math.imul) {
-	    comb10MulTo = smallMulTo;
-	  }
-
-	  function bigMulTo (self, num, out) {
-	    out.negative = num.negative ^ self.negative;
-	    out.length = self.length + num.length;
-
-	    var carry = 0;
-	    var hncarry = 0;
-	    for (var k = 0; k < out.length - 1; k++) {
-	      // Sum all words with the same `i + j = k` and accumulate `ncarry`,
-	      // note that ncarry could be >= 0x3ffffff
-	      var ncarry = hncarry;
-	      hncarry = 0;
-	      var rword = carry & 0x3ffffff;
-	      var maxJ = Math.min(k, num.length - 1);
-	      for (var j = Math.max(0, k - self.length + 1); j <= maxJ; j++) {
-	        var i = k - j;
-	        var a = self.words[i] | 0;
-	        var b = num.words[j] | 0;
-	        var r = a * b;
-
-	        var lo = r & 0x3ffffff;
-	        ncarry = (ncarry + ((r / 0x4000000) | 0)) | 0;
-	        lo = (lo + rword) | 0;
-	        rword = lo & 0x3ffffff;
-	        ncarry = (ncarry + (lo >>> 26)) | 0;
-
-	        hncarry += ncarry >>> 26;
-	        ncarry &= 0x3ffffff;
-	      }
-	      out.words[k] = rword;
-	      carry = ncarry;
-	      ncarry = hncarry;
-	    }
-	    if (carry !== 0) {
-	      out.words[k] = carry;
-	    } else {
-	      out.length--;
-	    }
-
-	    return out.strip();
-	  }
-
-	  function jumboMulTo (self, num, out) {
-	    var fftm = new FFTM();
-	    return fftm.mulp(self, num, out);
-	  }
-
-	  BN.prototype.mulTo = function mulTo (num, out) {
-	    var res;
-	    var len = this.length + num.length;
-	    if (this.length === 10 && num.length === 10) {
-	      res = comb10MulTo(this, num, out);
-	    } else if (len < 63) {
-	      res = smallMulTo(this, num, out);
-	    } else if (len < 1024) {
-	      res = bigMulTo(this, num, out);
-	    } else {
-	      res = jumboMulTo(this, num, out);
-	    }
-
-	    return res;
-	  };
-
-	  // Cooley-Tukey algorithm for FFT
-	  // slightly revisited to rely on looping instead of recursion
-
-	  function FFTM (x, y) {
-	    this.x = x;
-	    this.y = y;
-	  }
-
-	  FFTM.prototype.makeRBT = function makeRBT (N) {
-	    var t = new Array(N);
-	    var l = BN.prototype._countBits(N) - 1;
-	    for (var i = 0; i < N; i++) {
-	      t[i] = this.revBin(i, l, N);
-	    }
-
-	    return t;
-	  };
-
-	  // Returns binary-reversed representation of `x`
-	  FFTM.prototype.revBin = function revBin (x, l, N) {
-	    if (x === 0 || x === N - 1) return x;
-
-	    var rb = 0;
-	    for (var i = 0; i < l; i++) {
-	      rb |= (x & 1) << (l - i - 1);
-	      x >>= 1;
-	    }
-
-	    return rb;
-	  };
-
-	  // Performs "tweedling" phase, therefore 'emulating'
-	  // behaviour of the recursive algorithm
-	  FFTM.prototype.permute = function permute (rbt, rws, iws, rtws, itws, N) {
-	    for (var i = 0; i < N; i++) {
-	      rtws[i] = rws[rbt[i]];
-	      itws[i] = iws[rbt[i]];
-	    }
-	  };
-
-	  FFTM.prototype.transform = function transform (rws, iws, rtws, itws, N, rbt) {
-	    this.permute(rbt, rws, iws, rtws, itws, N);
-
-	    for (var s = 1; s < N; s <<= 1) {
-	      var l = s << 1;
-
-	      var rtwdf = Math.cos(2 * Math.PI / l);
-	      var itwdf = Math.sin(2 * Math.PI / l);
-
-	      for (var p = 0; p < N; p += l) {
-	        var rtwdf_ = rtwdf;
-	        var itwdf_ = itwdf;
-
-	        for (var j = 0; j < s; j++) {
-	          var re = rtws[p + j];
-	          var ie = itws[p + j];
-
-	          var ro = rtws[p + j + s];
-	          var io = itws[p + j + s];
-
-	          var rx = rtwdf_ * ro - itwdf_ * io;
-
-	          io = rtwdf_ * io + itwdf_ * ro;
-	          ro = rx;
-
-	          rtws[p + j] = re + ro;
-	          itws[p + j] = ie + io;
-
-	          rtws[p + j + s] = re - ro;
-	          itws[p + j + s] = ie - io;
-
-	          /* jshint maxdepth : false */
-	          if (j !== l) {
-	            rx = rtwdf * rtwdf_ - itwdf * itwdf_;
-
-	            itwdf_ = rtwdf * itwdf_ + itwdf * rtwdf_;
-	            rtwdf_ = rx;
-	          }
-	        }
-	      }
-	    }
-	  };
-
-	  FFTM.prototype.guessLen13b = function guessLen13b (n, m) {
-	    var N = Math.max(m, n) | 1;
-	    var odd = N & 1;
-	    var i = 0;
-	    for (N = N / 2 | 0; N; N = N >>> 1) {
-	      i++;
-	    }
-
-	    return 1 << i + 1 + odd;
-	  };
-
-	  FFTM.prototype.conjugate = function conjugate (rws, iws, N) {
-	    if (N <= 1) return;
-
-	    for (var i = 0; i < N / 2; i++) {
-	      var t = rws[i];
-
-	      rws[i] = rws[N - i - 1];
-	      rws[N - i - 1] = t;
-
-	      t = iws[i];
-
-	      iws[i] = -iws[N - i - 1];
-	      iws[N - i - 1] = -t;
-	    }
-	  };
-
-	  FFTM.prototype.normalize13b = function normalize13b (ws, N) {
-	    var carry = 0;
-	    for (var i = 0; i < N / 2; i++) {
-	      var w = Math.round(ws[2 * i + 1] / N) * 0x2000 +
-	        Math.round(ws[2 * i] / N) +
-	        carry;
-
-	      ws[i] = w & 0x3ffffff;
-
-	      if (w < 0x4000000) {
-	        carry = 0;
-	      } else {
-	        carry = w / 0x4000000 | 0;
-	      }
-	    }
-
-	    return ws;
-	  };
-
-	  FFTM.prototype.convert13b = function convert13b (ws, len, rws, N) {
-	    var carry = 0;
-	    for (var i = 0; i < len; i++) {
-	      carry = carry + (ws[i] | 0);
-
-	      rws[2 * i] = carry & 0x1fff; carry = carry >>> 13;
-	      rws[2 * i + 1] = carry & 0x1fff; carry = carry >>> 13;
-	    }
-
-	    // Pad with zeroes
-	    for (i = 2 * len; i < N; ++i) {
-	      rws[i] = 0;
-	    }
-
-	    assert(carry === 0);
-	    assert((carry & ~0x1fff) === 0);
-	  };
-
-	  FFTM.prototype.stub = function stub (N) {
-	    var ph = new Array(N);
-	    for (var i = 0; i < N; i++) {
-	      ph[i] = 0;
-	    }
-
-	    return ph;
-	  };
-
-	  FFTM.prototype.mulp = function mulp (x, y, out) {
-	    var N = 2 * this.guessLen13b(x.length, y.length);
-
-	    var rbt = this.makeRBT(N);
-
-	    var _ = this.stub(N);
-
-	    var rws = new Array(N);
-	    var rwst = new Array(N);
-	    var iwst = new Array(N);
-
-	    var nrws = new Array(N);
-	    var nrwst = new Array(N);
-	    var niwst = new Array(N);
-
-	    var rmws = out.words;
-	    rmws.length = N;
-
-	    this.convert13b(x.words, x.length, rws, N);
-	    this.convert13b(y.words, y.length, nrws, N);
-
-	    this.transform(rws, _, rwst, iwst, N, rbt);
-	    this.transform(nrws, _, nrwst, niwst, N, rbt);
-
-	    for (var i = 0; i < N; i++) {
-	      var rx = rwst[i] * nrwst[i] - iwst[i] * niwst[i];
-	      iwst[i] = rwst[i] * niwst[i] + iwst[i] * nrwst[i];
-	      rwst[i] = rx;
-	    }
-
-	    this.conjugate(rwst, iwst, N);
-	    this.transform(rwst, iwst, rmws, _, N, rbt);
-	    this.conjugate(rmws, _, N);
-	    this.normalize13b(rmws, N);
-
-	    out.negative = x.negative ^ y.negative;
-	    out.length = x.length + y.length;
-	    return out.strip();
-	  };
-
-	  // Multiply `this` by `num`
-	  BN.prototype.mul = function mul (num) {
-	    var out = new BN(null);
-	    out.words = new Array(this.length + num.length);
-	    return this.mulTo(num, out);
-	  };
-
-	  // Multiply employing FFT
-	  BN.prototype.mulf = function mulf (num) {
-	    var out = new BN(null);
-	    out.words = new Array(this.length + num.length);
-	    return jumboMulTo(this, num, out);
-	  };
-
-	  // In-place Multiplication
-	  BN.prototype.imul = function imul (num) {
-	    return this.clone().mulTo(num, this);
-	  };
-
-	  BN.prototype.imuln = function imuln (num) {
-	    assert(typeof num === 'number');
-	    assert(num < 0x4000000);
-
-	    // Carry
-	    var carry = 0;
-	    for (var i = 0; i < this.length; i++) {
-	      var w = (this.words[i] | 0) * num;
-	      var lo = (w & 0x3ffffff) + (carry & 0x3ffffff);
-	      carry >>= 26;
-	      carry += (w / 0x4000000) | 0;
-	      // NOTE: lo is 27bit maximum
-	      carry += lo >>> 26;
-	      this.words[i] = lo & 0x3ffffff;
-	    }
-
-	    if (carry !== 0) {
-	      this.words[i] = carry;
-	      this.length++;
-	    }
-
-	    return this;
-	  };
-
-	  BN.prototype.muln = function muln (num) {
-	    return this.clone().imuln(num);
-	  };
-
-	  // `this` * `this`
-	  BN.prototype.sqr = function sqr () {
-	    return this.mul(this);
-	  };
-
-	  // `this` * `this` in-place
-	  BN.prototype.isqr = function isqr () {
-	    return this.imul(this.clone());
-	  };
-
-	  // Math.pow(`this`, `num`)
-	  BN.prototype.pow = function pow (num) {
-	    var w = toBitArray(num);
-	    if (w.length === 0) return new BN(1);
-
-	    // Skip leading zeroes
-	    var res = this;
-	    for (var i = 0; i < w.length; i++, res = res.sqr()) {
-	      if (w[i] !== 0) break;
-	    }
-
-	    if (++i < w.length) {
-	      for (var q = res.sqr(); i < w.length; i++, q = q.sqr()) {
-	        if (w[i] === 0) continue;
-
-	        res = res.mul(q);
-	      }
-	    }
-
-	    return res;
-	  };
-
-	  // Shift-left in-place
-	  BN.prototype.iushln = function iushln (bits) {
-	    assert(typeof bits === 'number' && bits >= 0);
-	    var r = bits % 26;
-	    var s = (bits - r) / 26;
-	    var carryMask = (0x3ffffff >>> (26 - r)) << (26 - r);
-	    var i;
-
-	    if (r !== 0) {
-	      var carry = 0;
-
-	      for (i = 0; i < this.length; i++) {
-	        var newCarry = this.words[i] & carryMask;
-	        var c = ((this.words[i] | 0) - newCarry) << r;
-	        this.words[i] = c | carry;
-	        carry = newCarry >>> (26 - r);
-	      }
-
-	      if (carry) {
-	        this.words[i] = carry;
-	        this.length++;
-	      }
-	    }
-
-	    if (s !== 0) {
-	      for (i = this.length - 1; i >= 0; i--) {
-	        this.words[i + s] = this.words[i];
-	      }
-
-	      for (i = 0; i < s; i++) {
-	        this.words[i] = 0;
-	      }
-
-	      this.length += s;
-	    }
-
-	    return this.strip();
-	  };
-
-	  BN.prototype.ishln = function ishln (bits) {
-	    // TODO(indutny): implement me
-	    assert(this.negative === 0);
-	    return this.iushln(bits);
-	  };
-
-	  // Shift-right in-place
-	  // NOTE: `hint` is a lowest bit before trailing zeroes
-	  // NOTE: if `extended` is present - it will be filled with destroyed bits
-	  BN.prototype.iushrn = function iushrn (bits, hint, extended) {
-	    assert(typeof bits === 'number' && bits >= 0);
-	    var h;
-	    if (hint) {
-	      h = (hint - (hint % 26)) / 26;
-	    } else {
-	      h = 0;
-	    }
-
-	    var r = bits % 26;
-	    var s = Math.min((bits - r) / 26, this.length);
-	    var mask = 0x3ffffff ^ ((0x3ffffff >>> r) << r);
-	    var maskedWords = extended;
-
-	    h -= s;
-	    h = Math.max(0, h);
-
-	    // Extended mode, copy masked part
-	    if (maskedWords) {
-	      for (var i = 0; i < s; i++) {
-	        maskedWords.words[i] = this.words[i];
-	      }
-	      maskedWords.length = s;
-	    }
-
-	    if (s === 0) ; else if (this.length > s) {
-	      this.length -= s;
-	      for (i = 0; i < this.length; i++) {
-	        this.words[i] = this.words[i + s];
-	      }
-	    } else {
-	      this.words[0] = 0;
-	      this.length = 1;
-	    }
-
-	    var carry = 0;
-	    for (i = this.length - 1; i >= 0 && (carry !== 0 || i >= h); i--) {
-	      var word = this.words[i] | 0;
-	      this.words[i] = (carry << (26 - r)) | (word >>> r);
-	      carry = word & mask;
-	    }
-
-	    // Push carried bits as a mask
-	    if (maskedWords && carry !== 0) {
-	      maskedWords.words[maskedWords.length++] = carry;
-	    }
-
-	    if (this.length === 0) {
-	      this.words[0] = 0;
-	      this.length = 1;
-	    }
-
-	    return this.strip();
-	  };
-
-	  BN.prototype.ishrn = function ishrn (bits, hint, extended) {
-	    // TODO(indutny): implement me
-	    assert(this.negative === 0);
-	    return this.iushrn(bits, hint, extended);
-	  };
-
-	  // Shift-left
-	  BN.prototype.shln = function shln (bits) {
-	    return this.clone().ishln(bits);
-	  };
-
-	  BN.prototype.ushln = function ushln (bits) {
-	    return this.clone().iushln(bits);
-	  };
-
-	  // Shift-right
-	  BN.prototype.shrn = function shrn (bits) {
-	    return this.clone().ishrn(bits);
-	  };
-
-	  BN.prototype.ushrn = function ushrn (bits) {
-	    return this.clone().iushrn(bits);
-	  };
-
-	  // Test if n bit is set
-	  BN.prototype.testn = function testn (bit) {
-	    assert(typeof bit === 'number' && bit >= 0);
-	    var r = bit % 26;
-	    var s = (bit - r) / 26;
-	    var q = 1 << r;
-
-	    // Fast case: bit is much higher than all existing words
-	    if (this.length <= s) return false;
-
-	    // Check bit and return
-	    var w = this.words[s];
-
-	    return !!(w & q);
-	  };
-
-	  // Return only lowers bits of number (in-place)
-	  BN.prototype.imaskn = function imaskn (bits) {
-	    assert(typeof bits === 'number' && bits >= 0);
-	    var r = bits % 26;
-	    var s = (bits - r) / 26;
-
-	    assert(this.negative === 0, 'imaskn works only with positive numbers');
-
-	    if (this.length <= s) {
-	      return this;
-	    }
-
-	    if (r !== 0) {
-	      s++;
-	    }
-	    this.length = Math.min(s, this.length);
-
-	    if (r !== 0) {
-	      var mask = 0x3ffffff ^ ((0x3ffffff >>> r) << r);
-	      this.words[this.length - 1] &= mask;
-	    }
-
-	    return this.strip();
-	  };
-
-	  // Return only lowers bits of number
-	  BN.prototype.maskn = function maskn (bits) {
-	    return this.clone().imaskn(bits);
-	  };
-
-	  // Add plain number `num` to `this`
-	  BN.prototype.iaddn = function iaddn (num) {
-	    assert(typeof num === 'number');
-	    assert(num < 0x4000000);
-	    if (num < 0) return this.isubn(-num);
-
-	    // Possible sign change
-	    if (this.negative !== 0) {
-	      if (this.length === 1 && (this.words[0] | 0) < num) {
-	        this.words[0] = num - (this.words[0] | 0);
-	        this.negative = 0;
+	  }, {
+	    key: 'pointInPath',
+	    value: function pointInPath(index, point) {
+	      var capitalConversion = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+	      var integerConversion = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : false;
+
+	      if (capitalConversion) point = vectorToCapital(point);
+	      if (integerConversion) point = roundVector(point);
+	      var path = this.paths[index];
+	      var intPoint = { X: Math.round(point.X), Y: Math.round(point.Y) };
+
+	      return _clipperLib2.default.Clipper.PointInPolygon(intPoint, path) > 0;
+	    }
+	  }, {
+	    key: 'fixOrientation',
+	    value: function fixOrientation() {
+	      if (!this.closed) {
 	        return this;
 	      }
 
-	      this.negative = 0;
-	      this.isubn(num);
-	      this.negative = 1;
+	      if (this.totalArea() < 0) {
+	        this.reverse();
+	      }
+
 	      return this;
 	    }
-
-	    // Add without checks
-	    return this._iaddn(num);
-	  };
-
-	  BN.prototype._iaddn = function _iaddn (num) {
-	    this.words[0] += num;
-
-	    // Carry
-	    for (var i = 0; i < this.length && this.words[i] >= 0x4000000; i++) {
-	      this.words[i] -= 0x4000000;
-	      if (i === this.length - 1) {
-	        this.words[i + 1] = 1;
+	  }, {
+	    key: 'simplify',
+	    value: function simplify(fillType) {
+	      if (this.closed) {
+	        var shape = _clipperLib2.default.Clipper.SimplifyPolygons(this.paths, _clipperLib2.default.PolyFillType[fillType]);
+	        return new Shape(shape, true);
 	      } else {
-	        this.words[i + 1]++;
+	        return this;
 	      }
 	    }
-	    this.length = Math.max(this.length, i + 1);
-
-	    return this;
-	  };
-
-	  // Subtract plain number `num` from `this`
-	  BN.prototype.isubn = function isubn (num) {
-	    assert(typeof num === 'number');
-	    assert(num < 0x4000000);
-	    if (num < 0) return this.iaddn(-num);
-
-	    if (this.negative !== 0) {
-	      this.negative = 0;
-	      this.iaddn(num);
-	      this.negative = 1;
-	      return this;
-	    }
-
-	    this.words[0] -= num;
-
-	    if (this.length === 1 && this.words[0] < 0) {
-	      this.words[0] = -this.words[0];
-	      this.negative = 1;
-	    } else {
-	      // Carry
-	      for (var i = 0; i < this.length && this.words[i] < 0; i++) {
-	        this.words[i] += 0x4000000;
-	        this.words[i + 1] -= 1;
-	      }
-	    }
-
-	    return this.strip();
-	  };
-
-	  BN.prototype.addn = function addn (num) {
-	    return this.clone().iaddn(num);
-	  };
-
-	  BN.prototype.subn = function subn (num) {
-	    return this.clone().isubn(num);
-	  };
-
-	  BN.prototype.iabs = function iabs () {
-	    this.negative = 0;
-
-	    return this;
-	  };
-
-	  BN.prototype.abs = function abs () {
-	    return this.clone().iabs();
-	  };
-
-	  BN.prototype._ishlnsubmul = function _ishlnsubmul (num, mul, shift) {
-	    var len = num.length + shift;
-	    var i;
-
-	    this._expand(len);
-
-	    var w;
-	    var carry = 0;
-	    for (i = 0; i < num.length; i++) {
-	      w = (this.words[i + shift] | 0) + carry;
-	      var right = (num.words[i] | 0) * mul;
-	      w -= right & 0x3ffffff;
-	      carry = (w >> 26) - ((right / 0x4000000) | 0);
-	      this.words[i + shift] = w & 0x3ffffff;
-	    }
-	    for (; i < this.length - shift; i++) {
-	      w = (this.words[i + shift] | 0) + carry;
-	      carry = w >> 26;
-	      this.words[i + shift] = w & 0x3ffffff;
-	    }
-
-	    if (carry === 0) return this.strip();
-
-	    // Subtraction overflow
-	    assert(carry === -1);
-	    carry = 0;
-	    for (i = 0; i < this.length; i++) {
-	      w = -(this.words[i] | 0) + carry;
-	      carry = w >> 26;
-	      this.words[i] = w & 0x3ffffff;
-	    }
-	    this.negative = 1;
-
-	    return this.strip();
-	  };
-
-	  BN.prototype._wordDiv = function _wordDiv (num, mode) {
-	    var shift = this.length - num.length;
-
-	    var a = this.clone();
-	    var b = num;
-
-	    // Normalize
-	    var bhi = b.words[b.length - 1] | 0;
-	    var bhiBits = this._countBits(bhi);
-	    shift = 26 - bhiBits;
-	    if (shift !== 0) {
-	      b = b.ushln(shift);
-	      a.iushln(shift);
-	      bhi = b.words[b.length - 1] | 0;
-	    }
-
-	    // Initialize quotient
-	    var m = a.length - b.length;
-	    var q;
-
-	    if (mode !== 'mod') {
-	      q = new BN(null);
-	      q.length = m + 1;
-	      q.words = new Array(q.length);
-	      for (var i = 0; i < q.length; i++) {
-	        q.words[i] = 0;
-	      }
-	    }
-
-	    var diff = a.clone()._ishlnsubmul(b, 1, m);
-	    if (diff.negative === 0) {
-	      a = diff;
-	      if (q) {
-	        q.words[m] = 1;
-	      }
-	    }
-
-	    for (var j = m - 1; j >= 0; j--) {
-	      var qj = (a.words[b.length + j] | 0) * 0x4000000 +
-	        (a.words[b.length + j - 1] | 0);
-
-	      // NOTE: (qj / bhi) is (0x3ffffff * 0x4000000 + 0x3ffffff) / 0x2000000 max
-	      // (0x7ffffff)
-	      qj = Math.min((qj / bhi) | 0, 0x3ffffff);
-
-	      a._ishlnsubmul(b, qj, j);
-	      while (a.negative !== 0) {
-	        qj--;
-	        a.negative = 0;
-	        a._ishlnsubmul(b, 1, j);
-	        if (!a.isZero()) {
-	          a.negative ^= 1;
-	        }
-	      }
-	      if (q) {
-	        q.words[j] = qj;
-	      }
-	    }
-	    if (q) {
-	      q.strip();
-	    }
-	    a.strip();
-
-	    // Denormalize
-	    if (mode !== 'div' && shift !== 0) {
-	      a.iushrn(shift);
-	    }
-
-	    return {
-	      div: q || null,
-	      mod: a
-	    };
-	  };
-
-	  // NOTE: 1) `mode` can be set to `mod` to request mod only,
-	  //       to `div` to request div only, or be absent to
-	  //       request both div & mod
-	  //       2) `positive` is true if unsigned mod is requested
-	  BN.prototype.divmod = function divmod (num, mode, positive) {
-	    assert(!num.isZero());
-
-	    if (this.isZero()) {
-	      return {
-	        div: new BN(0),
-	        mod: new BN(0)
-	      };
-	    }
-
-	    var div, mod, res;
-	    if (this.negative !== 0 && num.negative === 0) {
-	      res = this.neg().divmod(num, mode);
-
-	      if (mode !== 'mod') {
-	        div = res.div.neg();
-	      }
-
-	      if (mode !== 'div') {
-	        mod = res.mod.neg();
-	        if (positive && mod.negative !== 0) {
-	          mod.iadd(num);
-	        }
-	      }
-
-	      return {
-	        div: div,
-	        mod: mod
-	      };
-	    }
-
-	    if (this.negative === 0 && num.negative !== 0) {
-	      res = this.divmod(num.neg(), mode);
-
-	      if (mode !== 'mod') {
-	        div = res.div.neg();
-	      }
-
-	      return {
-	        div: div,
-	        mod: res.mod
-	      };
-	    }
-
-	    if ((this.negative & num.negative) !== 0) {
-	      res = this.neg().divmod(num.neg(), mode);
-
-	      if (mode !== 'div') {
-	        mod = res.mod.neg();
-	        if (positive && mod.negative !== 0) {
-	          mod.isub(num);
-	        }
-	      }
-
-	      return {
-	        div: res.div,
-	        mod: mod
-	      };
-	    }
-
-	    // Both numbers are positive at this point
-
-	    // Strip both numbers to approximate shift value
-	    if (num.length > this.length || this.cmp(num) < 0) {
-	      return {
-	        div: new BN(0),
-	        mod: this
-	      };
-	    }
-
-	    // Very short reduction
-	    if (num.length === 1) {
-	      if (mode === 'div') {
-	        return {
-	          div: this.divn(num.words[0]),
-	          mod: null
-	        };
-	      }
-
-	      if (mode === 'mod') {
-	        return {
-	          div: null,
-	          mod: new BN(this.modn(num.words[0]))
-	        };
-	      }
-
-	      return {
-	        div: this.divn(num.words[0]),
-	        mod: new BN(this.modn(num.words[0]))
-	      };
-	    }
-
-	    return this._wordDiv(num, mode);
-	  };
-
-	  // Find `this` / `num`
-	  BN.prototype.div = function div (num) {
-	    return this.divmod(num, 'div', false).div;
-	  };
-
-	  // Find `this` % `num`
-	  BN.prototype.mod = function mod (num) {
-	    return this.divmod(num, 'mod', false).mod;
-	  };
-
-	  BN.prototype.umod = function umod (num) {
-	    return this.divmod(num, 'mod', true).mod;
-	  };
-
-	  // Find Round(`this` / `num`)
-	  BN.prototype.divRound = function divRound (num) {
-	    var dm = this.divmod(num);
-
-	    // Fast case - exact division
-	    if (dm.mod.isZero()) return dm.div;
-
-	    var mod = dm.div.negative !== 0 ? dm.mod.isub(num) : dm.mod;
-
-	    var half = num.ushrn(1);
-	    var r2 = num.andln(1);
-	    var cmp = mod.cmp(half);
-
-	    // Round down
-	    if (cmp < 0 || r2 === 1 && cmp === 0) return dm.div;
-
-	    // Round up
-	    return dm.div.negative !== 0 ? dm.div.isubn(1) : dm.div.iaddn(1);
-	  };
-
-	  BN.prototype.modn = function modn (num) {
-	    assert(num <= 0x3ffffff);
-	    var p = (1 << 26) % num;
-
-	    var acc = 0;
-	    for (var i = this.length - 1; i >= 0; i--) {
-	      acc = (p * acc + (this.words[i] | 0)) % num;
-	    }
-
-	    return acc;
-	  };
-
-	  // In-place division by number
-	  BN.prototype.idivn = function idivn (num) {
-	    assert(num <= 0x3ffffff);
-
-	    var carry = 0;
-	    for (var i = this.length - 1; i >= 0; i--) {
-	      var w = (this.words[i] | 0) + carry * 0x4000000;
-	      this.words[i] = (w / num) | 0;
-	      carry = w % num;
-	    }
-
-	    return this.strip();
-	  };
-
-	  BN.prototype.divn = function divn (num) {
-	    return this.clone().idivn(num);
-	  };
-
-	  BN.prototype.egcd = function egcd (p) {
-	    assert(p.negative === 0);
-	    assert(!p.isZero());
-
-	    var x = this;
-	    var y = p.clone();
-
-	    if (x.negative !== 0) {
-	      x = x.umod(p);
-	    } else {
-	      x = x.clone();
-	    }
-
-	    // A * x + B * y = x
-	    var A = new BN(1);
-	    var B = new BN(0);
-
-	    // C * x + D * y = y
-	    var C = new BN(0);
-	    var D = new BN(1);
-
-	    var g = 0;
-
-	    while (x.isEven() && y.isEven()) {
-	      x.iushrn(1);
-	      y.iushrn(1);
-	      ++g;
-	    }
-
-	    var yp = y.clone();
-	    var xp = x.clone();
-
-	    while (!x.isZero()) {
-	      for (var i = 0, im = 1; (x.words[0] & im) === 0 && i < 26; ++i, im <<= 1);
-	      if (i > 0) {
-	        x.iushrn(i);
-	        while (i-- > 0) {
-	          if (A.isOdd() || B.isOdd()) {
-	            A.iadd(yp);
-	            B.isub(xp);
+	  }, {
+	    key: 'seperateShapes',
+	    value: function seperateShapes() {
+	      var shapes = [];
+
+	      if (!this.closed) {
+	        var _iteratorNormalCompletion = true;
+	        var _didIteratorError = false;
+	        var _iteratorError = undefined;
+
+	        try {
+	          for (var _iterator = this.paths[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+	            var path = _step.value;
+
+	            shapes.push(new Shape([path], false));
 	          }
-
-	          A.iushrn(1);
-	          B.iushrn(1);
-	        }
-	      }
-
-	      for (var j = 0, jm = 1; (y.words[0] & jm) === 0 && j < 26; ++j, jm <<= 1);
-	      if (j > 0) {
-	        y.iushrn(j);
-	        while (j-- > 0) {
-	          if (C.isOdd() || D.isOdd()) {
-	            C.iadd(yp);
-	            D.isub(xp);
+	        } catch (err) {
+	          _didIteratorError = true;
+	          _iteratorError = err;
+	        } finally {
+	          try {
+	            if (!_iteratorNormalCompletion && _iterator.return) {
+	              _iterator.return();
+	            }
+	          } finally {
+	            if (_didIteratorError) {
+	              throw _iteratorError;
+	            }
 	          }
-
-	          C.iushrn(1);
-	          D.iushrn(1);
 	        }
-	      }
-
-	      if (x.cmp(y) >= 0) {
-	        x.isub(y);
-	        A.isub(C);
-	        B.isub(D);
 	      } else {
-	        y.isub(x);
-	        C.isub(A);
-	        D.isub(B);
-	      }
-	    }
+	        var areas = new WeakMap();
+	        var outlines = [];
+	        var holes = [];
 
-	    return {
-	      a: C,
-	      b: D,
-	      gcd: y.iushln(g)
-	    };
-	  };
+	        for (var i = 0; i < this.paths.length; i++) {
+	          var _path = this.paths[i];
+	          var orientation = this.orientation(i);
 
-	  // This is reduced incarnation of the binary EEA
-	  // above, designated to invert members of the
-	  // _prime_ fields F(p) at a maximal speed
-	  BN.prototype._invmp = function _invmp (p) {
-	    assert(p.negative === 0);
-	    assert(!p.isZero());
-
-	    var a = this;
-	    var b = p.clone();
-
-	    if (a.negative !== 0) {
-	      a = a.umod(p);
-	    } else {
-	      a = a.clone();
-	    }
-
-	    var x1 = new BN(1);
-	    var x2 = new BN(0);
-
-	    var delta = b.clone();
-
-	    while (a.cmpn(1) > 0 && b.cmpn(1) > 0) {
-	      for (var i = 0, im = 1; (a.words[0] & im) === 0 && i < 26; ++i, im <<= 1);
-	      if (i > 0) {
-	        a.iushrn(i);
-	        while (i-- > 0) {
-	          if (x1.isOdd()) {
-	            x1.iadd(delta);
+	          if (orientation) {
+	            var area = this.area(i);
+	            areas.set(_path, area);
+	            outlines.push(_path);
+	          } else {
+	            holes.push(_path);
 	          }
-
-	          x1.iushrn(1);
 	        }
-	      }
 
-	      for (var j = 0, jm = 1; (b.words[0] & jm) === 0 && j < 26; ++j, jm <<= 1);
-	      if (j > 0) {
-	        b.iushrn(j);
-	        while (j-- > 0) {
-	          if (x2.isOdd()) {
-	            x2.iadd(delta);
+	        outlines.sort(function (a, b) {
+	          return areas.get(a) - areas.get(b);
+	        });
+
+	        var _iteratorNormalCompletion2 = true;
+	        var _didIteratorError2 = false;
+	        var _iteratorError2 = undefined;
+
+	        try {
+	          for (var _iterator2 = outlines[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
+	            var outline = _step2.value;
+
+	            var shape = [outline];
+
+	            var index = this.paths.indexOf(outline);
+
+	            var _arr2 = [].concat(holes);
+
+	            for (var _i2 = 0; _i2 < _arr2.length; _i2++) {
+	              var hole = _arr2[_i2];
+	              var pointInHole = this.pointInPath(index, hole[0]);
+	              if (pointInHole) {
+	                shape.push(hole);
+
+	                var _index = holes.indexOf(hole);
+	                holes.splice(_index, 1);
+	              }
+	            }
+
+	            shapes.push(new Shape(shape, true));
 	          }
-
-	          x2.iushrn(1);
+	        } catch (err) {
+	          _didIteratorError2 = true;
+	          _iteratorError2 = err;
+	        } finally {
+	          try {
+	            if (!_iteratorNormalCompletion2 && _iterator2.return) {
+	              _iterator2.return();
+	            }
+	          } finally {
+	            if (_didIteratorError2) {
+	              throw _iteratorError2;
+	            }
+	          }
 	        }
 	      }
 
-	      if (a.cmp(b) >= 0) {
-	        a.isub(b);
-	        x1.isub(x2);
-	      } else {
-	        b.isub(a);
-	        x2.isub(x1);
-	      }
+	      return shapes;
 	    }
-
-	    var res;
-	    if (a.cmpn(1) === 0) {
-	      res = x1;
-	    } else {
-	      res = x2;
+	  }, {
+	    key: 'round',
+	    value: function round() {
+	      return new Shape(this.paths.map(mapToRound), this.closed);
 	    }
-
-	    if (res.cmpn(0) < 0) {
-	      res.iadd(p);
+	  }, {
+	    key: 'removeDuplicates',
+	    value: function removeDuplicates() {
+	      return new Shape(this.paths.map(filterPathsDuplicates), this.closed);
 	    }
-
-	    return res;
-	  };
-
-	  BN.prototype.gcd = function gcd (num) {
-	    if (this.isZero()) return num.abs();
-	    if (num.isZero()) return this.abs();
-
-	    var a = this.clone();
-	    var b = num.clone();
-	    a.negative = 0;
-	    b.negative = 0;
-
-	    // Remove common factor of two
-	    for (var shift = 0; a.isEven() && b.isEven(); shift++) {
-	      a.iushrn(1);
-	      b.iushrn(1);
+	  }, {
+	    key: 'mapToLower',
+	    value: function mapToLower() {
+	      return this.paths.map(mapCapitalToLower);
 	    }
+	  }]);
 
-	    do {
-	      while (a.isEven()) {
-	        a.iushrn(1);
-	      }
-	      while (b.isEven()) {
-	        b.iushrn(1);
-	      }
+	  return Shape;
+	}();
 
-	      var r = a.cmp(b);
-	      if (r < 0) {
-	        // Swap `a` and `b` to make `a` always bigger than `b`
-	        var t = a;
-	        a = b;
-	        b = t;
-	      } else if (r === 0 || b.cmpn(1) === 0) {
-	        break;
-	      }
+	exports.default = Shape;
 
-	      a.isub(b);
-	    } while (true);
 
-	    return b.iushln(shift);
-	  };
+	function mapCapitalToLower(path) {
+	  return path.map(vectorToLower);
+	}
 
-	  // Invert number in the field F(num)
-	  BN.prototype.invm = function invm (num) {
-	    return this.egcd(num).a.umod(num);
-	  };
+	function vectorToLower(_ref) {
+	  var X = _ref.X,
+	      Y = _ref.Y;
 
-	  BN.prototype.isEven = function isEven () {
-	    return (this.words[0] & 1) === 0;
-	  };
+	  return { x: X, y: Y };
+	}
 
-	  BN.prototype.isOdd = function isOdd () {
-	    return (this.words[0] & 1) === 1;
-	  };
+	function mapLowerToCapital(path) {
+	  return path.map(vectorToCapital);
+	}
 
-	  // And first word and num
-	  BN.prototype.andln = function andln (num) {
-	    return this.words[0] & num;
-	  };
+	function vectorToCapital(_ref2) {
+	  var x = _ref2.x,
+	      y = _ref2.y;
 
-	  // Increment at the bit position in-line
-	  BN.prototype.bincn = function bincn (bit) {
-	    assert(typeof bit === 'number');
-	    var r = bit % 26;
-	    var s = (bit - r) / 26;
-	    var q = 1 << r;
+	  return { X: x, Y: y };
+	}
 
-	    // Fast case: bit is much higher than all existing words
-	    if (this.length <= s) {
-	      this._expand(s + 1);
-	      this.words[s] |= q;
-	      return this;
-	    }
+	function mapToRound(path) {
+	  return path.map(roundVector);
+	}
 
-	    // Add bit and propagate, if needed
-	    var carry = q;
-	    for (var i = s; carry !== 0 && i < this.length; i++) {
-	      var w = this.words[i] | 0;
-	      w += carry;
-	      carry = w >>> 26;
-	      w &= 0x3ffffff;
-	      this.words[i] = w;
-	    }
-	    if (carry !== 0) {
-	      this.words[i] = carry;
-	      this.length++;
-	    }
-	    return this;
-	  };
+	function roundVector(_ref3) {
+	  var X = _ref3.X,
+	      Y = _ref3.Y;
 
-	  BN.prototype.isZero = function isZero () {
-	    return this.length === 1 && this.words[0] === 0;
-	  };
+	  return { X: Math.round(X), Y: Math.round(Y) };
+	}
 
-	  BN.prototype.cmpn = function cmpn (num) {
-	    var negative = num < 0;
+	function filterPathsDuplicates(path) {
+	  return path.filter(filterPathDuplicates);
+	}
 
-	    if (this.negative !== 0 && !negative) return -1;
-	    if (this.negative === 0 && negative) return 1;
+	function filterPathDuplicates(point, i, array) {
+	  if (i === 0) return true;
 
-	    this.strip();
-
-	    var res;
-	    if (this.length > 1) {
-	      res = 1;
-	    } else {
-	      if (negative) {
-	        num = -num;
-	      }
-
-	      assert(num <= 0x3ffffff, 'Number is too big');
-
-	      var w = this.words[0] | 0;
-	      res = w === num ? 0 : w < num ? -1 : 1;
-	    }
-	    if (this.negative !== 0) return -res | 0;
-	    return res;
-	  };
-
-	  // Compare two numbers and return:
-	  // 1 - if `this` > `num`
-	  // 0 - if `this` == `num`
-	  // -1 - if `this` < `num`
-	  BN.prototype.cmp = function cmp (num) {
-	    if (this.negative !== 0 && num.negative === 0) return -1;
-	    if (this.negative === 0 && num.negative !== 0) return 1;
-
-	    var res = this.ucmp(num);
-	    if (this.negative !== 0) return -res | 0;
-	    return res;
-	  };
-
-	  // Unsigned comparison
-	  BN.prototype.ucmp = function ucmp (num) {
-	    // At this point both numbers have the same sign
-	    if (this.length > num.length) return 1;
-	    if (this.length < num.length) return -1;
-
-	    var res = 0;
-	    for (var i = this.length - 1; i >= 0; i--) {
-	      var a = this.words[i] | 0;
-	      var b = num.words[i] | 0;
-
-	      if (a === b) continue;
-	      if (a < b) {
-	        res = -1;
-	      } else if (a > b) {
-	        res = 1;
-	      }
-	      break;
-	    }
-	    return res;
-	  };
-
-	  BN.prototype.gtn = function gtn (num) {
-	    return this.cmpn(num) === 1;
-	  };
-
-	  BN.prototype.gt = function gt (num) {
-	    return this.cmp(num) === 1;
-	  };
-
-	  BN.prototype.gten = function gten (num) {
-	    return this.cmpn(num) >= 0;
-	  };
-
-	  BN.prototype.gte = function gte (num) {
-	    return this.cmp(num) >= 0;
-	  };
-
-	  BN.prototype.ltn = function ltn (num) {
-	    return this.cmpn(num) === -1;
-	  };
-
-	  BN.prototype.lt = function lt (num) {
-	    return this.cmp(num) === -1;
-	  };
-
-	  BN.prototype.lten = function lten (num) {
-	    return this.cmpn(num) <= 0;
-	  };
-
-	  BN.prototype.lte = function lte (num) {
-	    return this.cmp(num) <= 0;
-	  };
-
-	  BN.prototype.eqn = function eqn (num) {
-	    return this.cmpn(num) === 0;
-	  };
-
-	  BN.prototype.eq = function eq (num) {
-	    return this.cmp(num) === 0;
-	  };
-
-	  //
-	  // A reduce context, could be using montgomery or something better, depending
-	  // on the `m` itself.
-	  //
-	  BN.red = function red (num) {
-	    return new Red(num);
-	  };
-
-	  BN.prototype.toRed = function toRed (ctx) {
-	    assert(!this.red, 'Already a number in reduction context');
-	    assert(this.negative === 0, 'red works only with positives');
-	    return ctx.convertTo(this)._forceRed(ctx);
-	  };
-
-	  BN.prototype.fromRed = function fromRed () {
-	    assert(this.red, 'fromRed works only with numbers in reduction context');
-	    return this.red.convertFrom(this);
-	  };
-
-	  BN.prototype._forceRed = function _forceRed (ctx) {
-	    this.red = ctx;
-	    return this;
-	  };
-
-	  BN.prototype.forceRed = function forceRed (ctx) {
-	    assert(!this.red, 'Already a number in reduction context');
-	    return this._forceRed(ctx);
-	  };
-
-	  BN.prototype.redAdd = function redAdd (num) {
-	    assert(this.red, 'redAdd works only with red numbers');
-	    return this.red.add(this, num);
-	  };
-
-	  BN.prototype.redIAdd = function redIAdd (num) {
-	    assert(this.red, 'redIAdd works only with red numbers');
-	    return this.red.iadd(this, num);
-	  };
-
-	  BN.prototype.redSub = function redSub (num) {
-	    assert(this.red, 'redSub works only with red numbers');
-	    return this.red.sub(this, num);
-	  };
-
-	  BN.prototype.redISub = function redISub (num) {
-	    assert(this.red, 'redISub works only with red numbers');
-	    return this.red.isub(this, num);
-	  };
-
-	  BN.prototype.redShl = function redShl (num) {
-	    assert(this.red, 'redShl works only with red numbers');
-	    return this.red.shl(this, num);
-	  };
-
-	  BN.prototype.redMul = function redMul (num) {
-	    assert(this.red, 'redMul works only with red numbers');
-	    this.red._verify2(this, num);
-	    return this.red.mul(this, num);
-	  };
-
-	  BN.prototype.redIMul = function redIMul (num) {
-	    assert(this.red, 'redMul works only with red numbers');
-	    this.red._verify2(this, num);
-	    return this.red.imul(this, num);
-	  };
-
-	  BN.prototype.redSqr = function redSqr () {
-	    assert(this.red, 'redSqr works only with red numbers');
-	    this.red._verify1(this);
-	    return this.red.sqr(this);
-	  };
-
-	  BN.prototype.redISqr = function redISqr () {
-	    assert(this.red, 'redISqr works only with red numbers');
-	    this.red._verify1(this);
-	    return this.red.isqr(this);
-	  };
-
-	  // Square root over p
-	  BN.prototype.redSqrt = function redSqrt () {
-	    assert(this.red, 'redSqrt works only with red numbers');
-	    this.red._verify1(this);
-	    return this.red.sqrt(this);
-	  };
-
-	  BN.prototype.redInvm = function redInvm () {
-	    assert(this.red, 'redInvm works only with red numbers');
-	    this.red._verify1(this);
-	    return this.red.invm(this);
-	  };
-
-	  // Return negative clone of `this` % `red modulo`
-	  BN.prototype.redNeg = function redNeg () {
-	    assert(this.red, 'redNeg works only with red numbers');
-	    this.red._verify1(this);
-	    return this.red.neg(this);
-	  };
-
-	  BN.prototype.redPow = function redPow (num) {
-	    assert(this.red && !num.red, 'redPow(normalNum)');
-	    this.red._verify1(this);
-	    return this.red.pow(this, num);
-	  };
-
-	  // Prime numbers with efficient reduction
-	  var primes = {
-	    k256: null,
-	    p224: null,
-	    p192: null,
-	    p25519: null
-	  };
-
-	  // Pseudo-Mersenne prime
-	  function MPrime (name, p) {
-	    // P = 2 ^ N - K
-	    this.name = name;
-	    this.p = new BN(p, 16);
-	    this.n = this.p.bitLength();
-	    this.k = new BN(1).iushln(this.n).isub(this.p);
-
-	    this.tmp = this._tmp();
-	  }
-
-	  MPrime.prototype._tmp = function _tmp () {
-	    var tmp = new BN(null);
-	    tmp.words = new Array(Math.ceil(this.n / 13));
-	    return tmp;
-	  };
-
-	  MPrime.prototype.ireduce = function ireduce (num) {
-	    // Assumes that `num` is less than `P^2`
-	    // num = HI * (2 ^ N - K) + HI * K + LO = HI * K + LO (mod P)
-	    var r = num;
-	    var rlen;
-
-	    do {
-	      this.split(r, this.tmp);
-	      r = this.imulK(r);
-	      r = r.iadd(this.tmp);
-	      rlen = r.bitLength();
-	    } while (rlen > this.n);
-
-	    var cmp = rlen < this.n ? -1 : r.ucmp(this.p);
-	    if (cmp === 0) {
-	      r.words[0] = 0;
-	      r.length = 1;
-	    } else if (cmp > 0) {
-	      r.isub(this.p);
-	    } else {
-	      r.strip();
-	    }
-
-	    return r;
-	  };
-
-	  MPrime.prototype.split = function split (input, out) {
-	    input.iushrn(this.n, 0, out);
-	  };
-
-	  MPrime.prototype.imulK = function imulK (num) {
-	    return num.imul(this.k);
-	  };
-
-	  function K256 () {
-	    MPrime.call(
-	      this,
-	      'k256',
-	      'ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff fffffffe fffffc2f');
-	  }
-	  inherits(K256, MPrime);
-
-	  K256.prototype.split = function split (input, output) {
-	    // 256 = 9 * 26 + 22
-	    var mask = 0x3fffff;
-
-	    var outLen = Math.min(input.length, 9);
-	    for (var i = 0; i < outLen; i++) {
-	      output.words[i] = input.words[i];
-	    }
-	    output.length = outLen;
-
-	    if (input.length <= 9) {
-	      input.words[0] = 0;
-	      input.length = 1;
-	      return;
-	    }
-
-	    // Shift by 9 limbs
-	    var prev = input.words[9];
-	    output.words[output.length++] = prev & mask;
-
-	    for (i = 10; i < input.length; i++) {
-	      var next = input.words[i] | 0;
-	      input.words[i - 10] = ((next & mask) << 4) | (prev >>> 22);
-	      prev = next;
-	    }
-	    prev >>>= 22;
-	    input.words[i - 10] = prev;
-	    if (prev === 0 && input.length > 10) {
-	      input.length -= 10;
-	    } else {
-	      input.length -= 9;
-	    }
-	  };
-
-	  K256.prototype.imulK = function imulK (num) {
-	    // K = 0x1000003d1 = [ 0x40, 0x3d1 ]
-	    num.words[num.length] = 0;
-	    num.words[num.length + 1] = 0;
-	    num.length += 2;
-
-	    // bounded at: 0x40 * 0x3ffffff + 0x3d0 = 0x100000390
-	    var lo = 0;
-	    for (var i = 0; i < num.length; i++) {
-	      var w = num.words[i] | 0;
-	      lo += w * 0x3d1;
-	      num.words[i] = lo & 0x3ffffff;
-	      lo = w * 0x40 + ((lo / 0x4000000) | 0);
-	    }
-
-	    // Fast length reduction
-	    if (num.words[num.length - 1] === 0) {
-	      num.length--;
-	      if (num.words[num.length - 1] === 0) {
-	        num.length--;
-	      }
-	    }
-	    return num;
-	  };
-
-	  function P224 () {
-	    MPrime.call(
-	      this,
-	      'p224',
-	      'ffffffff ffffffff ffffffff ffffffff 00000000 00000000 00000001');
-	  }
-	  inherits(P224, MPrime);
-
-	  function P192 () {
-	    MPrime.call(
-	      this,
-	      'p192',
-	      'ffffffff ffffffff ffffffff fffffffe ffffffff ffffffff');
-	  }
-	  inherits(P192, MPrime);
-
-	  function P25519 () {
-	    // 2 ^ 255 - 19
-	    MPrime.call(
-	      this,
-	      '25519',
-	      '7fffffffffffffff ffffffffffffffff ffffffffffffffff ffffffffffffffed');
-	  }
-	  inherits(P25519, MPrime);
-
-	  P25519.prototype.imulK = function imulK (num) {
-	    // K = 0x13
-	    var carry = 0;
-	    for (var i = 0; i < num.length; i++) {
-	      var hi = (num.words[i] | 0) * 0x13 + carry;
-	      var lo = hi & 0x3ffffff;
-	      hi >>>= 26;
-
-	      num.words[i] = lo;
-	      carry = hi;
-	    }
-	    if (carry !== 0) {
-	      num.words[num.length++] = carry;
-	    }
-	    return num;
-	  };
-
-	  // Exported mostly for testing purposes, use plain name instead
-	  BN._prime = function prime (name) {
-	    // Cached version of prime
-	    if (primes[name]) return primes[name];
-
-	    var prime;
-	    if (name === 'k256') {
-	      prime = new K256();
-	    } else if (name === 'p224') {
-	      prime = new P224();
-	    } else if (name === 'p192') {
-	      prime = new P192();
-	    } else if (name === 'p25519') {
-	      prime = new P25519();
-	    } else {
-	      throw new Error('Unknown prime ' + name);
-	    }
-	    primes[name] = prime;
-
-	    return prime;
-	  };
-
-	  //
-	  // Base reduction engine
-	  //
-	  function Red (m) {
-	    if (typeof m === 'string') {
-	      var prime = BN._prime(m);
-	      this.m = prime.p;
-	      this.prime = prime;
-	    } else {
-	      assert(m.gtn(1), 'modulus must be greater than 1');
-	      this.m = m;
-	      this.prime = null;
-	    }
-	  }
-
-	  Red.prototype._verify1 = function _verify1 (a) {
-	    assert(a.negative === 0, 'red works only with positives');
-	    assert(a.red, 'red works only with red numbers');
-	  };
-
-	  Red.prototype._verify2 = function _verify2 (a, b) {
-	    assert((a.negative | b.negative) === 0, 'red works only with positives');
-	    assert(a.red && a.red === b.red,
-	      'red works only with red numbers');
-	  };
-
-	  Red.prototype.imod = function imod (a) {
-	    if (this.prime) return this.prime.ireduce(a)._forceRed(this);
-	    return a.umod(this.m)._forceRed(this);
-	  };
-
-	  Red.prototype.neg = function neg (a) {
-	    if (a.isZero()) {
-	      return a.clone();
-	    }
-
-	    return this.m.sub(a)._forceRed(this);
-	  };
-
-	  Red.prototype.add = function add (a, b) {
-	    this._verify2(a, b);
-
-	    var res = a.add(b);
-	    if (res.cmp(this.m) >= 0) {
-	      res.isub(this.m);
-	    }
-	    return res._forceRed(this);
-	  };
-
-	  Red.prototype.iadd = function iadd (a, b) {
-	    this._verify2(a, b);
-
-	    var res = a.iadd(b);
-	    if (res.cmp(this.m) >= 0) {
-	      res.isub(this.m);
-	    }
-	    return res;
-	  };
-
-	  Red.prototype.sub = function sub (a, b) {
-	    this._verify2(a, b);
-
-	    var res = a.sub(b);
-	    if (res.cmpn(0) < 0) {
-	      res.iadd(this.m);
-	    }
-	    return res._forceRed(this);
-	  };
-
-	  Red.prototype.isub = function isub (a, b) {
-	    this._verify2(a, b);
-
-	    var res = a.isub(b);
-	    if (res.cmpn(0) < 0) {
-	      res.iadd(this.m);
-	    }
-	    return res;
-	  };
-
-	  Red.prototype.shl = function shl (a, num) {
-	    this._verify1(a);
-	    return this.imod(a.ushln(num));
-	  };
-
-	  Red.prototype.imul = function imul (a, b) {
-	    this._verify2(a, b);
-	    return this.imod(a.imul(b));
-	  };
-
-	  Red.prototype.mul = function mul (a, b) {
-	    this._verify2(a, b);
-	    return this.imod(a.mul(b));
-	  };
-
-	  Red.prototype.isqr = function isqr (a) {
-	    return this.imul(a, a.clone());
-	  };
-
-	  Red.prototype.sqr = function sqr (a) {
-	    return this.mul(a, a);
-	  };
-
-	  Red.prototype.sqrt = function sqrt (a) {
-	    if (a.isZero()) return a.clone();
-
-	    var mod3 = this.m.andln(3);
-	    assert(mod3 % 2 === 1);
-
-	    // Fast case
-	    if (mod3 === 3) {
-	      var pow = this.m.add(new BN(1)).iushrn(2);
-	      return this.pow(a, pow);
-	    }
-
-	    // Tonelli-Shanks algorithm (Totally unoptimized and slow)
-	    //
-	    // Find Q and S, that Q * 2 ^ S = (P - 1)
-	    var q = this.m.subn(1);
-	    var s = 0;
-	    while (!q.isZero() && q.andln(1) === 0) {
-	      s++;
-	      q.iushrn(1);
-	    }
-	    assert(!q.isZero());
-
-	    var one = new BN(1).toRed(this);
-	    var nOne = one.redNeg();
-
-	    // Find quadratic non-residue
-	    // NOTE: Max is such because of generalized Riemann hypothesis.
-	    var lpow = this.m.subn(1).iushrn(1);
-	    var z = this.m.bitLength();
-	    z = new BN(2 * z * z).toRed(this);
-
-	    while (this.pow(z, lpow).cmp(nOne) !== 0) {
-	      z.redIAdd(nOne);
-	    }
-
-	    var c = this.pow(z, q);
-	    var r = this.pow(a, q.addn(1).iushrn(1));
-	    var t = this.pow(a, q);
-	    var m = s;
-	    while (t.cmp(one) !== 0) {
-	      var tmp = t;
-	      for (var i = 0; tmp.cmp(one) !== 0; i++) {
-	        tmp = tmp.redSqr();
-	      }
-	      assert(i < m);
-	      var b = this.pow(c, new BN(1).iushln(m - i - 1));
-
-	      r = r.redMul(b);
-	      c = b.redSqr();
-	      t = t.redMul(c);
-	      m = i;
-	    }
-
-	    return r;
-	  };
-
-	  Red.prototype.invm = function invm (a) {
-	    var inv = a._invmp(this.m);
-	    if (inv.negative !== 0) {
-	      inv.negative = 0;
-	      return this.imod(inv).redNeg();
-	    } else {
-	      return this.imod(inv);
-	    }
-	  };
-
-	  Red.prototype.pow = function pow (a, num) {
-	    if (num.isZero()) return new BN(1).toRed(this);
-	    if (num.cmpn(1) === 0) return a.clone();
-
-	    var windowSize = 4;
-	    var wnd = new Array(1 << windowSize);
-	    wnd[0] = new BN(1).toRed(this);
-	    wnd[1] = a;
-	    for (var i = 2; i < wnd.length; i++) {
-	      wnd[i] = this.mul(wnd[i - 1], a);
-	    }
-
-	    var res = wnd[0];
-	    var current = 0;
-	    var currentLen = 0;
-	    var start = num.bitLength() % 26;
-	    if (start === 0) {
-	      start = 26;
-	    }
-
-	    for (i = num.length - 1; i >= 0; i--) {
-	      var word = num.words[i];
-	      for (var j = start - 1; j >= 0; j--) {
-	        var bit = (word >> j) & 1;
-	        if (res !== wnd[0]) {
-	          res = this.sqr(res);
-	        }
-
-	        if (bit === 0 && current === 0) {
-	          currentLen = 0;
-	          continue;
-	        }
-
-	        current <<= 1;
-	        current |= bit;
-	        currentLen++;
-	        if (currentLen !== windowSize && (i !== 0 || j !== 0)) continue;
-
-	        res = this.mul(res, wnd[current]);
-	        currentLen = 0;
-	        current = 0;
-	      }
-	      start = 26;
-	    }
-
-	    return res;
-	  };
-
-	  Red.prototype.convertTo = function convertTo (num) {
-	    var r = num.umod(this.m);
-
-	    return r === num ? r.clone() : r;
-	  };
-
-	  Red.prototype.convertFrom = function convertFrom (num) {
-	    var res = num.clone();
-	    res.red = null;
-	    return res;
-	  };
-
-	  //
-	  // Montgomery method engine
-	  //
-
-	  BN.mont = function mont (num) {
-	    return new Mont(num);
-	  };
-
-	  function Mont (m) {
-	    Red.call(this, m);
-
-	    this.shift = this.m.bitLength();
-	    if (this.shift % 26 !== 0) {
-	      this.shift += 26 - (this.shift % 26);
-	    }
-
-	    this.r = new BN(1).iushln(this.shift);
-	    this.r2 = this.imod(this.r.sqr());
-	    this.rinv = this.r._invmp(this.m);
-
-	    this.minv = this.rinv.mul(this.r).isubn(1).div(this.m);
-	    this.minv = this.minv.umod(this.r);
-	    this.minv = this.r.sub(this.minv);
-	  }
-	  inherits(Mont, Red);
-
-	  Mont.prototype.convertTo = function convertTo (num) {
-	    return this.imod(num.ushln(this.shift));
-	  };
-
-	  Mont.prototype.convertFrom = function convertFrom (num) {
-	    var r = this.imod(num.mul(this.rinv));
-	    r.red = null;
-	    return r;
-	  };
-
-	  Mont.prototype.imul = function imul (a, b) {
-	    if (a.isZero() || b.isZero()) {
-	      a.words[0] = 0;
-	      a.length = 1;
-	      return a;
-	    }
-
-	    var t = a.imul(b);
-	    var c = t.maskn(this.shift).mul(this.minv).imaskn(this.shift).mul(this.m);
-	    var u = t.isub(c).iushrn(this.shift);
-	    var res = u;
-
-	    if (u.cmp(this.m) >= 0) {
-	      res = u.isub(this.m);
-	    } else if (u.cmpn(0) < 0) {
-	      res = u.iadd(this.m);
-	    }
-
-	    return res._forceRed(this);
-	  };
-
-	  Mont.prototype.mul = function mul (a, b) {
-	    if (a.isZero() || b.isZero()) return new BN(0)._forceRed(this);
-
-	    var t = a.mul(b);
-	    var c = t.maskn(this.shift).mul(this.minv).imaskn(this.shift).mul(this.m);
-	    var u = t.isub(c).iushrn(this.shift);
-	    var res = u;
-	    if (u.cmp(this.m) >= 0) {
-	      res = u.isub(this.m);
-	    } else if (u.cmpn(0) < 0) {
-	      res = u.iadd(this.m);
-	    }
-
-	    return res._forceRed(this);
-	  };
-
-	  Mont.prototype.invm = function invm (a) {
-	    // (AR)^-1 * R^2 = (A^-1 * R^-1) * R^2 = A^-1 * R
-	    var res = this.imod(a._invmp(this.m).mul(this.r2));
-	    return res._forceRed(this);
-	  };
-	})(module, commonjsGlobal);
+	  var prevPoint = array[i - 1];
+	  return !(point.X === prevPoint.X && point.Y === prevPoint.Y);
+	}
+	//# sourceMappingURL=index.js.map
 	});
 
-	var isBn = isBN;
+	var Shape = unwrapExports(module);
+	var module_1 = module.setErrorCallback;
 
-	//Test if x is a bignumber
-	//FIXME: obviously this is the wrong way to do it
-	function isBN(x) {
-	  return x && typeof x === 'object' && Boolean(x.words)
-	}
+	var csg2d = createCommonjsModule(function (module) {
+	// Constructive Solid Geometry (CSG) is a modeling technique that uses Boolean
+	// operations like union and intersection to combine 3D solids. This library
+	// implements CSG operations on 2D polygons elegantly and concisely using BSP trees,
+	// and is meant to serve as an easily understandable implementation of the
+	// algorithm.
+	// 
+	// Example usage:
+	// 
+	//   var subjectPolygon = CSG.fromPolygons([[10, 10], [100, 10], [50, 140]]);
+	//   var clipPolygon = CSG.fromPolygons([[10, 100], [50, 10], [100, 100]]);
+	//   var polygons = subjectPolygon.subtract(clipPolygon).toPolygons();
+	// 
+	// ## Implementation Details
+	// 
+	// All CSG operations are implemented in terms of two functions, `clipTo()` and
+	// `invert()`, which remove parts of a BSP tree inside another BSP tree and swap
+	// solid and empty space, respectively. To find the union of `a` and `b`, we
+	// want to remove everything in `a` inside `b` and everything in `b` inside `a`,
+	// then combine polygons from `a` and `b` into one solid:
+	// 
+	//   a.clipTo(b);
+	//   b.clipTo(a);
+	//   a.build(b.allPolygons());
+	// 
+	// The only tricky part is handling overlapping coplanar polygons in both trees.
+	// The code above keeps both copies, but we need to keep them in one tree and
+	// remove them in the other tree. To remove them from `b` we can clip the
+	// inverse of `b` against `a`. The code for union now looks like this:
+	// 
+	//   a.clipTo(b);
+	//   b.clipTo(a);
+	//   b.invert();
+	//   b.clipTo(a);
+	//   b.invert();
+	//   a.build(b.allPolygons());
+	// 
+	// Subtraction and intersection naturally follow from set operations. If
+	// union is `A | B`, subtraction is `A - B = ~(~A | B)` and intersection is
+	// `A & B = ~(~A | ~B)` where `~` is the complement operator.
+	// 
+	// ## License
+	// 
+	// Copyright (c) 2011 Evan Wallace (http://madebyevan.com/), under the MIT license.
 
-	var isRat_1 = isRat;
+	// # class CSG
 
-	function isRat(x) {
-	  return Array.isArray(x) && x.length === 2 && isBn(x[0]) && isBn(x[1])
-	}
+	// Holds a binary space partition tree representing a 3D solid. Two solids can
+	// be combined using the `union()`, `subtract()`, and `intersect()` methods.
 
-	var double_1 = createCommonjsModule(function (module) {
-	var hasTypedArrays = false;
-	if(typeof Float64Array !== "undefined") {
-	  var DOUBLE_VIEW = new Float64Array(1)
-	    , UINT_VIEW   = new Uint32Array(DOUBLE_VIEW.buffer);
-	  DOUBLE_VIEW[0] = 1.0;
-	  hasTypedArrays = true;
-	  if(UINT_VIEW[1] === 0x3ff00000) {
-	    //Use little endian
-	    module.exports = function doubleBitsLE(n) {
-	      DOUBLE_VIEW[0] = n;
-	      return [ UINT_VIEW[0], UINT_VIEW[1] ]
-	    };
-	    function toDoubleLE(lo, hi) {
-	      UINT_VIEW[0] = lo;
-	      UINT_VIEW[1] = hi;
-	      return DOUBLE_VIEW[0]
-	    }
-	    module.exports.pack = toDoubleLE;
-	    function lowUintLE(n) {
-	      DOUBLE_VIEW[0] = n;
-	      return UINT_VIEW[0]
-	    }
-	    module.exports.lo = lowUintLE;
-	    function highUintLE(n) {
-	      DOUBLE_VIEW[0] = n;
-	      return UINT_VIEW[1]
-	    }
-	    module.exports.hi = highUintLE;
-	  } else if(UINT_VIEW[0] === 0x3ff00000) {
-	    //Use big endian
-	    module.exports = function doubleBitsBE(n) {
-	      DOUBLE_VIEW[0] = n;
-	      return [ UINT_VIEW[1], UINT_VIEW[0] ]
-	    };
-	    function toDoubleBE(lo, hi) {
-	      UINT_VIEW[1] = lo;
-	      UINT_VIEW[0] = hi;
-	      return DOUBLE_VIEW[0]
-	    }
-	    module.exports.pack = toDoubleBE;
-	    function lowUintBE(n) {
-	      DOUBLE_VIEW[0] = n;
-	      return UINT_VIEW[1]
-	    }
-	    module.exports.lo = lowUintBE;
-	    function highUintBE(n) {
-	      DOUBLE_VIEW[0] = n;
-	      return UINT_VIEW[0]
-	    }
-	    module.exports.hi = highUintBE;
-	  } else {
-	    hasTypedArrays = false;
+
+	(function(m) {
+	  // CommonJS
+	  {
+	    console.log("FOOO");
+	    module.exports = m();
+	  // Browser
 	  }
-	}
-	if(!hasTypedArrays) {
-	  var buffer = new Buffer(8);
-	  module.exports = function doubleBits(n) {
-	    buffer.writeDoubleLE(n, 0, true);
-	    return [ buffer.readUInt32LE(0, true), buffer.readUInt32LE(4, true) ]
+	})(function() {
+
+	  var CSG = function() {
+	    this.segments = [];
 	  };
-	  function toDouble(lo, hi) {
-	    buffer.writeUInt32LE(lo, 0, true);
-	    buffer.writeUInt32LE(hi, 4, true);
-	    return buffer.readDoubleLE(0, true)
-	  }
-	  module.exports.pack = toDouble;  
-	  function lowUint(n) {
-	    buffer.writeDoubleLE(n, 0, true);
-	    return buffer.readUInt32LE(0, true)
-	  }
-	  module.exports.lo = lowUint;
-	  function highUint(n) {
-	    buffer.writeDoubleLE(n, 0, true);
-	    return buffer.readUInt32LE(4, true)
-	  }
-	  module.exports.hi = highUint;
-	}
 
-	module.exports.sign = function(n) {
-	  return module.exports.hi(n) >>> 31
-	};
-
-	module.exports.exponent = function(n) {
-	  var b = module.exports.hi(n);
-	  return ((b<<1) >>> 21) - 1023
-	};
-
-	module.exports.fraction = function(n) {
-	  var lo = module.exports.lo(n);
-	  var hi = module.exports.hi(n);
-	  var b = hi & ((1<<20) - 1);
-	  if(hi & 0x7ff00000) {
-	    b += (1<<20);
-	  }
-	  return [lo, b]
-	};
-
-	module.exports.denormalized = function(n) {
-	  var hi = module.exports.hi(n);
-	  return !(hi & 0x7ff00000)
-	};
-	});
-	var double_2 = double_1.pack;
-	var double_3 = double_1.lo;
-	var double_4 = double_1.hi;
-	var double_5 = double_1.sign;
-	var double_6 = double_1.exponent;
-	var double_7 = double_1.fraction;
-	var double_8 = double_1.denormalized;
-
-	var numToBn = num2bn;
-
-	function num2bn(x) {
-	  var e = double_1.exponent(x);
-	  if(e < 52) {
-	    return new bn(x)
-	  } else {
-	    return (new bn(x * Math.pow(2, 52-e))).ushln(e-52)
-	  }
-	}
-
-	var strToBn = str2BN;
-
-	function str2BN(x) {
-	  return new bn(x)
-	}
-
-	var bnSign = sign$1;
-
-	function sign$1 (x) {
-	  return x.cmp(new bn(0))
-	}
-
-	var rationalize_1 = rationalize;
-
-	function rationalize(numer, denom) {
-	  var snumer = bnSign(numer);
-	  var sdenom = bnSign(denom);
-	  if(snumer === 0) {
-	    return [numToBn(0), numToBn(1)]
-	  }
-	  if(sdenom === 0) {
-	    return [numToBn(0), numToBn(0)]
-	  }
-	  if(sdenom < 0) {
-	    numer = numer.neg();
-	    denom = denom.neg();
-	  }
-	  var d = numer.gcd(denom);
-	  if(d.cmpn(1)) {
-	    return [ numer.div(d), denom.div(d) ]
-	  }
-	  return [ numer, denom ]
-	}
-
-	var div_1 = div;
-
-	function div(a, b) {
-	  return rationalize_1(a[0].mul(b[1]), a[1].mul(b[0]))
-	}
-
-	var bigRat = makeRational;
-
-	function makeRational(numer, denom) {
-	  if(isRat_1(numer)) {
-	    if(denom) {
-	      return div_1(numer, makeRational(denom))
-	    }
-	    return [numer[0].clone(), numer[1].clone()]
-	  }
-	  var shift = 0;
-	  var a, b;
-	  if(isBn(numer)) {
-	    a = numer.clone();
-	  } else if(typeof numer === 'string') {
-	    a = strToBn(numer);
-	  } else if(numer === 0) {
-	    return [numToBn(0), numToBn(1)]
-	  } else if(numer === Math.floor(numer)) {
-	    a = numToBn(numer);
-	  } else {
-	    while(numer !== Math.floor(numer)) {
-	      numer = numer * Math.pow(2, 256);
-	      shift -= 256;
-	    }
-	    a = numToBn(numer);
-	  }
-	  if(isRat_1(denom)) {
-	    a.mul(denom[1]);
-	    b = denom[0].clone();
-	  } else if(isBn(denom)) {
-	    b = denom.clone();
-	  } else if(typeof denom === 'string') {
-	    b = strToBn(denom);
-	  } else if(!denom) {
-	    b = numToBn(1);
-	  } else if(denom === Math.floor(denom)) {
-	    b = numToBn(denom);
-	  } else {
-	    while(denom !== Math.floor(denom)) {
-	      denom = denom * Math.pow(2, 256);
-	      shift += 256;
-	    }
-	    b = numToBn(denom);
-	  }
-	  if(shift > 0) {
-	    a = a.ushln(shift);
-	  } else if(shift < 0) {
-	    b = b.ushln(-shift);
-	  }
-	  return rationalize_1(a, b)
-	}
-
-	var cmp_1 = cmp;
-
-	function cmp(a, b) {
-	    return a[0].mul(b[1]).cmp(b[0].mul(a[1]))
-	}
-
-	var bnToNum = bn2num;
-
-	//TODO: Make this better
-	function bn2num(b) {
-	  var l = b.length;
-	  var words = b.words;
-	  var out = 0;
-	  if (l === 1) {
-	    out = words[0];
-	  } else if (l === 2) {
-	    out = words[0] + (words[1] * 0x4000000);
-	  } else {
-	    for (var i = 0; i < l; i++) {
-	      var w = words[i];
-	      out += w * Math.pow(0x4000000, i);
-	    }
-	  }
-	  return bnSign(b) * out
-	}
-
-	var ctz = twiddle.countTrailingZeros;
-
-	var ctz_1 = ctzNumber;
-
-	//Counts the number of trailing zeros
-	function ctzNumber(x) {
-	  var l = ctz(double_1.lo(x));
-	  if(l < 32) {
-	    return l
-	  }
-	  var h = ctz(double_1.hi(x));
-	  if(h > 20) {
-	    return 52
-	  }
-	  return h + 32
-	}
-
-	var toFloat = roundRat;
-
-	// Round a rational to the closest float
-	function roundRat (f) {
-	  var a = f[0];
-	  var b = f[1];
-	  if (a.cmpn(0) === 0) {
-	    return 0
-	  }
-	  var h = a.abs().divmod(b.abs());
-	  var iv = h.div;
-	  var x = bnToNum(iv);
-	  var ir = h.mod;
-	  var sgn = (a.negative !== b.negative) ? -1 : 1;
-	  if (ir.cmpn(0) === 0) {
-	    return sgn * x
-	  }
-	  if (x) {
-	    var s = ctz_1(x) + 4;
-	    var y = bnToNum(ir.ushln(s).divRound(b));
-	    return sgn * (x + y * Math.pow(2, -s))
-	  } else {
-	    var ybits = b.bitLength() - ir.bitLength() + 53;
-	    var y = bnToNum(ir.ushln(ybits).divRound(b));
-	    if (ybits < 1023) {
-	      return sgn * y * Math.pow(2, -ybits)
-	    }
-	    y *= Math.pow(2, -1023);
-	    return sgn * y * Math.pow(2, 1023 - ybits)
-	  }
-	}
-
-	var ratVec = float2rat;
-
-
-
-	function float2rat(v) {
-	  var result = new Array(v.length);
-	  for(var i=0; i<v.length; ++i) {
-	    result[i] = bigRat(v[i]);
-	  }
-	  return result
-	}
-
-	var SMALLEST_DENORM = Math.pow(2, -1074);
-	var UINT_MAX = (-1)>>>0;
-
-	var nextafter_1 = nextafter;
-
-	function nextafter(x, y) {
-	  if(isNaN(x) || isNaN(y)) {
-	    return NaN
-	  }
-	  if(x === y) {
-	    return x
-	  }
-	  if(x === 0) {
-	    if(y < 0) {
-	      return -SMALLEST_DENORM
-	    } else {
-	      return SMALLEST_DENORM
-	    }
-	  }
-	  var hi = double_1.hi(x);
-	  var lo = double_1.lo(x);
-	  if((y > x) === (x > 0)) {
-	    if(lo === UINT_MAX) {
-	      hi += 1;
-	      lo = 0;
-	    } else {
-	      lo += 1;
-	    }
-	  } else {
-	    if(lo === 0) {
-	      lo = UINT_MAX;
-	      hi -= 1;
-	    } else {
-	      lo -= 1;
-	    }
-	  }
-	  return double_1.pack(lo, hi)
-	}
-
-	var mul_1 = mul;
-
-	function mul(a, b) {
-	  return rationalize_1(a[0].mul(b[0]), a[1].mul(b[1]))
-	}
-
-	var sub_1 = sub;
-
-	function sub(a, b) {
-	  return rationalize_1(a[0].mul(b[1]).sub(a[1].mul(b[0])), a[1].mul(b[1]))
-	}
-
-	var sign_1 = sign$2;
-
-	function sign$2(x) {
-	  return bnSign(x[0]) * bnSign(x[1])
-	}
-
-	var sub_1$1 = sub$1;
-
-	function sub$1(a, b) {
-	  var n = a.length;
-	  var r = new Array(n);
-	    for(var i=0; i<n; ++i) {
-	    r[i] = sub_1(a[i], b[i]);
-	  }
-	  return r
-	}
-
-	var add_1 = add;
-
-	function add(a, b) {
-	  return rationalize_1(
-	    a[0].mul(b[1]).add(b[0].mul(a[1])),
-	    a[1].mul(b[1]))
-	}
-
-	var add_1$1 = add$1;
-
-	function add$1 (a, b) {
-	  var n = a.length;
-	  var r = new Array(n);
-	  for (var i=0; i<n; ++i) {
-	    r[i] = add_1(a[i], b[i]);
-	  }
-	  return r
-	}
-
-	var muls_1 = muls;
-
-	function muls(a, x) {
-	  var s = bigRat(x);
-	  var n = a.length;
-	  var r = new Array(n);
-	  for(var i=0; i<n; ++i) {
-	    r[i] = mul_1(a[i], s);
-	  }
-	  return r
-	}
-
-	var ratSegIntersect = solveIntersection;
-
-
-
-
-
-
-
-
-
-	function ratPerp (a, b) {
-	  return sub_1(mul_1(a[0], b[1]), mul_1(a[1], b[0]))
-	}
-
-	// Solve for intersection
-	//  x = a + t (b-a)
-	//  (x - c) ^ (d-c) = 0
-	//  (t * (b-a) + (a-c) ) ^ (d-c) = 0
-	//  t * (b-a)^(d-c) = (d-c)^(a-c)
-	//  t = (d-c)^(a-c) / (b-a)^(d-c)
-
-	function solveIntersection (a, b, c, d) {
-	  var ba = sub_1$1(b, a);
-	  var dc = sub_1$1(d, c);
-
-	  var baXdc = ratPerp(ba, dc);
-
-	  if (sign_1(baXdc) === 0) {
-	    return null
-	  }
-
-	  var ac = sub_1$1(a, c);
-	  var dcXac = ratPerp(dc, ac);
-
-	  var t = div_1(dcXac, baXdc);
-	  var s = muls_1(ba, t);
-	  var r = add_1$1(a, s);
-
-	  return r
-	}
-
-	var cleanPslg = cleanPSLG;
-
-
-
-
-
-
-
-
-
-
-
-
-	// Bounds on a rational number when rounded to a float
-	function boundRat (r) {
-	  var f = toFloat(r);
-	  return [
-	    nextafter_1(f, -Infinity),
-	    nextafter_1(f, Infinity)
-	  ]
-	}
-
-	// Convert a list of edges in a pslg to bounding boxes
-	function boundEdges (points, edges) {
-	  var bounds = new Array(edges.length);
-	  for (var i = 0; i < edges.length; ++i) {
-	    var e = edges[i];
-	    var a = points[e[0]];
-	    var b = points[e[1]];
-	    bounds[i] = [
-	      nextafter_1(Math.min(a[0], b[0]), -Infinity),
-	      nextafter_1(Math.min(a[1], b[1]), -Infinity),
-	      nextafter_1(Math.max(a[0], b[0]), Infinity),
-	      nextafter_1(Math.max(a[1], b[1]), Infinity)
-	    ];
-	  }
-	  return bounds
-	}
-
-	// Convert a list of points into bounding boxes by duplicating coords
-	function boundPoints (points) {
-	  var bounds = new Array(points.length);
-	  for (var i = 0; i < points.length; ++i) {
-	    var p = points[i];
-	    bounds[i] = [
-	      nextafter_1(p[0], -Infinity),
-	      nextafter_1(p[1], -Infinity),
-	      nextafter_1(p[0], Infinity),
-	      nextafter_1(p[1], Infinity)
-	    ];
-	  }
-	  return bounds
-	}
-
-	// Find all pairs of crossing edges in a pslg (given edge bounds)
-	function getCrossings (points, edges, edgeBounds) {
-	  var result = [];
-	  boxIntersect_1(edgeBounds, function (i, j) {
-	    var e = edges[i];
-	    var f = edges[j];
-	    if (e[0] === f[0] || e[0] === f[1] ||
-	      e[1] === f[0] || e[1] === f[1]) {
-	      return
-	    }
-	    var a = points[e[0]];
-	    var b = points[e[1]];
-	    var c = points[f[0]];
-	    var d = points[f[1]];
-	    if (segseg(a, b, c, d)) {
-	      result.push([i, j]);
-	    }
-	  });
-	  return result
-	}
-
-	// Find all pairs of crossing vertices in a pslg (given edge/vert bounds)
-	function getTJunctions (points, edges, edgeBounds, vertBounds) {
-	  var result = [];
-	  boxIntersect_1(edgeBounds, vertBounds, function (i, v) {
-	    var e = edges[i];
-	    if (e[0] === v || e[1] === v) {
-	      return
-	    }
-	    var p = points[v];
-	    var a = points[e[0]];
-	    var b = points[e[1]];
-	    if (segseg(a, b, p, p)) {
-	      result.push([i, v]);
-	    }
-	  });
-	  return result
-	}
-
-	// Cut edges along crossings/tjunctions
-	function cutEdges (floatPoints, edges, crossings, junctions, useColor) {
-	  var i, e;
-
-	  // Convert crossings into tjunctions by constructing rational points
-	  var ratPoints = floatPoints.map(function(p) {
-	      return [
-	          bigRat(p[0]),
-	          bigRat(p[1])
-	      ]
-	  });
-	  for (i = 0; i < crossings.length; ++i) {
-	    var crossing = crossings[i];
-	    e = crossing[0];
-	    var f = crossing[1];
-	    var ee = edges[e];
-	    var ef = edges[f];
-	    var x = ratSegIntersect(
-	      ratVec(floatPoints[ee[0]]),
-	      ratVec(floatPoints[ee[1]]),
-	      ratVec(floatPoints[ef[0]]),
-	      ratVec(floatPoints[ef[1]]));
-	    if (!x) {
-	      // Segments are parallel, should already be handled by t-junctions
-	      continue
-	    }
-	    var idx = floatPoints.length;
-	    floatPoints.push([toFloat(x[0]), toFloat(x[1])]);
-	    ratPoints.push(x);
-	    junctions.push([e, idx], [f, idx]);
-	  }
-
-	  // Sort tjunctions
-	  junctions.sort(function (a, b) {
-	    if (a[0] !== b[0]) {
-	      return a[0] - b[0]
-	    }
-	    var u = ratPoints[a[1]];
-	    var v = ratPoints[b[1]];
-	    return cmp_1(u[0], v[0]) || cmp_1(u[1], v[1])
-	  });
-
-	  // Split edges along junctions
-	  for (i = junctions.length - 1; i >= 0; --i) {
-	    var junction = junctions[i];
-	    e = junction[0];
-
-	    var edge = edges[e];
-	    var s = edge[0];
-	    var t = edge[1];
-
-	    // Check if edge is not lexicographically sorted
-	    var a = floatPoints[s];
-	    var b = floatPoints[t];
-	    if (((a[0] - b[0]) || (a[1] - b[1])) < 0) {
-	      var tmp = s;
-	      s = t;
-	      t = tmp;
-	    }
-
-	    // Split leading edge
-	    edge[0] = s;
-	    var last = edge[1] = junction[1];
-
-	    // If we are grouping edges by color, remember to track data
-	    var color;
-	    if (useColor) {
-	      color = edge[2];
-	    }
-
-	    // Split other edges
-	    while (i > 0 && junctions[i - 1][0] === e) {
-	      var junction = junctions[--i];
-	      var next = junction[1];
-	      if (useColor) {
-	        edges.push([last, next, color]);
-	      } else {
-	        edges.push([last, next]);
+	  CSG.fromSegments = function(segments) {
+	    var csg = new CSG();
+	    csg.segments = segments;
+	    return csg;
+	  };
+
+	  // Construct a CSG solid from a list of `CSG.Polygon` instances.
+	  CSG.fromPolygons = function(polygons) {
+	    var csg = new CSG();
+	    csg.segments = [];
+	    for (var i = 0; i < polygons.length; i++) {
+	      for (var j = 0; j < polygons[i].length; j++) {
+	        var k = (j + 1) % (polygons[i].length);
+	        csg.segments.push(new CSG.Segment([new CSG.Vector(polygons[i][j]), new CSG.Vector(polygons[i][k])]));
 	      }
-	      last = next;
 	    }
+	    return csg;
+	  };
 
-	    // Add final edge
-	    if (useColor) {
-	      edges.push([last, t, color]);
+	  CSG.prototype = {
+	    clone: function() {
+	      var csg = new CSG();
+	      csg.segments = this.segments.map(function(p) {
+	        return p.clone();
+	      });
+	      return csg;
+	    },
+
+	    toSegments: function() {
+	      return this.segments;
+	    },
+
+	    toPolygons: function() {
+	      var segments = this.toSegments();
+
+	      var polygons = [];
+
+	      var list = segments.slice();
+
+	      var findNext = function(extremum) {
+	        for (var i = 0; i < list.length; i++) {
+	          if (list[i].vertices[0].squaredLengthTo(extremum) < 1) {
+	            var result = list[i].clone();
+	            list.splice(i, 1);
+	            return result;
+	          }
+	        }
+	        return false;
+	      };
+	      var currentIndex = 0;
+	      while (list.length > 0) {
+	        polygons[currentIndex] = polygons[currentIndex] || [];
+	        if (polygons[currentIndex].length == 0) {
+	          polygons[currentIndex].push(list[0].vertices[0]);
+	          polygons[currentIndex].push(list[0].vertices[1]);
+	          list.splice(0, 1);
+	        }
+
+	        var next = findNext(polygons[currentIndex][polygons[currentIndex].length - 1]);
+	        if (next) {
+	          polygons[currentIndex].push(next.vertices[1]);
+	        } else {
+	          currentIndex++;
+	        }
+	      }
+
+	      return polygons;
+	    },
+
+	    // Return a new CSG solid representing space in either this solid or in the
+	    // solid `csg`. Neither this solid nor the solid `csg` are modified.
+	    // 
+	    //   A.union(B)
+	    // 
+	    //   +-------+      +-------+
+	    //   |     |      |     |
+	    //   |   A   |      |     |
+	    //   |  +--+----+   =   |     +----+
+	    //   +----+--+  |     +----+     |
+	    //      |   B   |      |     |
+	    //      |     |      |     |
+	    //      +-------+      +-------+
+	    // 
+	    union: function(csg) {
+	      var a = new CSG.Node(this.clone().segments);
+	      var b = new CSG.Node(csg.clone().segments);
+	      a.invert();
+	      b.clipTo(a);
+	      b.invert();
+	      a.clipTo(b);
+	      b.clipTo(a);
+	      a.build(b.allSegments());
+	      a.invert();
+	      return CSG.fromSegments(a.allSegments());
+	    },
+
+
+	    // Return a new CSG solid representing space in this solid but not in the
+	    // solid `csg`. Neither this solid nor the solid `csg` are modified.
+	    // 
+	    //   A.subtract(B)
+	    // 
+	    //   +-------+      +-------+
+	    //   |     |      |     |
+	    //   |   A   |      |     |
+	    //   |  +--+----+   =   |  +--+
+	    //   +----+--+  |     +----+
+	    //      |   B   |
+	    //      |     |
+	    //      +-------+
+	    // 
+	    subtract: function(csg) {
+	      var b = new CSG.Node(this.clone().segments);
+	      var a = new CSG.Node(csg.clone().segments);
+	      a.invert();
+	      a.clipTo(b);
+	      b.clipTo(a);
+	      b.invert();
+	      b.clipTo(a);
+	      b.invert();
+	      a.build(b.allSegments());
+	      a.invert();
+	      return CSG.fromSegments(a.allSegments()).inverse();
+	    },
+
+	    // Return a new CSG solid representing space both this solid and in the
+	    // solid `csg`. Neither this solid nor the solid `csg` are modified.
+	    // 
+	    //   A.intersect(B)
+	    // 
+	    //   +-------+
+	    //   |     |
+	    //   |   A   |
+	    //   |  +--+----+   =   +--+
+	    //   +----+--+  |     +--+
+	    //      |   B   |
+	    //      |     |
+	    //      +-------+
+	    // 
+	    intersect: function(csg) {
+	      var a = new CSG.Node(this.clone().segments);
+	      var b = new CSG.Node(csg.clone().segments);
+	      a.clipTo(b);
+	      b.clipTo(a);
+	      b.invert();
+	      b.clipTo(a);
+	      b.invert();
+	      a.build(b.allSegments());
+	      return CSG.fromSegments(a.allSegments());
+	    },
+
+	    // Return a new CSG solid with solid and empty space switched. This solid is
+	    // not modified.
+	    inverse: function() {
+	      var csg = this.clone();
+	      csg.segments.map(function(p) {
+	        p.flip();
+	      });
+	      return csg;
+	    }
+	  };
+
+	  // # class Vector
+
+	  // Represents a 3D vector.
+	  // 
+	  // Example usage:
+	  // 
+	  //   new CSG.Vector(1, 2);
+	  //   new CSG.Vector([1, 2]);
+	  //   new CSG.Vector({ x: 1, y: 2 });
+
+	  CSG.Vector = function(x, y) {
+	    if (arguments.length == 2) {
+	      this.x = x;
+	      this.y = y;
+	    } else if ('x' in x) {
+	      this.x = x.x;
+	      this.y = x.y;
 	    } else {
-	      edges.push([last, t]);
+	      this.x = x[0];
+	      this.y = x[1];
 	    }
-	  }
+	  };
 
-	  // Return constructed rational points
-	  return ratPoints
-	}
+	  CSG.Vector.prototype = {
+	    clone: function() {
+	      return new CSG.Vector(this.x, this.y);
+	    },
 
-	// Merge overlapping points
-	function dedupPoints (floatPoints, ratPoints, floatBounds) {
-	  var numPoints = ratPoints.length;
-	  var uf = new unionFind(numPoints);
+	    negated: function() {
+	      return new CSG.Vector(-this.x, -this.y);
+	    },
 
-	  // Compute rational bounds
-	  var bounds = [];
-	  for (var i = 0; i < ratPoints.length; ++i) {
-	    var p = ratPoints[i];
-	    var xb = boundRat(p[0]);
-	    var yb = boundRat(p[1]);
-	    bounds.push([
-	      nextafter_1(xb[0], -Infinity),
-	      nextafter_1(yb[0], -Infinity),
-	      nextafter_1(xb[1], Infinity),
-	      nextafter_1(yb[1], Infinity)
-	    ]);
-	  }
+	    plus: function(a) {
+	      return new CSG.Vector(this.x + a.x, this.y + a.y);
+	    },
 
-	  // Link all points with over lapping boxes
-	  boxIntersect_1(bounds, function (i, j) {
-	    uf.link(i, j);
-	  });
+	    minus: function(a) {
+	      return new CSG.Vector(this.x - a.x, this.y - a.y);
+	    },
 
-	  // Do 1 pass over points to combine points in label sets
-	  var noDupes = true;
-	  var labels = new Array(numPoints);
-	  for (var i = 0; i < numPoints; ++i) {
-	    var j = uf.find(i);
-	    if (j !== i) {
-	      // Clear no-dupes flag, zero out label
-	      noDupes = false;
-	      // Make each point the top-left point from its cell
-	      floatPoints[j] = [
-	        Math.min(floatPoints[i][0], floatPoints[j][0]),
-	        Math.min(floatPoints[i][1], floatPoints[j][1])
-	      ];
+	    times: function(a) {
+	      return new CSG.Vector(this.x * a, this.y * a);
+	    },
+
+	    dividedBy: function(a) {
+	      return new CSG.Vector(this.x / a, this.y / a);
+	    },
+
+	    dot: function(a) {
+	      return this.x * a.x + this.y * a.y;
+	    },
+
+	    lerp: function(a, t) {
+	      return this.plus(a.minus(this).times(t));
+	    },
+
+	    length: function() {
+	      return Math.sqrt(this.dot(this));
+	    },
+
+	    unit: function() {
+	      return this.dividedBy(this.length());
+	    },
+
+	    squaredLengthTo: function(b) {
+	      return (this.x - b.x) * (this.x - b.x) + (this.y - b.y) * (this.y - b.y);
 	    }
-	  }
+	  };
 
-	  // If no duplicates, return null to signal termination
-	  if (noDupes) {
-	    return null
-	  }
+	  // # class line
 
-	  var ptr = 0;
-	  for (var i = 0; i < numPoints; ++i) {
-	    var j = uf.find(i);
-	    if (j === i) {
-	      labels[i] = ptr;
-	      floatPoints[ptr++] = floatPoints[i];
-	    } else {
-	      labels[i] = -1;
+	  CSG.Line = function(origin, direction) {
+	    this.origin = origin;
+	    this.direction = direction;
+	    this.normal = (new CSG.Vector(this.direction.y, -this.direction.x));
+	  };
+
+	  CSG.Line.EPSILON = 1e-5;
+
+	  CSG.Line.fromPoints = function(a, b) {
+	    var dir = b.minus(a).unit();
+	    return new CSG.Line(a, dir);
+	  };
+
+	  CSG.Line.prototype = {
+	    clone: function() {
+	      return new CSG.Line(this.origin.clone(), this.direction.clone());
+	    },
+
+	    flip: function() {
+	      this.direction = this.direction.negated();
+	      this.normal = this.normal.negated();
+	    },
+
+	    // Split `segment` by this line if needed, then put the segment or segment
+	    // fragments in the appropriate lists. Colinear segments go into either
+	    // `colinearRight` or `colinearLeft` depending on their orientation with
+	    // respect to this line. segments in right or in left of this line go into
+	    // either `right` or `left`.
+	    splitSegment: function(segment, colinearRight, colinearLeft, right, left) {
+	      var COLINEAR = 0;
+	      var RIGHT = 1;
+	      var LEFT = 2;
+	      var SPANNING = 3;
+
+	      // Classify each point as well as the entire polygon into one of the above
+	      // four classes.
+	      var segmentType = 0;
+	      var types = [];
+	      for (var i = 0; i < segment.vertices.length; i++) {
+	        var t = this.normal.dot(segment.vertices[i].minus(this.origin));
+	        var type = (t < -CSG.Line.EPSILON) ? RIGHT : (t > CSG.Line.EPSILON) ? LEFT : COLINEAR;
+	        segmentType |= type;
+	        types.push(type);
+	      }
+
+	      // Put the segment in the correct list, splitting it when necessary.
+	      switch (segmentType) {
+	        case COLINEAR:
+	          if (t != 0) {
+	            (t > 0 ? colinearRight : colinearLeft).push(segment);
+	          } else {
+	            if (segment.line.origin.x < this.origin.x) {
+	              colinearLeft.push(segment);
+	            } else {
+	              colinearRight.push(segment);
+	            }
+	          }
+	          break;
+	        case RIGHT:
+	          right.push(segment);
+	          break;
+	        case LEFT:
+	          left.push(segment);
+	          break;
+	        case SPANNING: //TODO
+	          var r = [],
+	            l = [];
+	          var ti = types[0],
+	            tj = types[1];
+	          var vi = segment.vertices[0],
+	            vj = segment.vertices[1];
+	          if (ti == RIGHT && tj == RIGHT) {
+	            r.push(vi);
+	            r.push(vj);
+	          }
+	          if (ti == LEFT && tj == LEFT) {
+	            l.push(vi);
+	            l.push(vj);
+	          }
+	          if (ti == RIGHT && tj == LEFT) {
+	            var t = (this.normal.dot(this.origin.minus(vi))) / this.normal.dot(vj.minus(vi));
+	            var v = vi.lerp(vj, t);
+	            r.push(vi);
+	            r.push(v);
+	            l.push(v.clone());
+	            l.push(vj);
+	          }
+	          if (ti == LEFT && tj == RIGHT) {
+	            var t = (this.normal.dot(this.origin.minus(vi))) / this.normal.dot(vj.minus(vi));
+	            var v = vi.lerp(vj, t);
+	            l.push(vi);
+	            l.push(v);
+	            r.push(v.clone());
+	            r.push(vj);
+	          }
+	          if (r.length >= 2) {
+	            right.push(new CSG.Segment(r, segment.shared));
+	          }
+
+	          if (l.length >= 2) {
+	            left.push(new CSG.Segment(l, segment.shared));
+	          }
+	          break;
+	      }
 	    }
-	  }
+	  };
 
-	  floatPoints.length = ptr;
+	  // # class Segment
 
-	  // Do a second pass to fix up missing labels
-	  for (var i = 0; i < numPoints; ++i) {
-	    if (labels[i] < 0) {
-	      labels[i] = labels[uf.find(i)];
+	  // Represents a convex segment. The vertices used to initialize a segment must
+	  // be coplanar and form a convex loop. They do not have to be `CSG.Vertex`
+	  // instances but they must behave similarly (duck typing can be used for
+	  // customization).
+	  // 
+	  // Each convex segment has a `shared` property, which is shared between all
+	  // segments that are clones of each other or were split from the same segment.
+	  // This can be used to define per-segment properties (such as surface color).
+
+	  CSG.Segment = function(vertices, shared) {
+	    this.vertices = vertices;
+	    this.shared = shared;
+	    this.line = CSG.Line.fromPoints(vertices[0], vertices[1]);
+	  };
+
+	  CSG.Segment.prototype = {
+	    clone: function() {
+	      var vertices = this.vertices.map(function(v) {
+	        return v.clone();
+	      });
+	      return new CSG.Segment(vertices, this.shared);
+	    },
+
+	    flip: function() {
+	      this.vertices.reverse().map(function(v) {
+	        v.negated();
+	      });
+	      this.line.flip();
 	    }
-	  }
+	  };
 
-	  // Return resulting union-find data structure
-	  return labels
-	}
+	  // # class Node
 
-	function compareLex2 (a, b) { return (a[0] - b[0]) || (a[1] - b[1]) }
-	function compareLex3 (a, b) {
-	  var d = (a[0] - b[0]) || (a[1] - b[1]);
-	  if (d) {
-	    return d
-	  }
-	  if (a[2] < b[2]) {
-	    return -1
-	  } else if (a[2] > b[2]) {
-	    return 1
-	  }
-	  return 0
-	}
+	  // Holds a node in a BSP tree. A BSP tree is built from a collection of polygons
+	  // by picking a polygon to split along. That polygon (and all other coplanar
+	  // polygons) are added directly to that node and the other polygons are added to
+	  // the right and/or left subtrees. This is not a leafy BSP tree since there is
+	  // no distinction between internal and leaf nodes.
 
-	// Remove duplicate edge labels
-	function dedupEdges (edges, labels, useColor) {
-	  if (edges.length === 0) {
-	    return
-	  }
-	  if (labels) {
-	    for (var i = 0; i < edges.length; ++i) {
-	      var e = edges[i];
-	      var a = labels[e[0]];
-	      var b = labels[e[1]];
-	      e[0] = Math.min(a, b);
-	      e[1] = Math.max(a, b);
+	  CSG.Node = function(segments) {
+	    this.line = null;
+	    this.right = null;
+	    this.left = null;
+	    this.segments = [];
+	    if (segments) this.build(segments);
+	  };
+
+	  CSG.Node.prototype = {
+	    clone: function() {
+	      var node = new CSG.Node();
+	      node.line = this.line && this.line.clone();
+	      node.right = this.right && this.right.clone();
+	      node.left = this.left && this.left.clone();
+	      note.segments = this.segments.map(function(p) {
+	        return p.clone();
+	      });
+	      return node;
+	    },
+
+	    // Convert solid space to empty space and empty space to solid space.
+	    invert: function() {
+	      for (var i = 0; i < this.segments.length; i++) {
+	        this.segments[i].flip();
+	      }
+	      this.line.flip();
+	      if (this.right) this.right.invert();
+	      if (this.left) this.left.invert();
+	      var temp = this.right;
+	      this.right = this.left;
+	      this.left = temp;
+	    },
+
+	    // Recursively remove all segments in `segments` that are inside this BSP
+	    // tree.
+
+	    clipSegments: function(segments) {
+	      if (!this.line) return segments.slice();
+	      var right = [],
+	        left = [];
+	      for (var i = 0; i < segments.length; i++) {
+	        this.line.splitSegment(segments[i], right, left, right, left);
+	      }
+	      if (this.right) right = this.right.clipSegments(right);
+	      if (this.left) left = this.left.clipSegments(left);
+	      else left = [];
+	      return right.concat(left);
+	    },
+
+	    // Remove all segments in this BSP tree that are inside the other BSP tree
+	    // `bsp`.
+	    clipTo: function(bsp) {
+	      this.segments = bsp.clipSegments(this.segments);
+	      if (this.right) this.right.clipTo(bsp);
+	      if (this.left) this.left.clipTo(bsp);
+	    },
+
+	    // Return a list of all segments in this BSP tree.
+	    allSegments: function() {
+	      var segments = this.segments.slice();
+	      if (this.right) segments = segments.concat(this.right.allSegments());
+	      if (this.left) segments = segments.concat(this.left.allSegments());
+	      return segments;
+	    },
+
+	    // Build a BSP tree out of `segments`. When called on an existing tree, the
+	    // new segments are filtered down to the bottom of the tree and become new
+	    // nodes there. Each set of segments is partitioned using the first polygon
+	    // (no heuristic is used to pick a good split).
+	    build: function(segments) {
+	      if (!segments.length) return;
+	      if (!this.line) this.line = segments[0].line.clone();
+	      var right = [],
+	        left = [];
+	      for (var i = 0; i < segments.length; i++) {
+	        this.line.splitSegment(segments[i], this.segments, this.segments, right, left);
+	      }
+	      if (right.length) {
+	        if (!this.right) this.right = new CSG.Node();
+	        this.right.build(right);
+	      }
+	      if (left.length) {
+	        if (!this.left) this.left = new CSG.Node();
+	        this.left.build(left);
+	      }
 	    }
-	  } else {
-	    for (var i = 0; i < edges.length; ++i) {
-	      var e = edges[i];
-	      var a = e[0];
-	      var b = e[1];
-	      e[0] = Math.min(a, b);
-	      e[1] = Math.max(a, b);
-	    }
-	  }
-	  if (useColor) {
-	    edges.sort(compareLex3);
-	  } else {
-	    edges.sort(compareLex2);
-	  }
-	  var ptr = 1;
-	  for (var i = 1; i < edges.length; ++i) {
-	    var prev = edges[i - 1];
-	    var next = edges[i];
-	    if (next[0] === prev[0] && next[1] === prev[1] &&
-	      (!useColor || next[2] === prev[2])) {
-	      continue
-	    }
-	    edges[ptr++] = next;
-	  }
-	  edges.length = ptr;
-	}
+	  };
 
-	function preRound (points, edges, useColor) {
-	  var labels = dedupPoints(points, [], boundPoints(points));
-	  dedupEdges(edges, labels, useColor);
-	  return !!labels
-	}
-
-	// Repeat until convergence
-	function snapRound (points, edges, useColor) {
-	  // 1. find edge crossings
-	  var edgeBounds = boundEdges(points, edges);
-	  var crossings = getCrossings(points, edges, edgeBounds);
-
-	  // 2. find t-junctions
-	  var vertBounds = boundPoints(points);
-	  var tjunctions = getTJunctions(points, edges, edgeBounds, vertBounds);
-
-	  // 3. cut edges, construct rational points
-	  var ratPoints = cutEdges(points, edges, crossings, tjunctions, useColor);
-
-	  // 4. dedupe verts
-	  var labels = dedupPoints(points, ratPoints, vertBounds);
-
-	  // 5. dedupe edges
-	  dedupEdges(edges, labels, useColor);
-
-	  // 6. check termination
-	  if (!labels) {
-	    return (crossings.length > 0 || tjunctions.length > 0)
-	  }
-
-	  // More iterations necessary
-	  return true
-	}
-
-	// Main loop, runs PSLG clean up until completion
-	function cleanPSLG (points, edges, colors) {
-	  // If using colors, augment edges with color data
-	  var prevEdges;
-	  if (colors) {
-	    prevEdges = edges;
-	    var augEdges = new Array(edges.length);
-	    for (var i = 0; i < edges.length; ++i) {
-	      var e = edges[i];
-	      augEdges[i] = [e[0], e[1], colors[i]];
-	    }
-	    edges = augEdges;
-	  }
-
-	  // First round: remove duplicate edges and points
-	  var modified = preRound(points, edges, !!colors);
-
-	  // Run snap rounding until convergence
-	  while (snapRound(points, edges, !!colors)) {
-	    modified = true;
-	  }
-
-	  // Strip color tags
-	  if (!!colors && modified) {
-	    prevEdges.length = 0;
-	    colors.length = 0;
-	    for (var i = 0; i < edges.length; ++i) {
-	      var e = edges[i];
-	      prevEdges.push([e[0], e[1]]);
-	      colors.push(e[2]);
-	    }
-	  }
-
-	  return modified
-	}
+	  return CSG;
+	});
+	});
 
 	var MAX_HOLE_LEN = 16;
 
 	const PLANE = new Plane();
 	const POINT = new Vector3();
+	const A = new Vector3();
+	const B = new Vector3();
+	const C = new Vector3();
 
 	// dfs search through edges by related mapped edge.prev vertices
 	function searchEdgeList(map, builtContour, startingEdge) {
@@ -33272,8 +27447,6 @@ return d[d.length-1];};return ", funcName].join("");
 
 	class NavMeshUtils {
 
-	    // TODO: extrude boundary edges to fill up by boundary edges
-	    // boundary edge: add polygon extrude..
 	    // todo: boundary edge: inset
 
 	    /*
@@ -33293,6 +27466,16 @@ return d[d.length-1];};return ", funcName].join("");
 	    }
 	    */
 
+	   static planeFromCoplarVertexIndices(vertices, i, i2, i3) {
+	        i*=3;
+	        i2*=3;
+	        i3*=3;
+	        A.set(vertices[i], vertices[i+1], vertices[i+2]);
+	        B.set(vertices[i2], vertices[i2+1], vertices[i2+2]);
+	        C.set(vertices[i3], vertices[i3+1], vertices[i3+2]);
+	        return PLANE.fromCoplanarPoints(A, B, C);
+	   }
+
 	    /**
 	     * Sets up triangulated data for 3D rendering from  polygon references to be extruded
 	     * @param {*} collector An object of existing "vertices" and "indices" array to push values into
@@ -33303,8 +27486,171 @@ return d[d.length-1];};return ", funcName].join("");
 	     * @param {Number} yBottomMin If yBottom isn't specified as an absolute number, this additional optional parameter limits how far down a polygon can extrude downwards by an absolute y value
 	     */
 	    static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin) {
-	        // yVal, yBottom, yBottomMin may be unique per polygon if polygon has it's own exclusive "yExtrudeParams" settings
-	        //  that overwrites existing default params
+	        transformId++;
+
+	        const vertices = collector.vertices;
+	        const indices = collector.indices;
+	        const normals = collector.normals;
+	        let vi = vertices.length;
+	        let vc = vi / 3;
+	        let ii = indices.length;
+	        let ni = vi;
+
+	        let nx;
+	        let nz;
+	        let dn;
+
+	        let len = polygons.length;
+	        const defaultExtrudeParams = {
+	            yBottom: yBottom,
+	            yBottomMin: yBottomMin,
+	            yVal: yVal
+	        };
+	        let extrudeParams;
+
+	        // to map extrudeParams to a map of vertex ids to extrusion vertex ids
+	        let profile;
+	        let profileMap = new Map();
+
+	        const faceIndices = [];
+	        let fi = 0;
+	        let edge;
+	        let targYBottom;
+
+	        for (let i=0; i<len; i++) {
+	            let polygon = polygons[i];
+	            edge = polygon.edge;
+
+	            fi = 0;
+	            extrudeParams = !polygon.yExtrudeParams ? defaultExtrudeParams : polygon.yExtrudeParams;
+	            if (profileMap.has(extrudeParams)) {
+	                profile = profileMap.get(extrudeParams);
+	            } else {
+	                profileMap.set(extrudeParams, profile=new Map());
+	            }
+
+	            let absoluteYRange = typeof extrudeParams.yBottom === "number";
+	            let considerEdges = yVal !== 0 || (absoluteYRange || yBottom);
+
+	            let edgeIndex = 0;
+	            do {
+	                if (edge.vertex.transformId !== transformId && !extrudeParams.bordersOnly) {
+	                    edge.vertex.id = vc++;
+	                    vertices[vi++] = edge.vertex.x * xzScale;
+	                    vertices[vi++] = absoluteYRange ? extrudeParams.yVal : edge.vertex.y;
+	                    vertices[vi++] = edge.vertex.z * xzScale;
+	                    normals[ni++] = 0;
+	                    normals[ni++] = 1;
+	                    normals[ni++] = 0;
+	                    edge.vertex.transformId = transformId;
+	                }
+
+	                faceIndices[fi++]  = edge.vertex.id;
+
+	                ///*
+	                if (!extrudeParams.bordersOnly && extrudeParams.yBottom !== true && !profile.has(edge.vertex.id)) {
+	                    profile.set(edge.vertex.id, vc++);
+	                    vertices[vi++] = edge.vertex.x * xzScale;
+	                    targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
+	                    vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
+	                    vertices[vi++] = edge.vertex.z * xzScale;
+
+	                    normals[ni++] = 0;
+	                    normals[ni++] = -1;
+	                    normals[ni++] = 0;
+	                }
+	                //*/
+
+	                if (!extrudeParams.bordersOnly ? edge.twin === null && considerEdges : (polygon.edgeMask & (1<<edgeIndex)) ) {
+	                    ///*
+	                    let a;
+	                    let b;
+	                    let c;
+	                    let d;
+	                    // tri 1
+	                    targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.prev.vertex.y - extrudeParams.yVal;
+	                    indices[ii++] = a = vc++;
+	                    vertices[vi++] = edge.prev.vertex.x * xzScale;
+	                    vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
+	                    vertices[vi++] = edge.prev.vertex.z * xzScale;
+	                    nx = -edge.prev.vertex.z;
+	                    nz = edge.prev.vertex.x;
+	                    dn = Math.sqrt(nx*nx + nz*nz);
+	                    nx /= dn;
+	                    nz /= dn;
+	                    normals[ni++] = nx;
+	                    normals[ni++] = 0;
+	                    normals[ni++] = nz;
+
+	                    targYBottom = absoluteYRange ? extrudeParams.yBottom : extrudeParams.yBottom === true ? extrudeParams.yVal : edge.vertex.y - extrudeParams.yVal;
+	                    indices[ii++] = b = vc++;
+	                    vertices[vi++] = edge.vertex.x * xzScale;
+	                    vertices[vi++] = extrudeParams.yBottomMin === undefined ? targYBottom : Math.max(extrudeParams.yBottomMin, targYBottom);
+	                    vertices[vi++] = edge.vertex.z * xzScale;
+	                    nx = -edge.vertex.z;
+	                    nz = edge.vertex.x;
+	                    dn = Math.sqrt(nx*nx + nz*nz);
+	                    nx /= dn;
+	                    nz /= dn;
+	                    normals[ni++] = nx;
+	                    normals[ni++] = 0;
+	                    normals[ni++] = nz;
+
+	                    // top right
+	                    indices[ii++] = c = vc++;
+	                    vertices[vi++] = edge.vertex.x * xzScale;
+	                    vertices[vi++] = edge.vertex.y;
+	                    vertices[vi++] = edge.vertex.z * xzScale;
+	                    normals[ni++] = nx;
+	                    normals[ni++] = 0;
+	                    normals[ni++] = nz;
+
+	                    // top left
+	                    d = vc++;
+	                    vertices[vi++] = edge.prev.vertex.x * xzScale;
+	                    vertices[vi++] = edge.prev.vertex.y;
+	                    vertices[vi++] = edge.prev.vertex.z * xzScale;
+	                    nx = -edge.prev.vertex.z;
+	                    nz = edge.prev.vertex.x;
+	                    dn = Math.sqrt(nx*nx + nz*nz);
+	                    nx /= dn;
+	                    nz /= dn;
+	                    normals[ni++] = nx;
+	                    normals[ni++] = 0;
+	                    normals[ni++] = nz;
+
+	                    // tri2
+	                    indices[ii++] = a;
+	                    indices[ii++] = c;
+	                    indices[ii++] = d;
+	                   // */
+	                }
+
+	                edge = edge.next;
+	                edgeIndex++;
+	            } while(edge !== polygon.edge)
+
+	            // set up upper top face indices
+	            let fLen = fi - 1;
+	            for (let f=1; f< fLen; f++) {
+	                indices[ii++] = faceIndices[0];
+	                indices[ii++] = faceIndices[f];
+	                indices[ii++] = faceIndices[f+1];
+	            }
+
+	            // set up lower bottom face indices if needed
+	            ///*
+	            if (!extrudeParams.bordersOnly && extrudeParams.yBottom !== true) {
+	                for (let f=1; f< fLen; f++) {
+	                    indices[ii++] = profile.get(faceIndices[f+1]);
+	                    indices[ii++] = profile.get(faceIndices[f]);
+	                    indices[ii++] = profile.get(faceIndices[0]);
+	                }
+	            }
+	            //*/
+	        }
+
+	        return collector;
 	    }
 
 
@@ -33312,17 +27658,31 @@ return d[d.length-1];};return ", funcName].join("");
 	     *
 	     * @param {HalfEdge} edge A HalfEdge to extrude from (using facing "normal", inwards for HalfEdge)
 	     * @param {Number} extrudeVal How much to extrude from in negative/positive direction
+	     * kiv open border parameter
 	     * @return The sepearte newly-created polygon formed as a result of the extruded edge
 	     */
-	    static getNewExtrudeEdgePolygon( edge, extrudeVal) {
-
+	    static getNewExtrudeEdgePolygon(edge, extrudeVal, keepVertices=false) {
+	        let dx = edge.vertex.x - edge.prev.vertex.x;
+	        let dz = edge.vertex.z - edge.prev.vertex.z;
+	        let nx = -dz;
+	        let nz = dx;
+	        let d = Math.sqrt(nx*nx + nz*nz);
+	        nx /=d;
+	        nz /=d;
+	        let contours = [
+	            (keepVertices ? edge.prev.vertex : edge.prev.vertex.clone()),
+	            new Vector3(edge.prev.vertex.x + extrudeVal * nx, edge.prev.vertex.y, edge.prev.vertex.z+  extrudeVal * nz),
+	            new Vector3(edge.vertex.x + extrudeVal * nx, edge.vertex.y, edge.vertex.z + extrudeVal* nz),
+	            (keepVertices ? edge.vertex : edge.vertex.clone())
+	        ];
+	        return new Polygon().fromContour(contours);
 	    }
 
 	    /**
 	     * Clones a polygon entirely with an entir enew set of HalfEdges and vertex references
-	     * @param {Polygon} polygon 
+	     * @param {Polygon} polygon
 	     */
-	    static clonePolygon(polygon) {
+	    static clonePolygon(polygon, reversed=false) {
 	        let contours = [];
 	        let edge = polygon.edge;
 	        do {
@@ -33330,16 +27690,36 @@ return d[d.length-1];};return ", funcName].join("");
 	            edge = edge.next;
 	        } while (edge !== polygon.edge);
 
+	        if (reversed) contours.reverse();
 	        return new Polygon().fromContour(contours);
 	    }
 
+	    static countBorderEdges(polygon, countAllEdgeTypes=false) {
+	        let count = 0;
+	        let edge = polygon.edge;
+	        do {
+	            count += !edge.twin || countAllEdgeTypes ? 1 : 0;
+	            edge = edge.next;
+	        } while (edge !== polygon.edge);
+	        return count;
+	    }
+
+	    static getBorderEdges(polygon) {
+	        let arr = [];
+	        let edge = polygon.edge;
+	        do {
+	            if (!edge.twin) arr.push(edge);
+	            edge = edge.next;
+	        } while (edge !== polygon.edge);
+	        return arr;
+	    }
 
 	    /**
 	     * LInk polygons by connecting quad polygons
-	     * @param {HalfEdge} connector A HalfEdge of a Polygon #1 
+	     * @param {HalfEdge} connector A HalfEdge of a Polygon #1
 	     * @param {HalfEdge} connector2 A HalfEdge of a Polygon #2
 	     * @param {Polygon} connector3 This will be the connecting polygon to link the polgons if any, given 2 border edges
-	     * @return The resulting connecting polygons 
+	     * @return The resulting connecting polygons
 	     */
 	    static linkPolygons(connector, connector2=null, connector3=null) {
 	        let polies = [];
@@ -33356,18 +27736,23 @@ return d[d.length-1];};return ", funcName].join("");
 	            POINT.z = (connector.prev.vertex.z + connector.vertex.z) * 0.5;
 	            edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
 	            // edge to connector
-	            
-	            contours[c++] = edge.vertex;
-	            contours[c++] = connector.prev.vertex;
-	            contours[c++] = connector.vertex;
-	            contours[c++] = edge.prev.vertex;
 
-	            
+
+	            contours[c++] = edge.prev.vertex;
+	             contours[c++] = connector.vertex;
+	              contours[c++] = connector.prev.vertex;
+	               contours[c++] = edge.vertex;
+
+
 	            let p;
+	            contours.length = c;
 	            polies.push(p = new Polygon().fromContour(contours));
 
-	            p.edge.twin = connector.prev;
-	            connector.prev.twin = p.edge;
+	            edge.twin = p.edge.prev;
+	            p.edge.prev.twin = edge;
+
+	            p.edge.prev.twin = connector;
+	            connector.twin = p.edge.prev;
 
 	            if (connector2 !== null) {
 	                let p2;
@@ -33376,14 +27761,20 @@ return d[d.length-1];};return ", funcName].join("");
 	                POINT.z = (connector2.prev.vertex.z + connector2.vertex.z) * 0.5;
 	                edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
 
-	                contours[c++] = edge.vertex;
-	                contours[c++] = connector2.prev.vertex;
-	                contours[c++] = connector2.vertex;
+
 	                contours[c++] = edge.prev.vertex;
-	                
+	                 contours[c++] = connector2.vertex;
+	                  contours[c++] = connector2.prev.vertex;
+	                  contours[c++] = edge.vertex;
+
+	                contours.length = c;
 	                polies.push(p2 =  new Polygon().fromContour(contours));
-	                p2.edge.twin = connector2.prev;
-	                connector2.prev.twin = p2.edge;
+
+	                edge.twin = p.edge.prev;
+	                 p.edge.prev.twin = edge;
+
+	                p2.edge.prev.twin = connector2;
+	                connector2.twin = p2.edge.prev;
 	            }
 	        }
 	        return polies;
@@ -33419,7 +27810,7 @@ return d[d.length-1];};return ", funcName].join("");
 	            } while (edge !== r.edge);
 	        }
 	        return result;
-	    } 
+	    }
 
 	    static scalePolygons(polygons, xzScale) {
 	        transformId++;
@@ -33485,29 +27876,35 @@ return d[d.length-1];};return ", funcName].join("");
 	            c = 0;
 	            let edge = polygon.edge;
 	            do {
+	                let v;
 	                if (vertexMap.has(edge.vertex)) {
-	                    edge.vertex = vertexMap.get(edge.vertex);
+	                    v = vertexMap.get(edge.vertex);
 	                } else {
-	                    let v = edge.vertex.clone();
+	                    v = edge.vertex.clone();
 	                    vertexMap.set(edge.vertex, v);
-	                    if (clonePolygons) {
-	                        contours[c++] = v;
-	                    } else {
-	                        if (clonePolygons !== null) edge.vertex = v;
-	                    }
+	                }
+	                if (clonePolygons) {
+	                    contours[c++] = v;
+	                } else {
+	                    if (clonePolygons !== null) edge.vertex = v;
 	                }
 	                edge = edge.next;
 	            } while (edge !== polygon.edge);
 
 	            if (clonePolygons) {
 	                contours.length = c;
-	                filteredPolygons.push(new Polygon().fromContour(contours));
+	                let poly;
+	                filteredPolygons.push(poly = new Polygon().fromContour(contours));
+	                if (polygon.yExtrudeParams !== undefined) poly.yExtrudeParams = polygon.yExtrudeParams;
+	                if (polygon.edgeMask !== undefined) poly.edgeMask = polygon.edgeMask;
+	                if (polygon.sep !== undefined) poly.sep = polygon.sep;
+	                poly.mask = polygon.mask;
 	            } else filteredPolygons.push(polygon);
 	        }
 	        return filteredPolygons;
 	    }
 
-	    static adjustAltitudeOfAllPolygons(polygons) {
+	    static adjustAltitudeOfAllPolygons(polygons, altitude) {
 	        transformId++;
 	        let len = polygons.length;
 	        for (let i=0; i<len; i++) {
@@ -33609,6 +28006,19 @@ return d[d.length-1];};return ", funcName].join("");
 	        } while (edge !== polygon.edge);
 	    }
 
+	    static seperateMarkedPolygonsVertices(polygons) {
+	        let len = polygons.length;
+	        for (let i=0;i<len; i++) {
+	            let polygon = polygons[i];
+	            if (!polygon.sep) continue;
+	            let edge = polygon.edge;
+	            do {
+	                edge.vertex = edge.vertex.clone();
+	                edge = edge.next;
+	            } while (edge !== polygon.edge)
+	        }
+	        return polygons;
+	    }
 
 
 	   /**
@@ -33730,8 +28140,10 @@ return d[d.length-1];};return ", funcName].join("");
 
 	}
 
-	const lineSegment$3 = new LineSegment();
+	const lineSegment$2 = new LineSegment();
 	const pointOnLineSegment$2 = new Vector3();
+
+	const WALL_RADIUS = 1;
 
 	const CITADEL_WARD_INDEX = -1;
 	const T_EPSILON =  1e-7;
@@ -33747,6 +28159,7 @@ return d[d.length-1];};return ", funcName].join("");
 	const BIT_HIGHWAY = 1;
 	const BIT_WARD_ROAD = 2;
 	const BIT_HIGHWAY_RAMP = 4;
+	const BIT_WARD_ROAD_OUTER = 8;
 	// const BIT_INNER_ROAD = 4;
 
 
@@ -33754,44 +28167,23 @@ return d[d.length-1];};return ", funcName].join("");
 	For Kralchester3D
 
 	SVGCityReader identify:
-	- City Wall tower/entrance key polygons, tower/entrance pillar border edges (inward/outward 2e ach)
-	- entrance+highways, tower+roads connecting edges through above
-
-	for NavMeshUtils's: for
-	- linkPolygons(entrance+highways ... tower+roads)
-
-	*DONE as of above*
-
-	- getNewExtrudeEdgePolygon(tower/entrance pillar)
 
 	( // kiv later)
 	- addConnectingPortal(subjectEdge, connectingEdge, setTwinLinks?=false)
 
-	All Navmeshes:
-	UPPER WARDS* (kiv: 3D buildings on upper ward built from SVGCityReader)
-	CITY WALL
-	HIGHWAYS*
-	UPPER ROADS*
-	GROUND* (3D buildings on ground built from SVGCityReader)
-	RAMPS (3D built from SVGCityReader)
-
-	* Will be Linked by RAMPS to combine into 1 interconnected Navmesh
-
-	3D remaining:
-	- collectExtrudeGeometry(tower/entrance rooftops , extruded tower/pillar wall, HIGHWAYS (ramp down tagged), UPPER ROADS, CITY WALL(entry downs(CITY WALL tagged))  )
-
-	Base collection groups:
-	- Buildings (lower/upper)
-	- City Wall
-	- Highways
-	- Upper Roads
-	- Ramps
-	(not built/kiv, until altitude/heightmap considerations included in: Ground)
 	*/
 
 
 	function svgLineFromTo(from, to) {
 		return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
+	}
+
+	function getNewGeometryCollector() {
+		return {
+			vertices: [],
+			indices: [],
+			normals: []
+		}
 	}
 
 	/**
@@ -33800,10 +28192,10 @@ return d[d.length-1];};return ", funcName].join("");
 	 * @param {Vector3} pt
 	 * @param {Number} mask
 	 */
-	function navmeshTagRegionByPt(navmesh, pt, mask, errors, lenient=false) {
+	function navmeshTagRegionByPt(navmesh, pt, mask=null, errors, lenient=false) {
 		let r = navmesh.getRegionForPoint(pt);
 		if (r) {
-			r.mask = mask;
+			if (mask !== null) r.mask = mask;
 			pt.region = r;
 		} else {
 			if (lenient) {
@@ -33812,14 +28204,14 @@ return d[d.length-1];};return ", funcName].join("");
 				}
 				else r = navmesh.getClosestRegion(pt);
 				if (r) {
-					r.mask = mask;
+					if (mask !== null) r.mask = mask;
 					pt.region = r;
 					return r;
 				}
 			}
 			if (!errors) errors = [];
 			console.warn("navmeshTagRegionByPt couldn't find region:", pt, mask);
-			errors.push(pt.clone());
+			errors.push(pt);
 			return errors;
 		}
 		return r;
@@ -33846,6 +28238,24 @@ return d[d.length-1];};return ", funcName].join("");
 		( ( p.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( p.z - b.z ) ) >= 0 &&
 		( ( p.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( p.z - c.z ) ) >= 0;
 		*/
+	}
+
+	function pointToShapePt(pt) {
+		return {X:pt[0], Y:pt[1]};
+	}
+
+	function withinVincityOfPointSet(pt, points, dist) {
+		dist *= dist;
+		let len = points.length;
+		for (let i=0; i<len; i++) {
+			let p = points[i];
+			let dx = p.x - pt.x;
+			let dz = p.z - pt.z;
+			if (dx*dx + dz*dz <=dist) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	function setsIntersection(a,b) {
@@ -33904,6 +28314,10 @@ return d[d.length-1];};return ", funcName].join("");
 
 	function segPointEquals(a, b) {
 		return a[0] === b[0] && a[1] === b[1];
+	}
+
+	function segPointToVector3(a) {
+		return new Vector3(a[0], 0, a[1]);
 	}
 
 	function chamferEndsOfPointsList(pointsList, radius, wrapAround) {
@@ -33998,9 +28412,9 @@ return d[d.length-1];};return ", funcName].join("");
 		let edge = polygon.edge;
 		let shortestDistance = Infinity;
 		do {
-			lineSegment$3.set(edge.prev.vertex, edge.vertex);
-			let t = lineSegment$3.closestPointToPointParameter( point, true);
-			lineSegment$3.at( t, pointOnLineSegment$2 );
+			lineSegment$2.set(edge.prev.vertex, edge.vertex);
+			let t = lineSegment$2.closestPointToPointParameter( point, true);
+			lineSegment$2.at( t, pointOnLineSegment$2 );
 			let distance = pointOnLineSegment$2.squaredDistanceTo( point );
 			if (distance < shortestDistance) {
 				shortestDistance = distance;
@@ -34023,9 +28437,9 @@ return d[d.length-1];};return ", funcName].join("");
 		}
 
 		do {
-			lineSegment$3.set(edge.prev.vertex, edge.vertex);
-			let t = lineSegment$3.closestPointToPointParameter( point, true);
-			lineSegment$3.at( t, pointOnLineSegment$2 );
+			lineSegment$2.set(edge.prev.vertex, edge.vertex);
+			let t = lineSegment$2.closestPointToPointParameter( point, true);
+			lineSegment$2.at( t, pointOnLineSegment$2 );
 			let distance = pointOnLineSegment$2.squaredDistanceTo( point );
 			if (distance <= dist) {
 				return true;
@@ -34238,7 +28652,6 @@ return d[d.length-1];};return ", funcName].join("");
 		constructor() {
 			this.wards = [];
 			this.citadel = null;
-
 			// path
 			this.selectorWards = "g[fill='#99948A'][stroke='#1A1917']";
 
@@ -34249,10 +28662,13 @@ return d[d.length-1];};return ", funcName].join("");
 			this.selectorLandmark = "g[fill-rule='nonzero'][fill='#99948A'][stroke='#1A1917']";
 			this.selectorCitadel = "g[fill-rule='nonzero'][fill='#99948A'][stroke='#1A1917']";
 
+			this.selectorPlaza = "g[fill-rule='nonzero'][fill='#99948A'][stroke='#1A1917'][stroke-width='0.09999999999999999']";
+
 			this.selectorFarmhouses = "g[fill-rule='nonzero'][stroke='#99948A'][stroke-linecap='butt']";
 
 			this.selectorRoads = "g[fill=none]";  // polyline
 
+			this.aabb2d = new AABB();
 
 
 			// stroke-width="1.9"
@@ -34277,10 +28693,13 @@ return d[d.length-1];};return ", funcName].join("");
 			this.chamferForWallPillars = true;
 			this.chamferForEntranceWall = true;
 			this.weldWallPathThreshold = 1;
+			this.extrudeCityWallTowerWall = 0.8;
 
 			this.onlyElevateRoadsWithinWalls = false;
 
-			// Road detection settings
+			this.detectCityWallEntranceTowersDist = 3;
+
+			// Road detection/heuristic settings
 			this.maxRoadEdgeLength = 8; //8;
 			this.highwayMinWidth = 1.8;
 			this.highwayMaxWidth = 6.2;
@@ -34290,6 +28709,9 @@ return d[d.length-1];};return ", funcName].join("");
 			this.detectRampConnectMaxDist = 8;
 			this.detectHighwayConnectMaxDist = 5;
 			this.detectRoadConnectMaxDist = 8;
+
+			this.highwayMinRampBorderLength = 5;
+			this.highwayPerchNoRampLength = 2.7;
 			//this.optimalStreetThickness = 2.0;
 
 			// Staircase/ramp settings
@@ -34317,21 +28739,46 @@ return d[d.length-1];};return ", funcName].join("");
 
 			this.supportPillarBlockLevel = 2;
 
-			// Altitude settings
+			// Altitude settings (in intended export 3D scale values)
 			this.cityWallTowerTopAltitude = 19.5;
 			this.cityWallAltitude = 16;
 			this.cityWallTowerBaseAltitude = 14;
 			this.highwayAltitude = 12;
 			this.wardRoadAltitude = 3;
+			this.outerRoadAltitude = 0;
 			// this.innerWardRoadAltitude = 0;
 			this.innerWardAltitude = 0;
 
-			this.cityWallCeilThickness = 0.5;
+			this.cityWallCeilThickness = 1;
 			// extude thickness, if negative value, will sink into ground exclude bottom base faces
-			this.cityWallEntranceExtrudeThickness = 1;
+			this.cityWallEntranceExtrudeThickness = 1.4;
 			this.highwayExtrudeThickness = 3;
 			this.wardRoadExtrudeThickness = 0.7;
+			this.outerRoadExtrudeThickness = 0;
+			this.rampedBuildingExtrudeThickness = -1;
 
+			this.buildingMinHeight = 3;
+			this.buildingMaxHeight = 7;
+
+
+			// Export 3d scale settings
+			this.exportScaleXZ = 4;
+
+			// Building roofings
+			this.roofMethod = SVGCityReader.buildBasicQuadRoofs;
+			this.roofApexHeight = 3.2;
+			this.quadRoofChance = 1;
+
+			// Building filtering export settings
+			this.minBuildingEdges = 3;	// >=4 to be considered
+			this.maxBuildingEdges = 3; // >=4 to be considered
+			this.minBuildingEdgeLength = 0;
+			this.maxBuildingEdgeLength = 0; // >0 to be considered
+
+			this.smallenBuildingEdgeLength = 0; // >0 to be considered
+			this.largenBuildingEdgeLength = 0; // >0 to be considered
+			this.smallenSqRootAreaTest = 0;
+			this.largenSqRootAreaTest= 0;
 		}
 
 		extrudePathOfPoints(points, radius, loop, cap, newPoints, _isLooping) {
@@ -34449,29 +28896,19 @@ return d[d.length-1];};return ", funcName].join("");
 			var tempContainer = null;
 			if (previewContainer) {
 				$(previewContainer).append(svj);
-				window.document.body.style.zoom = "300%";
 			} else {
 				tempContainer = $(document.body).append($("<div></div>"));
 			}
 
-
-
 			let dummySelector = $("<g></g>");
 			if (this.selectorRoads) {
+				// kiv v2
 				this.selectorRoads = map.children(this.selectorRoads);
-
 			}
+
 			if (this.selectorFarmhouses) {
+				// kiv v2
 				this.selectorFarmhouses = map.children(this.selectorFarmhouses);
-
-			}
-			if (this.selectorCitadel) {
-				this.selectorCitadel = map.children(this.selectorCitadel);
-
-
-			}
-			if (this.selectorLandmark) {
-				this.selectorLandmark = map.children(this.selectorLandmark);
 			}
 
 			if (this.selectorCityWallPath) {
@@ -34499,10 +28936,38 @@ return d[d.length-1];};return ", funcName].join("");
 
 				if (this.selectorCityWall.length) {
 					this.navmeshCityWall = this.parseCityWalls(this.selectorCityWall, this.selectorCityWallPath, this.selectorCitadelWall);
+					this.prepareCityWallExtraPolygons();
 				} else {
 					console.warn("Could not find City/Citadel wall selector!");
 				}
 
+			}
+
+
+			if (this.selectorCitadel) {
+				this.selectorCitadel = map.children(this.selectorCitadel);
+				if (this.selectorCitadel.length) {
+					this.parseCitadel(this.selectorCitadel);
+				} else {
+					console.warn("JSelector Citadel not found!");
+				}
+			}
+
+			if (this.selectorLandmark) {
+				this.selectorLandmark = map.children(this.selectorLandmark);
+				if (this.selectorLandmark.length) {
+					if (this.selectorLandmark.length >= 2) ;
+
+					this.parseLandmark(this.selectorLandmark);
+				} else {
+					console.warn("JSelector Landmark not found!");
+				}
+			}
+
+			if (this.selectorPlaza) {
+				this.selectorPlaza = map.children(this.selectorPlaza);
+				//alert(this.selectorPlaza.length);
+				this.parsePlaza(this.selectorPlaza);
 			}
 
 			if (this.selectorWards) {
@@ -34514,8 +28979,11 @@ return d[d.length-1];};return ", funcName].join("");
 
 				this.parseWards(this.selectorWards);
 
-				this.testRampedBuilding = new Set();
-				this.testRampedBuilding.add(this.testSubdivideBuilding(this.wards[14].neighborhoodPts[0][0]));
+				/*
+				this.rampedBuildings = new Map();
+				let testBuilding = this.wards[14].neighborhoodPts[0][0];
+				this.rampedBuildings.set(testBuilding, this.testSubdivideBuilding(testBuilding));
+				*/
 			}
 
 
@@ -34532,35 +29000,636 @@ return d[d.length-1];};return ", funcName].join("");
 			if (tempContainer !== null) {
 				tempContainer.remove();
 			}
-
 		}
 
 		// Key public methods
 
-		getNavmeshBundleGeometry() {
+		getNavmeshExtrudedGeometry() {
+			/*
+			CITY WALL
+			HIGHWAYS*
+			UPPER ROADS*
+			RAMPS (3D built from SVGCityReader)
+			*/
 
+			let deployGeom = {};
+			let navmesh;
+			let gLevel  = this.innerWardAltitude;
+			if (this.navmeshCityWall) {
+				// City Wall
+				deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(),NavMeshUtils.seperateMarkedPolygonsVertices(this.navmeshCityWall.regions), gLevel, this.exportScaleXZ, true, gLevel);
+				// City wall towers
+				if (this.cityWallTowerCeilingPolies) {
+					deployGeom.cityWallTowerCeiling = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerCeilingPolies), this.cityWallCeilThickness, this.exportScaleXZ);
+				}
+				if (this.cityWallTowerWallPolies) {
+					let towerDownTo = this.cityWallTowerBaseAltitude >= 0 ? this.cityWallTowerBaseAltitude : gLevel;
+					let towerUpTo = this.cityWallTowerTopAltitude;
+					deployGeom.cityWallTowerWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerWallPolies), towerUpTo, this.exportScaleXZ, towerDownTo);
+				}
+			}
+
+			if (this.navmeshRoad) {
+				// Highways
+				navmesh = new NavMesh();
+				navmesh.attemptBuildGraph = false;
+				navmesh.attemptMergePolies = false;
+				navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY, true)));
+				deployGeom.highways = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
+					this.highwayExtrudeThickness >= 0 ? this.highwayExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.highwayExtrudeThickness < 0, this.innerWardRoadAltitude);
+				// Upper Roads within walls
+				navmesh = new NavMesh();
+				navmesh.attemptBuildGraph = false;
+				navmesh.attemptMergePolies = false;
+				navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD, true)));
+				deployGeom.wardRoads = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
+					this.wardRoadExtrudeThickness >= 0 ? this.wardRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.wardRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
+
+				// Outer roads outside walls
+				navmesh = new NavMesh();
+				navmesh.attemptBuildGraph = false;
+				navmesh.attemptMergePolies = false;
+				navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_WARD_ROAD_OUTER, true)));
+				deployGeom.wardRoadsOuter = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
+				this.outerRoadExtrudeThickness >= 0 ? this.outerRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.outerRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
+			}
+
+			if (this.rampedBuildings) {
+				let rampedBuildingNavmeshes = this.rampedBuildings.values();
+				deployGeom.rampedBuildings = [];
+
+				for (let mesh of rampedBuildingNavmeshes) {
+					NavMeshUtils.seperateMarkedPolygonsVertices(mesh.regions);
+					deployGeom.rampedBuildings.push(
+						NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), mesh.regions,
+						this.rampedBuildingExtrudeThickness >= 0 ? this.rampedBuildingExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.rampedBuildingExtrudeThickness < 0, this.innerWardAltitude)
+					);
+				}
+			}
+			return deployGeom;
 		}
 
-		/**
-		 *
-		 * @param {Number} scaleXZ
-		 * @param {Number} buildingInset
-		 * @param {Boolean} renderPerWard
-		 * @return {*} vertices/indices Object, or array of it with renderPerWard
-		 */
-		getWardBuildingsGeometry(scaleXZ = 1, buildingInset=0, renderPerWard=false) {
-			// TODO: vertices and indices, for now, just get all per ward neighborhood for collision detection DBVH/BVH
-			// for rendering buffer, consider renderPerWard, else render all
+
+		getNeighborhoodHullsGeometry() {
+			const collector = getNewGeometryCollector();
+			const gLevel = this.innerWardAltitude;
+			const scaleXZ = this.exportScaleXZ;
+
+			this.wards.forEach((wardObj)=> {
+				wardObj.neighborhoodHulls.forEach((hull)=> {
+					let bLen = hull.length - 1;
+					let wv = collector.vertices.length / 3;
+					hull.forEach((pt, i)=> {
+						//let prevIndex = i >= 1 ? i - 1 : bLen;
+						//let prevPt = hull[prevIndex];
+
+						let nextIndex = i < bLen ? i + 1 : 0;
+						let nextPt = hull[nextIndex];
+						collector.vertices.push(pt[0]*scaleXZ, gLevel, pt[1]*scaleXZ);
+						collector.normals.push(0, 1, 0);
+						if (i >= 1 && i < bLen) {
+							collector.indices.push(wv, wv+i, wv+i+1);
+						}
+					});
+
+				});
+			});
+			return collector;
+		}
+
+		buildGroundNavmesh(inset=0) {
+			// assumed only City wall and Buildings Blocks ground surface
+			if (!this.profileWardBuildings) {
+				alert('buildGroundNavmesh failed, please call getWardBuildingsGeometry() first!');
+				return;
+			}
+
+			const scaleXZ = this._PREVIEW_MODE ? 1 : this.exportScaleXZ;
+			const previewMult = this._PREVIEW_MODE ? 1/this.exportScaleXZ : 1;
+			var points = [
+				[-this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+				[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+				[this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ],
+				[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]
+			];
+			var canvasSubject = new Shape([points.map(pointToShapePt)]);
+			
+			var edges = [
+				[0,1], [1,2], [2,3], [3,0]
+			];
+			const pointsList = [];
+		
+
+			// assumed buildings are non-intersecting
+			
+			this.profileWardBuildings.forEach((ward)=> {
+				ward.forEach((b)=> {
+					let buildingPoints = [];
+					pointsList.push(buildingPoints);
+
+					let len = b.length;
+					let i = 0;
+					let bi = points.length;
+					points.push([b[i]*previewMult, b[i+1]*previewMult]);
+					buildingPoints.push([b[i]*previewMult, b[i+1]*previewMult]);
+					for (i=2; i<len; i+=2) {
+						edges.push([points.length - 1, points.length]);
+						points.push([b[i]*previewMult, b[i+1]*previewMult]);
+						buildingPoints.push([b[i]*previewMult, b[i+1]*previewMult]);
+					}
+					edges.push([points.length-1, bi]);
+				});
+			});
+			let bpLen = points.length;
+
+			/* // not needed. already done earlier
+			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
+			let wallRadius = WALL_RADIUS;
+			let cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
+				true, {exterior:false},
+				(points, index)=>{
+					//points = points.slice(0).reverse();
+					points = points.concat().reverse();
+					return  index < lineSegments.length ? this.extrudePathOfPoints(points, wallRadius, true, true) : points;
+				});
+
+			this.cityWallCDTObj = {
+				vertices: cdtObj.vertices,
+				edges: cdtObj.edges	
+			};
+			*/
+			
+			points = points.concat(this.cityWallCDTObj.vertices);
+			let cityWallEdges = this.cityWallCDTObj.edges;
+			let cityWallVertices = this.cityWallCDTObj.vertices;
+			cityWallEdges.forEach((e, index, array)=> {
+				edges.push([e[0]+bpLen, e[1]+bpLen]);
+			});
+			/*
+			cityWallVertices.forEach((v)=> {
+				segmentPoints.push(v);
+			});
+			*/
+
+			/* // Shape library not working
+			let buildingsShape = new Shape(pointsList);
+			let wallsShape = new Shape(pointsListWall);
+			let obstacles = buildingsShape.union(wallsShape);
+			*/
+		
+
+			let wallRadius = WALL_RADIUS;
+			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
+			
+			
+			let cityWallUnion = this.getPointsListShape(lineSegments,
+				(points, index)=>{
+					 points = points.slice(0);
+					//points = points.slice(0).reverse();
+					return this.extrudePathOfPoints(points, wallRadius, true, true);
+			});
+
+		
+			var buildingsShape = new Shape(pointsList.map((grp)=>{return grp.map(pointToShapePt)})); // CSG.fromPolygons(pointsList);
+			var wallsShape = cityWallUnion;
+			let obstacles = wallsShape.union(buildingsShape);
+		
+			//if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
+			//obstacles = canvasSubject.difference(obstacles);
+			// if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
+			/*
+			var svg = $(this.makeSVG("g", {}));
+				this.map.append(svg, {});
+				svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", d: obstacles.paths.map(ptPolySVGString).join(" ") }));
+
+			return;
+			*/
+
+			let obstacleVerts = points;
+			let obstacleEdges = edges;
+			this.collectVerticesEdgesFromShape(obstacleVerts, obstacleEdges, obstacles);
+			
+			/*
+			for (let i=0; i<obstacleEdges.length; i++) {
+				obstacleEdges[i][0] += 4;
+				obstacleEdges[i][1] += 4;
+			}
+			*/
+			
+
+			//points = obstacleVerts;
+			//edges = obstacleEdges;
+			
+			
+			cleanPSLG(points, edges);
+			let cdt = cdt2d_1(points, edges, {interior:true, exterior:false});
+
+			let navmesh = new NavMesh();
+			navmesh.attemptBuildGraph = false;
+			
+			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(points, tri)}));
+
+			if (this._PREVIEW_MODE) {
+				var svg = $(this.makeSVG("g", {}));
+				this.map.append(svg, {});
+				svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+				//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+				//return {vertices:points, edges:edges, cdt:cdt};
+			}
+
+			return navmesh;
+		}
+
+
+		getWardBuildingsGeometry(buildingInset=0) {
+			let wardCollectors = [];
+			this.wardCollectors = wardCollectors;
+			let wardRoofCollectors = [];
+			this.wardRoofCollectors = wardRoofCollectors;
+			let wardCollector;
+			let wardRoofCollector;
+			const scaleXZ = this.exportScaleXZ;
+			let groundLevel;
+			let upperLevel;
+			console.log(this.wards.length + ": Wards counted");
+
+			this.profileWardBuildings = [];
+
+
+			const A = new Vector3();
+			const B = new Vector3();
+			const C = new Vector3();
+
+			const VERTEX_NORMALS = [];
+			const EDGE_DIRECTIONS = [];
+			const BASE_BUILDING_HEIGHT_RANGE = this.buildingMaxHeight - this.buildingMinHeight;
+			const buildingTopIndices = [];
+
+			this.wards.forEach((wardObj)=> {
+				wardCollector = getNewGeometryCollector();
+				wardCollectors.push(wardCollector);
+				wardRoofCollector = getNewGeometryCollector();
+				wardRoofCollectors.push(wardRoofCollector);
+				let profileBuildings;
+				this.profileWardBuildings.push(profileBuildings = []);
+				wardObj.neighborhoodPts.forEach((buildingsList)=> {
+					buildingsList.forEach((building)=>{
+							let buildingProfile;
+							profileBuildings.push(buildingProfile = []);
+							if (this.rampedBuildings && this.rampedBuildings.has(building)) {
+								// 	console.log("Skiping ramped building")
+								return;
+							}
+							if (this.minBuildingEdges >= 4 && building.length < this.minBuildingEdges) {
+								return;
+							}
+							if (this.maxBuildingEdges >= 4 && building.length > this.maxBuildingEdges) {
+								return;
+							}
+
+
+							let w0 =  wardCollector.vertices.length;
+
+
+							const bLen = building.length - 1;
+
+							let vertexNormals = VERTEX_NORMALS;
+							let edgeDirs = EDGE_DIRECTIONS;
+							let vi = 0;
+							let ei = 0;
+
+							building.forEach((pt, i) => {
+								let d;
+								let prevIndex = i >= 1 ? i - 1 : bLen;
+								let prevPt = building[prevIndex];
+								let nextIndex = i < bLen ? i + 1 : 0;
+								let nextPt = building[nextIndex];
+								let dx = pt[0] - prevPt[0];
+								let dz = pt[1] - prevPt[1];
+
+								d = Math.sqrt(dx*dx + dz*dz);
+								dx /=d;
+								dz /=d;
+								edgeDirs[ei++] = dx;
+								edgeDirs[ei++] = dz;
+
+								let nx = dz;
+								let nz = -dx;
+
+								let nx2;
+								let nz2;
+
+								dx = nextPt[0] - pt[0];
+								dz = nextPt[1] - pt[1];
+								d = Math.sqrt(dx*dx + dz*dz);
+								dx /=d;
+								dz /=d;
+								nx2 = dz;
+								nz2 = -dx;
+								vertexNormals[vi++] = (nx + nx2) * 0.5;
+								vertexNormals[vi++] = (nz + nz2) * 0.5;
+							});
+
+
+							let smallestEdgeDist = Infinity;
+							let buildingArea = 0;
+
+							for (let i=0; i< building.length; i++) {
+								let pt = building[i];
+								let prevIndex = i >= 1 ? i - 1 : bLen;
+								let prevPt = building[prevIndex];
+								let nextIndex = i < bLen ? i + 1 : 0;
+								let nextPt = building[nextIndex];
+
+								let ex;
+								let ez;
+
+								let dx = (pt[0]*scaleXZ-vertexNormals[i*2]*buildingInset) - (prevPt[0]*scaleXZ-vertexNormals[prevIndex*2]*buildingInset);
+								let dz = (pt[1]*scaleXZ-vertexNormals[i*2+1]*buildingInset) - (prevPt[1]*scaleXZ-vertexNormals[prevIndex*2+1]*buildingInset);
+								let nx = edgeDirs[i*2];
+								let nz = edgeDirs[i*2+1];
+								let d = nx * dx + nz * dz;
+
+								if (this.minBuildingEdgeLength > 0 && d < this.minBuildingEdgeLength) {
+									return;
+								}
+
+								if (d <= 0) {
+									// kiv need to collapse edges... for now treat as auto-filtered out
+									return;
+								}
+
+								if (this.maxBuildingEdgeLength > 0 && d > this.maxBuildingEdgeLength) {
+									return;
+								}
+								if (d < smallestEdgeDist) {
+									smallestEdgeDist = d;
+								}
+
+								if (i >= 1 && i < bLen) {
+									ex = vertexNormals[0]*buildingInset;
+									ez = vertexNormals[1]*buildingInset;
+									C.x = building[0][0]*scaleXZ - ex;
+									C.z =  building[0][1]*scaleXZ - ez;
+
+									ex = vertexNormals[(i*2)]*buildingInset;
+									ez = vertexNormals[(i*2)+1]*buildingInset;
+									B.x = pt[0]*scaleXZ - ex;
+									B.z = pt[1]*scaleXZ-ez;
+
+									ex = vertexNormals[(nextIndex*2)]*buildingInset;
+									ez = vertexNormals[(nextIndex*2)+1]*buildingInset;
+									A.x = nextPt[0]*scaleXZ - ex;
+									A.z = nextPt[1]*scaleXZ - ez;
+
+									buildingArea += MathUtils.area(A, B, C);
+								}
+							}
+							let sampleSmallestEdgeDist = smallestEdgeDist;
+							let scaleHeightRange = 1;
+
+
+							let increase =  BASE_BUILDING_HEIGHT_RANGE * Math.random();
+
+							smallestEdgeDist = this.smallenSqRootAreaTest ? this.smallenSqRootAreaTest < 0 ? Math.min(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
+
+							if (this.smallenBuildingEdgeLength > 0 && smallestEdgeDist < this.smallenBuildingEdgeLength) {
+								scaleHeightRange = (smallestEdgeDist - this.minBuildingEdgeLength) / (this.smallenBuildingEdgeLength - this.minBuildingEdgeLength);
+							}
+
+							smallestEdgeDist = this.largenSqRootAreaTest ? this.largenSqRootAreaTest < 0 ? Math.min(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : Math.max(Math.sqrt(buildingArea), sampleSmallestEdgeDist) : sampleSmallestEdgeDist;
+
+							if (this.largenBuildingEdgeLength > 0 &&  smallestEdgeDist > this.smallenBuildingEdgeLength && this.largenBuildingEdgeLength > this.smallenBuildingEdgeLength) {
+								scaleHeightRange = 1 + ((smallestEdgeDist - this.smallenBuildingEdgeLength)/(this.largenBuildingEdgeLength-this.smallenBuildingEdgeLength)) * (1 - (increase / BASE_BUILDING_HEIGHT_RANGE));
+							}
+
+							increase *= scaleHeightRange;
+
+							groundLevel = this.innerWardAltitude;
+							upperLevel = groundLevel + this.buildingMinHeight + increase;
+
+
+
+							let bti = 0;
+
+
+							building.forEach((pt, i) => {
+								let prevIndex = i >= 1 ? i - 1 : bLen;
+								let prevPt = building[prevIndex];
+								let nextIndex = i < bLen ? i + 1 : 0;
+								let nextPt = building[nextIndex];
+								let dx = pt[0] - prevPt[0];
+								let dz = pt[1] - prevPt[1];
+								let nx = dz;
+								let nz = -dx;
+								let ex;
+								let ez;
+								let d = Math.sqrt(nx*nx + nz*nz);
+								nx /=d;
+								nz /=d;
+								let wv = wardCollector.vertices.length / 3;
+
+								ex = vertexNormals[(i*2)]*buildingInset;
+								ez = vertexNormals[(i*2)+1]*buildingInset;
+								wardCollector.vertices.push(pt[0]*scaleXZ-ex, upperLevel, pt[1]*scaleXZ-ez);
+								wardCollector.normals.push(nx, 0, nz);
+								buildingTopIndices[bti++] =wv;
+
+								wardCollector.vertices.push(pt[0]*scaleXZ-ex , groundLevel, pt[1]*scaleXZ-ez);
+								buildingProfile.push(pt[0]*scaleXZ-ex,  pt[1]*scaleXZ-ez);
+								wardCollector.normals.push(nx, 0, nz);
+
+								ex = vertexNormals[(prevIndex*2)]*buildingInset;
+								ez = vertexNormals[(prevIndex*2)+1]*buildingInset;
+								wardCollector.vertices.push(prevPt[0]*scaleXZ-ex , groundLevel, prevPt[1]*scaleXZ-ez);
+								wardCollector.normals.push(nx, 0, nz);
+
+								wardCollector.vertices.push(prevPt[0]*scaleXZ-ex , upperLevel, prevPt[1]*scaleXZ-ez);
+								wardCollector.normals.push(nx, 0, nz);
+
+								wardCollector.indices.push(wv, wv+1, wv+2,   wv, wv+2, wv+3);
+
+								/*  Deprecrated roofing (flat)
+								if (i >= 1 && i < bLen) {
+
+									ex = vertexNormals[0]*buildingInset;
+									ez = vertexNormals[1]*buildingInset;
+									wardCollector.vertices.push(building[0][0]*scaleXZ - ex, upperLevel, building[0][1]*scaleXZ - ez);
+									wardCollector.normals.push(0, 1, 0);
+
+									ex = vertexNormals[(i*2)]*buildingInset;
+									ez = vertexNormals[(i*2)+1]*buildingInset;
+									wardCollector.vertices.push(pt[0]*scaleXZ - ex, upperLevel, pt[1]*scaleXZ-ez);
+									wardCollector.normals.push(0, 1, 0);
+
+									ex = vertexNormals[(nextIndex*2)]*buildingInset;
+									ez = vertexNormals[(nextIndex*2)+1]*buildingInset;
+									wardCollector.vertices.push(nextPt[0]*scaleXZ - ex, upperLevel, nextPt[1]*scaleXZ - ez);
+									wardCollector.normals.push(0, 1, 0);
+
+									wardCollector.indices.push(wv+6, wv+5, wv+4);
+
+									//==wardCollector.indices.push(w0, wv, )
+									//[ii++] = faceIndices[0];
+									//indices[ii++] = faceIndices[f];
+									//indices[ii++] = faceIndices[f+1]
+								}
+								*/
+
+
+							});
+
+							buildingTopIndices.length = bti;
+							buildingTopIndices.reverse();
+							this.roofMethod(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset );
+
+						});
+					});
+
+					//profileBuildings.reverse();
+				});
 
 			// later, consider varying base heights at different wards even from outside city wall, at number 2 districts from city wall should be lower altitude
 			//  depending on distance to city wall, let highways still extend outside city wall after ramp down
+
+			return wardCollectors;
 		}
+
+		static buildFlatRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset) {
+			let len = buildingTopIndices.length;
+			let wv = wardRoofCollector.vertices.length / 3;
+			let i;
+			for (i=0; i< len; i++) {
+				let vi = buildingTopIndices[i] * 3;
+				wardRoofCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
+				wardRoofCollector.normals.push(0, 1, 0);
+			}
+			len--;
+			for (i=1; i<len ; i++) {
+				wardRoofCollector.indices.push(wv+i+1, wv+i, wv);
+			}
+			return null;
+		}
+
+		static buildBasicQuadRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset) {
+			if (buildingTopIndices.length !== 4 || Math.random() > this.quadRoofChance) {
+				SVGCityReader.buildFlatRoofs(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset);
+				return;
+			}
+			// todo: consider square-cross roofing variation
+
+			// identify long side
+			let len = buildingTopIndices.length;
+			let wv = wardCollector.vertices.length / 3;
+			let wvr = wardRoofCollector.vertices.length / 3;
+			let i;
+			let i2;
+			let D;
+			let D2;
+			let vi = buildingTopIndices[3] * 3;
+			let vi2 = buildingTopIndices[0] * 3;
+			let dx = wardCollector.vertices[vi] - wardCollector.vertices[vi2];
+			let dz = wardCollector.vertices[vi+2] - wardCollector.vertices[vi2+2];
+			D = dx*dx + dz * dz;
+			vi = buildingTopIndices[0] * 3;
+			vi2 = buildingTopIndices[1] * 3;
+			dx =  wardCollector.vertices[vi] - wardCollector.vertices[vi2];
+			dz = wardCollector.vertices[vi+2] - wardCollector.vertices[vi2+2];
+			D2 = dx*dx + dz*dz;
+			let dIndex1;
+			let dIndex3;
+			// add
+			if (D < D2) {
+				dIndex1 = 0;
+				dIndex3 = 2;
+
+			} else {  //
+				dIndex1 = 1;
+				dIndex3 = 3;
+
+			}
+			i = buildingTopIndices[dIndex1];
+			i2 = i + 3;
+			vi = i * 3;
+			vi2 = i2 * 3;
+			wardCollector.vertices.push((wardCollector.vertices[vi] + wardCollector.vertices[vi2]) * 0.5,
+				wardCollector.vertices[vi+1] + this.roofApexHeight,
+				(wardCollector.vertices[vi+2] + wardCollector.vertices[vi2+2]) * 0.5);
+			wardCollector.normals.push(wardCollector.normals[i*3], wardCollector.normals[i2*3+1], wardCollector.normals[i*3+2]);
+			wardCollector.indices.push(i, i2, wv++);
+
+			i = buildingTopIndices[dIndex3];
+			i2 = i + 3;
+			vi = i * 3;
+			vi2 = i2 * 3;
+			wardCollector.vertices.push((wardCollector.vertices[vi] + wardCollector.vertices[vi2]) * 0.5,
+				wardCollector.vertices[vi+1] + this.roofApexHeight,
+				(wardCollector.vertices[vi+2] + wardCollector.vertices[vi2+2]) * 0.5);
+			wardCollector.normals.push(wardCollector.normals[i*3], wardCollector.normals[i*3+1], wardCollector.normals[i*3+2]);
+			wardCollector.indices.push(i , i2, wv++);
+
+			let ap = (wv - 2) * 3;
+			let ap2 = (wv - 1) * 3;
+
+
+			// Roof tops
+			if (D < D2) {
+				dIndex1 = 1;
+				dIndex3 = 3;
+
+			} else {  //
+				dIndex1 = 2;
+				dIndex3 = 0;
+			}
+
+
+			i = buildingTopIndices[dIndex1];
+			i2 = i + 3;
+			vi = i * 3;
+			vi2 = i2 * 3;
+			let plane;
+			wardRoofCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
+			wardRoofCollector.vertices.push(wardCollector.vertices[ap2], wardCollector.vertices[ap2+1], wardCollector.vertices[ap2+2]);
+			wardRoofCollector.vertices.push(wardCollector.vertices[vi2], wardCollector.vertices[vi2+1], wardCollector.vertices[vi2+2]);
+			wardRoofCollector.vertices.push(wardCollector.vertices[ap], wardCollector.vertices[ap+1], wardCollector.vertices[ap+2]);
+
+			plane = NavMeshUtils.planeFromCoplarVertexIndices(wardRoofCollector.vertices, wvr+2, wvr+1, wvr);
+
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+
+			wardRoofCollector.indices.push(wvr+2, wvr+3, wvr+1);
+			wardRoofCollector.indices.push(wvr+2, wvr+1, wvr);
+			wvr += 4;
+
+			i = buildingTopIndices[dIndex3];
+			i2 = i + 3;
+			vi = i * 3;
+			vi2 = i2 * 3;
+			wardRoofCollector.vertices.push(wardCollector.vertices[vi], wardCollector.vertices[vi+1], wardCollector.vertices[vi+2]);
+			wardRoofCollector.vertices.push(wardCollector.vertices[ap], wardCollector.vertices[ap+1], wardCollector.vertices[ap+2]);
+			wardRoofCollector.vertices.push(wardCollector.vertices[vi2], wardCollector.vertices[vi2+1], wardCollector.vertices[vi2+2]);
+			wardRoofCollector.vertices.push(wardCollector.vertices[ap2], wardCollector.vertices[ap2+1], wardCollector.vertices[ap2+2]);
+
+			plane = NavMeshUtils.planeFromCoplarVertexIndices(wardRoofCollector.vertices, wvr+2, wvr+1, wvr);
+
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+			wardRoofCollector.normals.push(plane.normal.x, plane.normal.y, plane.normal.z);
+
+			wardRoofCollector.indices.push(wvr+2, wvr+3, wvr+1);
+			wardRoofCollector.indices.push(wvr+2, wvr+1, wvr);
+			wvr += 4;
+		}
+
 
 
 		// -----
 
 		testSubdivideBuilding(building) {
-			let srcBuilding = building;
 			building = building.slice(0).reverse(); // non-cleamature (svg outlines appears to be not clockwise for buildings?)
 			let poly = cellToPolygon(building);
 			let edge = poly.edge;
@@ -34574,10 +29643,8 @@ return d[d.length-1];};return ", funcName].join("");
 			//edges[Math.floor(Math.random() * edgeCount)
 
 
-			let result = this.carveRamps(edges[2], true, 9, Infinity);
-			this.buildRamps(result, this.highwayAltitude, this.innerWardRoadAltitude);
-
-			return srcBuilding;
+			let result = this.carveRamps(edges[2], true, 12, Infinity);
+			return this.buildRamps(result, this.highwayAltitude, this.innerWardAltitude);
 		}
 
 		slopeDownRamp(geom, accumSlopeY, slopeYDist, toTailSide) {
@@ -34587,9 +29654,12 @@ return d[d.length-1];};return ", funcName].join("");
 			// first landing from above
 			let landing = toTailSide ? geom.head : geom.tail;
 			NavMeshUtils.adjustAltitudeOfPolygon(landing, -accumSlopeY);
+			landing.sep = true;
+
 			// in-between ramp downs + landings if any
 			for (let i =1; i<len; i+=2) {
 				NavMeshUtils.adjustAltitudeOfPolygon(ramp[i], -slopeYDist - accumSlopeY);
+				ramp[i].sep = true;
 				accumSlopeY += slopeYDist;
 			}
 
@@ -34597,6 +29667,7 @@ return d[d.length-1];};return ", funcName].join("");
 			landing = toTailSide ? geom.tail : geom.head;
 			NavMeshUtils.adjustAltitudeOfPolygon(landing, -slopeYDist - accumSlopeY);
 			accumSlopeY += slopeYDist;
+			landing.sep = true;
 			return accumSlopeY;
 		}
 
@@ -34636,6 +29707,7 @@ return d[d.length-1];};return ", funcName].join("");
 					} else {
 						polySoup.push(geom.head);
 					}
+
 					accumSlopeY = this.slopeDownRamp(geom, accumSlopeY, slopeYDist, false);
 				} else {
 					polySoup.push(geom.head);
@@ -34667,8 +29739,8 @@ return d[d.length-1];};return ", funcName].join("");
 
 			var svg = $(this.makeSVG("g", {}));
 			this.map.append(svg, {});
-			svg.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
-			svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+			//svg.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 
 			return navmesh;
 		}
@@ -35220,6 +30292,109 @@ return d[d.length-1];};return ", funcName].join("");
 				el.setAttribute(k, attrs[k]);
 			return el;
 		}
+		
+		collectVerticesEdgesFromShape(vertices, edges, shape) {
+			let paths = shape.paths;
+			// let mapVerts = new Map();
+			paths.forEach((points)=>{
+				let baseCount = vertices.length;
+
+				let count = baseCount;
+				points.forEach((p, index)=> {
+					
+					if (index >= 1) edges.push([count-1, count]);
+					if (index === points.length - 1) edges.push([count, baseCount]);
+					count++;
+					vertices.push([p.X, p.Y]);
+
+					// note caveat: non welded
+					/*
+					let key = p.X + "," + p[0].Y;
+					let key2 =  p[1].X + "," + p[1].Y;
+					if (!mapVerts.has(key)) {
+						vertices.push([seg[0].X, seg[0].Y]);
+						mapVerts.set(key, vi++);
+					}
+					if (!mapVerts.has(key2)) {
+						vertices.push(([seg[1].X, seg[1].Y]));
+						mapVerts.set(key2, vi++);
+					}
+					edges[ei++] = [mapVerts.get(key), mapVerts.get(key2)];
+					*/
+				});
+			});
+		}
+
+		collectVerticesEdgesFromCSG(vertices, edges, csg) {
+			let segments = csg.segments;
+			let mapVerts = new Map();
+			let vi = vertices.length;
+			let ei = edges.length;
+			segments.forEach((seg)=>{
+				let key = seg.vertices[0].x + "," + seg.vertices[0].y;
+				let key2 =  seg.vertices[1].x + "," + seg.vertices[1].y;
+				if (!mapVerts.has(key)) {
+					vertices.push([seg.vertices[0].x, seg.vertices[0].y]);
+					mapVerts.set(key, vi++);
+				}
+				if (!mapVerts.has(key2)) {
+					vertices.push(([seg.vertices[1].x, seg.vertices[1].y]));
+					mapVerts.set(key2, vi++);
+				}
+				edges[ei++] = [mapVerts.get(key), mapVerts.get(key2)];
+			});
+		}
+
+		getPointsListUnion(pointsList, processPointsMethod) {
+			let polygonsListCSG = [];
+			pointsList.forEach((points, index)=> {
+				if (processPointsMethod) points = processPointsMethod(points, index);
+				polygonsListCSG.push(csg2d.fromPolygons([points]));
+			});
+
+			let csg = polygonsListCSG[0];
+			for (let i=1; i<polygonsListCSG.length; i++) {
+				csg = csg.union(polygonsListCSG[i]);
+			}
+
+			return csg;
+		}
+
+		getPointsListShape(pointsList, processPointsMethod) {
+			let polygonsListCSG = [];
+			pointsList.forEach((points, index)=> {
+				if (processPointsMethod) points = processPointsMethod(points, index);
+				polygonsListCSG.push(points.map(pointToShapePt));
+			});
+			let csg = new Shape(polygonsListCSG);
+			return csg;
+		}
+
+		getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
+			let polygonsListCSG = [];
+			pointsList.forEach((points, index)=> {
+				if (processPointsMethod) points = processPointsMethod(points, index);
+				polygonsListCSG.push(csg2d.fromPolygons([points]));
+			});
+
+			let csg = polygonsListCSG[0];
+			for (let i=1; i<polygonsListCSG.length; i++) {
+				csg = csg.union(polygonsListCSG[i]);
+			}
+
+			let vertices = params.vertices ? params.vertices.slice(0) : [];
+			let edges = params.edges ? params.edges.slice(0) : [];
+			this.collectVerticesEdgesFromCSG(vertices, edges, csg);
+
+			if (cleanup) {
+				cleanPSLG(vertices, edges);
+			}
+
+			let cdt = cdt2d_1(vertices, edges, (params ? params : {exterior:true}));
+			return {vertices:vertices, edges:edges, cdt:cdt};
+		}
+
+		//convertCSGPolygonsTo
 
 		getCDTObjFromPointsList(pointsList, cleanup, params, processPointsMethod) {
 			let vertices = params.vertices ? params.vertices.slice(0) : [];
@@ -35239,13 +30414,24 @@ return d[d.length-1];};return ", funcName].join("");
 			});
 
 			if (cleanup) {
-				if (this.citadelWallSegments.length > 0) ;
-				cleanPslg(vertices, edges);
+				cleanPSLG(vertices, edges);
 			}
 
 			let cdt = cdt2d_1(vertices, edges, (params ? params : {exterior:true}));
 
 			return {vertices:vertices, edges:edges, cdt:cdt};
+		}
+
+		parseCitadel(jSel) {
+
+		}
+
+		parseLandmark(jSel) {
+
+		}
+
+		parsePlaza(jSel) {
+
 		}
 
 		parseCityWalls(jSel, jSelPath, jSelCitadelWall) {
@@ -35353,11 +30539,13 @@ return d[d.length-1];};return ", funcName].join("");
 				this.cityWallPillars.push(poly=svgPolyStrToPoints($(item).attr("points")));
 				let pt = this.cityWallPillarByAABBCenter ? getBBoxCenter(item.getBBox()) : poly.computeCentroid().centroid;
 				this.cityWallPillarPoints.push(pt);
+				this.aabb2d.expand(pt);
 			});
 
 			jEntrances.each((index, item)=>{
 				let pt = getBBoxCenter($(item).children()[0].getBBox());
 				this.cityWallEntrancePoints.push(pt);
+				this.aabb2d.expand(pt);
 			});
 
 
@@ -35391,10 +30579,11 @@ return d[d.length-1];};return ", funcName].join("");
 				});
 
 				this.citadelWallSegments = getSegmentPointsFromSVGLinePath(jSelCitadelWall.children("path").attr("d"));
-
+				
 				let citadelEntranceLines = jSelCitadelWall.find(this.subSelectorEntranceLines);
 				if (citadelEntranceLines.length >=3) {
 					this.citadelWallEntrancePoint = getBBoxCenter(citadelEntranceLines[0].getBBox());
+					this.aabb2d.expand(this.citadelWallEntrancePoint);
 					this.citadelWallEntrancePillarPoints.push(
 						getBBoxCenter(citadelEntranceLines[1].getBBox()), // right first
 						getBBoxCenter(citadelEntranceLines[2].getBBox())	// left
@@ -35415,8 +30604,8 @@ return d[d.length-1];};return ", funcName].join("");
 
 
 				this.citadelWallSegmentsUpper = [explode2DArray(this.citadelWallSegments)]; // todo: break and rearrange from start/end citadel
-
-				///*
+		
+				/*
 				g.append(
 						this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
 							d: this.citadelWallSegments.map((pts)=>{
@@ -35425,7 +30614,7 @@ return d[d.length-1];};return ", funcName].join("");
 								}).join("");
 							}).join(" Z ") + " Z" }
 					));
-				//*/
+				*/
 			}
 
 			this.cityWallPillarPoints.forEach((p)=>{g.append(this.makeSVG("circle", {r:0.5, fill:"yellow", cx:p.x, cy:p.z}));});
@@ -35448,19 +30637,26 @@ return d[d.length-1];};return ", funcName].join("");
 			});
 
 			let edgeVertices = pathSpl.map((v)=>{return [v.x, v.z]});
-			cleanPslg(edgeVertices, edgesBoundary);
+			cleanPSLG(edgeVertices, edgesBoundary);
 
 			let cdt = cdt2d_1(edgeVertices, edgesBoundary, {exterior:false});
-			this.cityWallCDTBoundary = {tris:cdt, vertices:edgeVertices};
+			this.cityWallCDTBoundary = {cdt:cdt, vertices:edgeVertices};
 			/*
 			g.append(
 				this.makeSVG("path", {"fill":"rgba(155,255,122,0.3)", "stroke-width":0.1, "stroke":"red",
 					d: cdt.map((tri)=>{return triSVGString(this.cityWallCDTBoundary.vertices, tri)}).join(" ")})
 			);
 			*/
+		
+			this.citadelWallCDTBoundary = this.getCDTObjFromPointsListUnion(this.citadelWallSegments, true, {exterior:false});
+			/*
+			g.append(
+				this.makeSVG("path", {"fill":"rgba(155,111,122,0.7)", "stroke-width":0.1, "stroke":"red",
+					d: this.citadelWallCDTBoundary.cdt.map((tri)=>{return triSVGString(this.citadelWallCDTBoundary.vertices, tri)}).join(" ")})
+			);
+			*/
 
-
-			let wallRadius = 1;
+			let wallRadius = WALL_RADIUS;
 			let verticesSoup = [];
 			verticesSoup.push([-this.svgWidth*.5, -this.svgHeight*.5]);
 			verticesSoup.push([this.svgWidth*.5, -this.svgHeight*.5]);
@@ -35478,9 +30674,10 @@ return d[d.length-1];};return ", funcName].join("");
 			*/
 
 			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
-
+			
 			//.concat(this.citadelWallPillars).concat(this.cityWallPillars);
-			let cdtObj = this.getCDTObjFromPointsList(lineSegments,
+			
+			let cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
 				true, {exterior:false},
 				(points, index)=>{
 					//points = points.slice(0).reverse();
@@ -35488,6 +30685,11 @@ return d[d.length-1];};return ", funcName].join("");
 				});
 
 			cdt = cdtObj.cdt;
+
+			this.cityWallCDTObj = {
+				vertices: cdtObj.vertices,
+				edges: cdtObj.edges	
+			};
 			//cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
 
 
@@ -35502,16 +30704,22 @@ return d[d.length-1];};return ", funcName].join("");
 			});
 			*/
 			NavMeshUtils.weldVertices(navmesh);
+
+			/*  // only needed if using non union option cdt
 			let holesArr = NavMeshUtils.patchHoles(navmesh.regions);
-			let combinedRegions = NavMeshUtils.unlinkPolygons(navmesh.regions.concat(holesArr));
+			let combinedRegions = navmesh.regions.concat(holesArr); //NavMeshUtils.unlinkPolygons();
 			navmesh.regions = combinedRegions;
+			//*/
 
 			//navmesh = new NavMesh();
 			//navmesh.attemptBuildGraph = false;
 			//navmesh.fromPolygons(combinedRegions);
 
-			g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
-
+			// comm awa
+			//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			
+			
+			//g.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 			/*
 			g.append(
 				this.makeSVG("path", {"fill":"rgba(255,255,0,1)", "stroke-width":0.1, "stroke":"red",
@@ -35529,8 +30737,27 @@ return d[d.length-1];};return ", funcName].join("");
 			});
 			this.citadelWallPillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors));});
 			this.citadelWallEntrancePillarPoints.forEach((p)=>{(navmeshTagRegionByPt(navmesh,p, BIT_CITADEL_TOWER, errors));});
+
+			this.cityWallEntrancePillarPoints = []; // TODO: need to find a way to detect this
+			edgeVertices.forEach((p)=>{
+				let pt = segPointToVector3(p);
+				if (!withinVincityOfPointSet(pt, this.cityWallEntrancePoints, this.detectCityWallEntranceTowersDist)) {
+					return;
+				}
+				navmeshTagRegionByPt(navmesh, pt, null, errors);
+
+				if (pt.region && !pt.region.mask) {
+					// Check if point is closest enough to entrance
+					//if (pt.squaredDistanceTo())
+					pt.region.mask = BIT_CITADEL_TOWER;
+					this.cityWallEntrancePillarPoints.push(pt);
+				}
+			});
+
 			if (this.citadelWallEntrancePoint) navmeshTagRegionByPt(navmesh, this.citadelWallEntrancePoint, BIT_CITADEL_ENTRANCE, errors);
+
 			errors.forEach((e)=>{
+				console.warn("city wall point region find error founds");
 				g.append(this.makeSVG("circle", {r:0.5, "stroke":"red", fill:"white", cx:e.x, cy:e.z}));
 			});
 
@@ -35538,6 +30765,48 @@ return d[d.length-1];};return ", funcName].join("");
 
 			return navmesh;
 		}
+
+		prepareCityWallExtraPolygons() {
+
+			var g = $(this.makeSVG("g", {}));
+			this.map.append(g, {});
+
+			// this.navmeshCityWall
+
+			let refPts = this.cityWallPillarPoints.concat(this.cityWallEntrancePillarPoints).concat(this.citadelWallPillarPoints).concat(this.citadelWallEntrancePillarPoints);
+
+			// TOWER PILLAR WALLING (at both enrances and on both citadel and cit wall)
+			this.cityWallTowerWallPolies = [];
+			refPts.forEach((pt)=>{
+				if (!pt.region) return;
+				g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.5, d: polygonSVGString(pt.region)  }));
+
+				//console.log("Walling:"+NavMeshUtils.countBorderEdges(pt.region));
+
+				NavMeshUtils.getBorderEdges(pt.region).forEach((e)=>{
+					let poly = NavMeshUtils.getNewExtrudeEdgePolygon(e, this.extrudeCityWallTowerWall);
+					this.cityWallTowerWallPolies.push(poly);
+					g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.2, d: polygonSVGString(poly)  }));
+				});
+			});
+
+			// tower ceilings & roofings(kiv) (citadel/city wall corners and entrances)
+			this.cityWallTowerCeilingPolies = [];
+			refPts.forEach((pt)=>{
+				if (!pt.region) return;
+				//this.cityWallTOwer
+				this.cityWallTowerCeilingPolies.push(NavMeshUtils.clonePolygon(pt.region));
+			});
+
+			NavMeshUtils.setAbsAltitudeOfAllPolygons(this.cityWallTowerWallPolies, this.cityWallTowerTopAltitude);
+			NavMeshUtils.setAbsAltitudeOfAllPolygons(this.cityWallTowerCeilingPolies, this.cityWallTowerTopAltitude);
+			// kiv extra possible Ceilubgs.ROOFINGS
+			// KIV entrance roofing? (city wall), above city wall level
+			// KIV entrance roofing (citaldel) ? above highway level
+			// KIV entrance roofing (city wall) (above highway level)
+		}
+
+
 
 		parseWards(jSel) {
 			let hullVerticesSoup = [];
@@ -35623,14 +30892,12 @@ return d[d.length-1];};return ", funcName].join("");
 
 				}
 
-
-
 				len = hullPoints.length;
-
 
 				for (i=0; i<len; i++) {
 					let hullVertex;
 					hullVerticesSoup.push(hullVertex = [hullPoints[i].x, hullPoints[i].z]);
+					this.aabb2d.expand(hullPoints[i]);
 					hullVertex.id = index; // ward index
 					if (i > 0) {
 						if (i < len - 1) {
@@ -35953,25 +31220,31 @@ return d[d.length-1];};return ", funcName].join("");
 			let maxRoadEdgeLengthSq =  this.maxRoadEdgeLength* this.maxRoadEdgeLength;
 
 
-			const rampDowns = [];
-			const rampDownLevel = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.wardRoadAltitude;
-			const highways = [];
-			const roadsInner = [];
-			const roadsOuter = [];
+			let rampDowns = [];
+			const rampDownLevel = this.onlyElevateRoadsWithinWalls ? this.innerWardAltitude : this.outerRoadAltitude;
+			let highways = [];
+			let roadsInner = [];
+			let roadsOuter = [];
 			const potentialHighwayRoadCrossroads = [];
+
+			const rampDownParams = {yVal:this.highwayExtrudeThickness, yBottom:false, yBottomMin:this.innerWardAltitude };
 
 			for (let i=0; i<len; i++) {
 				r = regions[i];
 				edge = r.edge;
 
 				let numOfLongEdges = 0;
+				let numOfLongEdgesAbs = 0;
 				let numOfShortEdges = 0;
+				let totalEdgesAllTypes = 0;
 				let numOfEdgesWithinCityWalls = 0;
 				let numOfEdgesJustOutsideCityWalls = 0;
 
 				let streetwards = new Set();
 
 				do {
+					totalEdgesAllTypes++;
+
 					if (edge.twin !== null &&
 						edge.prev.vertex.id >= 0 && edge.vertex.id >= 0 &&
 						edge.vertex.id !== edge.prev.vertex.id
@@ -35990,9 +31263,9 @@ return d[d.length-1];};return ", funcName].join("");
 						// the above metric isnt reliable if long road sections are telsellated across full diagnal for long thin triangles
 
 
-						lineSegment$3.set(oppEdge.prev.vertex, oppEdge.vertex);
-						let t = lineSegment$3.closestPointToPointParameter(edge.vertex, false);
-						lineSegment$3.at( t, pointOnLineSegment$2 );
+						lineSegment$2.set(oppEdge.prev.vertex, oppEdge.vertex);
+						let t = lineSegment$2.closestPointToPointParameter(edge.vertex, false);
+						lineSegment$2.at( t, pointOnLineSegment$2 );
 
 						//g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.25, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
 
@@ -36002,7 +31275,14 @@ return d[d.length-1];};return ", funcName].join("");
 
 						let dist =  pointOnLineSegment$2.squaredDistanceTo( edge.vertex );
 
+
+
 						if (dist <= highwayMaxWidthSq) {
+
+							if (edge.prev.vertex.squaredDistanceTo(edge.vertex) >= highwayMinWidthSq) {
+								numOfLongEdgesAbs++;
+							}
+
 							if (dist < highwayMinWidthSq ) { // normal street
 								//g.append(this.makeSVG("line", {stroke:"rgb(255,255,255)", "stroke-width":0.25, x1:lineSegment.from.x, y1:lineSegment.from.z, x2:lineSegment.to.x, y2:lineSegment.to.z}));
 								g.append(this.makeSVG("line", {stroke:"rgb(0,122,110)", "stroke-width":0.25, x1:edge.prev.vertex.x, y1: edge.prev.vertex.z, x2:edge.vertex.x, y2:edge.vertex.z}));
@@ -36030,17 +31310,16 @@ return d[d.length-1];};return ", funcName].join("");
 				r.streetId = r.streetId.join("_");
 				//console.log(r.streetId);
 
-
 				// or numOfEdgesWithinCityWalls >=2
 				// && numOfEdgesWithinCityWalls === totalEdges && extremeLongPerpCount ===0
 				if (totalEdges >= 2 ) {
 					// || !this.checkWithinCityWall(r.centroid.x, r.centroid.z , true)
-					if ( numOfLongEdges !== 0) {
-						if ( (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)) {
+					if ( numOfLongEdges !== 0 || (totalEdgesAllTypes ===3 && numOfLongEdgesAbs >=2) ) {
+						if ( (numOfEdgesWithinCityWalls >=2 || numOfEdgesJustOutsideCityWalls >= 2)  ) {
 							let isRampDown = numOfEdgesWithinCityWalls < 2;
-							r.mask = isRampDown ? BIT_HIGHWAY_RAMP : BIT_HIGHWAY;
+							r.mask = isRampDown ? (BIT_HIGHWAY_RAMP|BIT_HIGHWAY) : BIT_HIGHWAY;
 							if (isRampDown) {
-								r.yExtrudeParams = {yVal:this.highwayExtrudeThickness, yBottom:false, yBottomMin:this.innerWardAltitude };
+								r.yExtrudeParams = rampDownParams;
 								rampDowns.push(r);
 							} else {
 								highways.push(r);
@@ -36057,16 +31336,16 @@ return d[d.length-1];};return ", funcName].join("");
 
 						} else {
 							if (!this.onlyElevateRoadsWithinWalls || numOfEdgesWithinCityWalls>=2) {
-								r.mask = BIT_WARD_ROAD; // could be thick also
-								roadsInner.push(r);
+								r.mask = numOfEdgesWithinCityWalls>=2 ? BIT_WARD_ROAD : BIT_WARD_ROAD_OUTER; // could be thick also
+								(numOfEdgesWithinCityWalls>=2  ? roadsInner : roadsOuter).push(r);
 								g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(44,0,44,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
 							}
 						}
 					}
 					else {
 						if (!this.onlyElevateRoadsWithinWalls || (numOfEdgesWithinCityWalls >= 2)) {
-							r.mask = BIT_WARD_ROAD; // always thin
-							roadsOuter.push(r);
+							r.mask = numOfEdgesWithinCityWalls>=2 ? BIT_WARD_ROAD : BIT_WARD_ROAD_OUTER; // always thin
+							(numOfEdgesWithinCityWalls>=2  ? roadsInner : roadsOuter).push(r);
 							g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,0,255,0.5)", "stroke-width":0.015, d: polygonSVGString(r) }));
 						}
 					}
@@ -36075,7 +31354,8 @@ return d[d.length-1];};return ", funcName].join("");
 
 			potentialHighwayRoadCrossroads.forEach((r)=> {
 				if (this.validateShortRoadEdges(2, r)) {
-					r.mask |= BIT_WARD_ROAD;
+					r = NavMeshUtils.clonePolygon(r);
+					r.mask = BIT_WARD_ROAD;
 					roadsInner.push(r);
 					g.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.1, d: polygonSVGString(r) }));
 				}
@@ -36087,12 +31367,36 @@ return d[d.length-1];};return ", funcName].join("");
 
 			// fow now, citadel wall exttudes down to rampDown level, until ground portio polygons below ctiy wall can be easily isolated
 
-
+			highways = NavMeshUtils.filterOutPolygonsByMask(highways, -1, true);
 			NavMeshUtils.setAbsAltitudeOfAllPolygons(highways, this.highwayAltitude);
-			NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsInner, this.wardRoadAltitude);
-			NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsOuter, this.wardRoadAltitude);
 
+			roadsInner = NavMeshUtils.filterOutPolygonsByMask(roadsInner, -1, true);
+			//roadsOuter = NavMeshUtils.filterOutPolygonsByMask(roadsOuter, -1, true);
+
+			NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsInner, this.wardRoadAltitude);
+			NavMeshUtils.setAbsAltitudeOfAllPolygons(roadsOuter, this.outerRoadAltitude);
+
+
+			rampDowns = NavMeshUtils.filterOutPolygonsByMask(rampDowns, -1, true);
 			NavMeshUtils.setAbsAltitudeOfAllPolygons(rampDowns, rampDownLevel);
+
+			let resetupRamps = new NavMesh();
+			resetupRamps.attemptBuildGraph = false;
+			resetupRamps.attemptMergePolies = false;
+			resetupRamps.fromPolygons(rampDowns);
+
+			const cityWallEntranceExtrudeParams = {
+				yVal: this.cityWallEntranceExtrudeThickness,
+				yBottom: false
+			};
+
+			const cityWallEntranceWallParams = {
+				yVal: rampDownLevel,
+				bordersOnly: true,
+				yBottom: true
+			};
+
+			navmesh.regions = highways.concat(roadsOuter).concat(roadsInner);
 
 			// Connect highways to ramp-downs at city wall entrances
 			this.cityWallEntrancePoints.forEach((p)=>{
@@ -36106,8 +31410,27 @@ return d[d.length-1];};return ", funcName].join("");
 					e.prev.vertex = e.prev.vertex.clone();
 					e.vertex = e.vertex.clone();
 
+					p.region.yExtrudeParams = cityWallEntranceExtrudeParams;
+
+					let edge = p.region.edge;
+					let bi = NavMeshUtils.countBorderEdges(p.region, true);
+					let biMask = 0;
+					do {
+						bi--;
+						biMask |= edge.twin ? (1 << bi) : 0;
+						edge = edge.next;
+					} while (edge !== p.region.edge);
+					let entryWayWallsBelow = NavMeshUtils.clonePolygon(p.region, true);
+					entryWayWallsBelow.yExtrudeParams = cityWallEntranceWallParams;
+					entryWayWallsBelow.mask = BIT_WARD_ROAD;
+					entryWayWallsBelow.edgeMask = ~biMask; // not sure why need to flip
+					NavMeshUtils.setAbsAltitudeOfPolygon(entryWayWallsBelow, this.cityWallAltitude);
+
 					let entryWay = NavMeshUtils.clonePolygon(p.region);
 					NavMeshUtils.setAbsAltitudeOfPolygon(entryWay, this.highwayAltitude);
+					entryWay.mask = BIT_HIGHWAY;
+					navmesh.regions.push(entryWay);
+					navmesh.regions.push(entryWayWallsBelow);
 
 					g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.015, d: polygonSVGString(entryWay) }));
 					g.append(this.makeSVG("path", {stroke:"white", fill:"none", "stroke-width":1, d: edgeSVGString(e) }));
@@ -36125,24 +31448,145 @@ return d[d.length-1];};return ", funcName].join("");
 					let polies  = NavMeshUtils.linkPolygons(e, e2, entryWay);
 					polies.forEach((r, index)=> {
 						r.connectRamp = true;
+						r.mask = BIT_HIGHWAY;
 						g.append(this.makeSVG("path", {stroke:"blue", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: polygonSVGString(r) }));
 						navmesh.regions.push(r);
+						//console.log("COnnected poly:"+r.convex(true));
 					});
+
+					/*
+					edge = entryWay.edge;
+					do {
+
+						if (edge.twin ) {
+							g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
+						}
+						edge = edge.next;
+					} while (edge !== entryWay.edge);
+					*/
+
+					if (!e2) { // add a highway perch leading out from entryway polygon
+						edge = p.region.edge;
+						let edgeEntryway = entryWay.edge;
+						console.log("Consider perch..");
+						do {
+
+							if (!edge.twin && !edgeEntryway.twin) {
+								console.log("DEtected 1 perch:");
+
+								let perch = NavMeshUtils.getNewExtrudeEdgePolygon(edgeEntryway, this.highwayPerchNoRampLength, true);
+								g.append(this.makeSVG("path", {stroke:"red", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: polygonSVGString(perch) }));
+								perch.mask = BIT_HIGHWAY;
+
+								NavMeshUtils.setAbsAltitudeOfPolygon(perch, this.highwayAltitude);
+								navmesh.regions.push(perch);
+							}
+							edgeEntryway = edgeEntryway.next;
+							edge = edge.next;
+						} while (edge !== p.region.edge);
+					}
 				} else {
 					console.warn("Missed Entrance connect highway entirely!");
 				}
 			});
+
+			let rampDownsSet = new Set();
+			let considerAdditionalRamps = [];
+			const rampLengthSquaredReq = this.highwayMinRampBorderLength * this.highwayMinRampBorderLength;
 			rampDowns.forEach((r)=>{
 				let edge = r.edge;
+				//r.sep = true;
+				let longestBorderLength = 0;
+				let hasNeighborRampPolygon = false;
 				do {
-					if (edge.twin && edge.twin.polygon.connectRamp) {
-						console.log("detected rampdown edge");
-						edge.prev.vertex.y = this.highwayAltitude;
-						edge.vertex.y = this.highwayAltitude;
+					if (edge.twin) {
+
+						if (edge.twin.polygon.connectRamp) {
+							console.log("detected rampdown edge");
+							edge.prev.vertex.y = this.highwayAltitude;
+							edge.vertex.y = this.highwayAltitude;
+							rampDownsSet.add(edge.polygon);
+						}
+						else if ((edge.twin.polygon.mask & BIT_HIGHWAY_RAMP)) {
+							hasNeighborRampPolygon = true;
+							// weld on the fly
+							edge.twin.vertex = edge.prev.vertex;
+							edge.twin.prev.vertex = edge.vertex;
+						}
+						//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
+					} else {
+						let dx = edge.vertex.x - edge.prev.vertex.x;
+						let dz = edge.vertex.z - edge.prev.vertex.z;
+
+						let testLength = dx*dx + dz*dz;
+						if (testLength > longestBorderLength) {
+							longestBorderLength = testLength;
+						}
 					}
 					edge = edge.next;
-				} while(edge !== r.edge)
+				} while(edge !== r.edge);
+				//console.log(longestBorderLength + ", "+rampLengthSquaredReq);
+				if (rampDownsSet.has(r) && longestBorderLength < rampLengthSquaredReq && hasNeighborRampPolygon) {
+					considerAdditionalRamps.push(r);
+					r.longestBorderLength = Math.sqrt(longestBorderLength);
+					edge = r.edge;
+					do {
+						edge.vertex.y = this.highwayAltitude;
+						edge = edge.next;
+					} while(edge !== r.edge);
+				}
 			});
+
+			while (considerAdditionalRamps.length > 0) {
+				let r = considerAdditionalRamps.pop();
+				let edge = r.edge;
+				let longestBorderLength = 0;
+				let hasNeighborRampPolygon = false;
+				let addedNeighbor;
+
+				do {
+					if (edge.twin) {
+						if ((edge.twin.polygon.mask & BIT_HIGHWAY_RAMP)) {
+							if ( !rampDownsSet.has(edge.twin.polygon)) {
+								if (!hasNeighborRampPolygon) {
+									hasNeighborRampPolygon = true;
+									addedNeighbor = edge.twin.polygon;
+									edge.twin.vertex = edge.prev.vertex;
+									edge.twin.prev.vertex = edge.vertex;
+									rampDownsSet.add(edge.twin.polygon);
+								}
+							}
+							//console.log("ADDED ADDITIONAL)");
+						}
+						//g.append(this.makeSVG("path", {stroke:"green", fill:("rgba(255,0,0,0.5)"), "stroke-width":0.4, d: edgeSVGString(edge) }));
+					} else {
+						let dx = edge.vertex.x - edge.prev.vertex.x;
+						let dz = edge.vertex.z - edge.prev.vertex.z;
+						let testLength = dx*dx + dz*dz;
+						if (testLength > longestBorderLength) {
+							longestBorderLength = testLength;
+						}
+					}
+					edge = edge.next;
+				} while (edge !== r.edge);
+
+
+				longestBorderLength = Math.sqrt(longestBorderLength);
+				//console.log("RUnning comparisons:"+hasNeighborRampPolygon + ", "+r.longestBorderLength + ", "+longestBorderLength);
+				if (hasNeighborRampPolygon && r.longestBorderLength + longestBorderLength  < this.highwayMinRampBorderLength) {
+					considerAdditionalRamps.push(addedNeighbor);
+					addedNeighbor.longestBorderLength = r.longestBorderLength + longestBorderLength;
+					edge = r.edge;
+					do {
+						edge.vertex.y = this.highwayAltitude;
+						edge = edge.next;
+					} while(edge !== r.edge);
+				}
+			}
+
+			rampDowns = rampDowns.filter((r)=> {return rampDownsSet.has(r)});
+			NavMeshUtils.unlinkPolygons(rampDowns);
+			navmesh.regions = navmesh.regions.concat(rampDowns);
 
 			// kiv todo: connect ward roads at tower connections and mark as secondary-entrance for tower
 
@@ -36168,8 +31612,12 @@ return d[d.length-1];};return ", funcName].join("");
 
 		checkWithinCityWall(x, y, defaultVal=false) {
 			if (!this.cityWallCDTBoundary) return defaultVal;
-			let tris = this.cityWallCDTBoundary.tris;
-			let vertices = this.cityWallCDTBoundary.vertices;
+			return this.checkWithinCDTBoundary(this.cityWallCDTBoundary, x,y);
+		}
+
+		checkWithinCDTBoundary(cdtBoundary, x, y) {
+			let tris = cdtBoundary.cdt;
+			let vertices = cdtBoundary.vertices;
 			let len = tris.length;
 			for (let i=0; i<len; i++) {
 				let tri = tris[i];
@@ -36435,8 +31883,8 @@ return d[d.length-1];};return ", funcName].join("");
 					}
 
 					// Link 'em up!
-					lineSegment$3.set( edge.prev.vertex, edge.vertex );
-					let t = lineSegment$3.closestPointToPointParameter(region.s.region.centroid, false);
+					lineSegment$2.set( edge.prev.vertex, edge.vertex );
+					let t = lineSegment$2.closestPointToPointParameter(region.s.region.centroid, false);
 					if (t >= 0 && t <= 1) {
 						let distCheck = region.s.region.centroid.squaredDistanceTo(region2.s.region.centroid);
 						if (distCheck <= maxBridgeSqDist2) { // distance check
@@ -36501,10 +31949,10 @@ return d[d.length-1];};return ", funcName].join("");
 				prev.z = lp[1];
 				cur.x = p[0];
 				cur.z = p[1];
-				lineSegment$3.set( prev, cur );
+				lineSegment$2.set( prev, cur );
 
-				let t = lineSegment$3.closestPointToPointParameter( centroid, false);
-				lineSegment$3.at( t, pointOnLineSegment$2 );
+				let t = lineSegment$2.closestPointToPointParameter( centroid, false);
+				lineSegment$2.at( t, pointOnLineSegment$2 );
 				let distance = pointOnLineSegment$2.squaredDistanceTo( centroid );
 				if (distance < minRadiusSq) {
 					let px = pointOnLineSegment$2.x - centerX;
@@ -36560,10 +32008,10 @@ return d[d.length-1];};return ", funcName].join("");
 				let beyondMaxRadius = true;
 				let isValid = true;
 				do {
-					lineSegment$3.set( edge.prev.vertex, edge.vertex );
+					lineSegment$2.set( edge.prev.vertex, edge.vertex );
 
-					let t = lineSegment$3.closestPointToPointParameter( r.centroid, false);
-					lineSegment$3.at( t, pointOnLineSegment$2 );
+					let t = lineSegment$2.closestPointToPointParameter( r.centroid, false);
+					lineSegment$2.at( t, pointOnLineSegment$2 );
 					let distance = pointOnLineSegment$2.squaredDistanceTo( r.centroid );
 
 					if (distance >= minRadius) {
@@ -36743,7 +32191,7 @@ return d[d.length-1];};return ", funcName].join("");
 					//console.log(arr.length + " VS " + vLen  + " :: "+indexTrace+","+i);
 					vLen = arr.length;
 
-					for (v=0; v<vLen; v++) {
+					for (v=vLen-1; v>=0; v--) {
 						let pArr = arr[v].split(",");
 						pArr = pArr.map((p=>{return parseFloat(p.trim())}));
 
@@ -36796,110 +32244,38 @@ return d[d.length-1];};return ", funcName].join("");
 	exports.AlignmentBehavior = AlignmentBehavior;
 	exports.ArriveBehavior = ArriveBehavior;
 	exports.BFS = BFS;
-	exports.BVH = BVH;
-	exports.BVHNode = BVHNode;
-	exports.BoundingSphere = BoundingSphere;
-	exports.CHFace = Face;
-	exports.CHVertex = Vertex;
-	exports.CHVertexList = VertexList;
 	exports.Cell = Cell;
 	exports.CellSpacePartitioning = CellSpacePartitioning;
 	exports.CohesionBehavior = CohesionBehavior;
-	exports.CompositeGoal = CompositeGoal;
-	exports.ConvexHull = ConvexHull;
-	exports.Corridor = Corridor;
-	exports.CostTable = CostTable;
 	exports.DFS = DFS;
 	exports.Dijkstra = Dijkstra;
 	exports.Edge = Edge;
 	exports.EntityManager = EntityManager;
-	exports.EvadeBehavior = EvadeBehavior;
 	exports.EventDispatcher = EventDispatcher;
-	exports.FleeBehavior = FleeBehavior;
 	exports.FlowAgent = FlowAgent;
 	exports.FlowTriangulate = FlowTriangulate;
 	exports.FlowVertex = FlowVertex;
-	exports.FollowPathBehavior = FollowPathBehavior;
-	exports.FuzzyAND = FuzzyAND;
-	exports.FuzzyCompositeTerm = FuzzyCompositeTerm;
-	exports.FuzzyFAIRLY = FuzzyFAIRLY;
-	exports.FuzzyModule = FuzzyModule;
-	exports.FuzzyOR = FuzzyOR;
-	exports.FuzzyRule = FuzzyRule;
-	exports.FuzzySet = FuzzySet;
-	exports.FuzzyTerm = FuzzyTerm;
-	exports.FuzzyVERY = FuzzyVERY;
-	exports.FuzzyVariable = FuzzyVariable;
 	exports.GameEntity = GameEntity;
-	exports.Goal = Goal;
-	exports.GoalEvaluator = GoalEvaluator;
 	exports.Graph = Graph;
-	exports.GraphUtils = GraphUtils;
 	exports.HalfEdge = HalfEdge;
-	exports.HeuristicPolicyDijkstra = HeuristicPolicyDijkstra;
-	exports.HeuristicPolicyEuclid = HeuristicPolicyEuclid;
-	exports.HeuristicPolicyEuclidSquared = HeuristicPolicyEuclidSquared;
-	exports.HeuristicPolicyManhattan = HeuristicPolicyManhattan;
-	exports.InterposeBehavior = InterposeBehavior;
-	exports.LeftSCurveFuzzySet = LeftSCurveFuzzySet;
-	exports.LeftShoulderFuzzySet = LeftShoulderFuzzySet;
 	exports.LineSegment = LineSegment;
-	exports.Logger = Logger;
-	exports.MathUtils = MathUtils;
-	exports.Matrix3 = Matrix3;
-	exports.Matrix4 = Matrix4;
-	exports.MemoryRecord = MemoryRecord;
-	exports.MemorySystem = MemorySystem;
-	exports.MeshGeometry = MeshGeometry;
-	exports.MessageDispatcher = MessageDispatcher;
 	exports.MovingEntity = MovingEntity;
 	exports.NavEdge = NavEdge;
 	exports.NavMesh = NavMesh;
 	exports.NavMeshFlowField = NavMeshFlowField;
 	exports.NavMeshFlowFieldBehavior = NavMeshFlowFieldBehavior;
-	exports.NavMeshLoader = NavMeshLoader;
 	exports.NavNode = NavNode;
 	exports.Node = Node;
-	exports.NormalDistFuzzySet = NormalDistFuzzySet;
 	exports.OBB = OBB;
-	exports.ObstacleAvoidanceBehavior = ObstacleAvoidanceBehavior;
-	exports.OffsetPursuitBehavior = OffsetPursuitBehavior;
-	exports.OnPathBehavior = OnPathBehavior;
-	exports.Path = Path;
 	exports.Plane = Plane;
 	exports.Polygon = Polygon;
-	exports.Polyhedron = Polyhedron;
 	exports.PriorityQueue = PriorityQueue;
-	exports.PursuitBehavior = PursuitBehavior;
-	exports.Quaternion = Quaternion;
-	exports.Ray = Ray;
-	exports.RectangularTriggerRegion = RectangularTriggerRegion;
-	exports.Regulator = Regulator;
-	exports.RightSCurveFuzzySet = RightSCurveFuzzySet;
-	exports.RightShoulderFuzzySet = RightShoulderFuzzySet;
-	exports.SAT = SAT;
 	exports.SVGCityReader = SVGCityReader;
-	exports.SeekBehavior = SeekBehavior;
 	exports.SeparationBehavior = SeparationBehavior;
-	exports.SingletonFuzzySet = SingletonFuzzySet;
-	exports.Smoother = Smoother;
-	exports.SphericalTriggerRegion = SphericalTriggerRegion;
-	exports.State = State;
-	exports.StateMachine = StateMachine;
 	exports.SteeringBehavior = SteeringBehavior;
 	exports.SteeringManager = SteeringManager;
-	exports.Task = Task;
-	exports.TaskQueue = TaskQueue;
-	exports.Telegram = Telegram;
-	exports.Think = Think;
-	exports.Time = Time;
-	exports.TriangularFuzzySet = TriangularFuzzySet;
-	exports.Trigger = Trigger;
-	exports.TriggerRegion = TriggerRegion;
 	exports.Vector3 = Vector3;
 	exports.Vehicle = Vehicle;
-	exports.Vision = Vision;
-	exports.WanderBehavior = WanderBehavior;
 	exports.WorldUp = WorldUp;
 
 	Object.defineProperty(exports, '__esModule', { value: true });

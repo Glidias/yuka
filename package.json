@@ -39,6 +39,8 @@
     "url": "https://github.com/Mugen87/yuka/issues"
   },
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^11.0.2",
+    "@rollup/plugin-node-resolve": "^7.1.1",
     "benchmark": "2.1.4",
     "chai": "4.2.0",
     "chai-uuid": "1.0.6",
@@ -69,6 +71,7 @@
     "@doodle3d/clipper-js": "^1.0.10",
     "cdt2d": "^1.0.0",
     "clean-pslg": "^1.1.2",
+    "clipper-lib": "^6.4.2",
     "csg2d": "^0.1.2",
     "d3-delaunay": "^5.1.5",
     "jquery": "^3.4.1"

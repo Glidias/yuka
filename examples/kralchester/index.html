@@ -30,10 +30,11 @@
 
 	function init() {
 		var cityReader = new YUKA.SVGCityReader();
+		cityReader._PREVIEW_MODE = true;
 		cityReader.parse(document.getElementById('svgholder').innerHTML, document.getElementById("svgpreview"));
 		console.log( cityReader.getNavmeshExtrudedGeometry() );
 		console.log( cityReader.getWardBuildingsGeometry(0.05) );
-		cityReader.buildGroundNavmesh();
+		cityReader.buildGroundNavmesh(0.05);
 		window.document.body.style.zoom = "400%";
 	}
 

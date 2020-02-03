@@ -5,7 +5,7 @@ import { LineSegment } from "../math/LineSegment.js";
 import {Delaunay} from "d3-delaunay";
 
 import cdt2d from "cdt2d";
-import Shape from "clipper-js";
+import Shape from "@doodle3d/clipper-js";
 //import cleanPSLG from "clean-pslg";
 import CSG from "csg2d";
 
@@ -590,6 +590,20 @@ function cellSVGString(cell) {
 	return str;
 }
 
+function ptPolySVGString(cell) {
+	let len = cell.length;
+	let str = "";
+	let c = cell[0];
+
+	str += "M"+c.X+","+c.Y + " ";
+	for (let i=1; i<len; i++) {
+		c = cell[i];
+		str += "L"+c.X+","+c.Y + " ";
+	}
+	str += "Z";
+	return str;
+}
+
 function svgPolyStrToContour(str) {
 	return str.split(" ").map((s) => {
 		s = s.split(",");
@@ -1114,20 +1128,22 @@ class SVGCityReader {
 		return collector;
 	}
 
-	buildGroundNavmesh() {
+	buildGroundNavmesh(inset=0) {
 		// assumed only City wall and Buildings Blocks ground surface
 		if (!this.profileWardBuildings) {
 			alert('buildGroundNavmesh failed, please call getWardBuildingsGeometry() first!');
 			return;
 		}
 
-		const scaleXZ = 1; // this.exportScaleXZ;
+		const scaleXZ = this._PREVIEW_MODE ? 1 : this.exportScaleXZ;
+		const previewMult = this._PREVIEW_MODE ? 1/this.exportScaleXZ : 1;
 		var points = [
 			[-this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
 			[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
 			[this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ],
 			[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]
 		];
+		var canvasSubject = new Shape([points.map(pointToShapePt)]);
 		
 		var edges = [
 			[0,1], [1,2], [2,3], [3,0]
@@ -1145,12 +1161,12 @@ class SVGCityReader {
 				let len = b.length;
 				let i = 0;
 				let bi = points.length;
-				points.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
-				buildingPoints.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
+				points.push([b[i]*previewMult, b[i+1]*previewMult]);
+				buildingPoints.push([b[i]*previewMult, b[i+1]*previewMult]);
 				for (i=2; i<len; i+=2) {
 					edges.push([points.length - 1, points.length]);
-					points.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
-					buildingPoints.push([b[i]/this.exportScaleXZ, b[i+1]/this.exportScaleXZ]);
+					points.push([b[i]*previewMult, b[i+1]*previewMult]);
+					buildingPoints.push([b[i]*previewMult, b[i+1]*previewMult]);
 				}
 				edges.push([points.length-1, bi]);
 			});
@@ -1196,32 +1212,50 @@ class SVGCityReader {
 		let wallsShape = new Shape(pointsListWall);
 		let obstacles = buildingsShape.union(wallsShape);
 		*/
-		pointsListWall.push([[1,0],[-1,0],[-1,1]]); // dummy test
+	
+
 		let wallRadius = WALL_RADIUS;
 		let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
-		lineSegments = lineSegments.map((ls=> {
-			return this.extrudePathOfPoints(ls, wallRadius, true, true);
-		}));
-
-		var buildingsShape = CSG.fromPolygons(pointsList);
-		var wallsShape = CSG.fromPolygons(lineSegments);
-		let obstacles = wallsShape; // buildingsShape.union(wallsShape);
 		
-		let obstacleVerts =[];
-		let obstacleEdges = [];
-		this.collectVerticesEdgesFromCSG(obstacleVerts, obstacleEdges, obstacles);
-		points = points.concat(obstacleVerts);
+		
+		let cityWallUnion = this.getPointsListShape(lineSegments,
+			(points, index)=>{
+				 points = points.slice(0);
+				//points = points.slice(0).reverse();
+				return this.extrudePathOfPoints(points, wallRadius, true, true);
+		});
+
+	
+		var buildingsShape = new Shape(pointsList.map((grp)=>{return grp.map(pointToShapePt)})); // CSG.fromPolygons(pointsList);
+		var wallsShape = cityWallUnion;
+		let obstacles = wallsShape.union(buildingsShape);
+	
+		//if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
+		//obstacles = canvasSubject.difference(obstacles);
+		// if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
+		/*
+		var svg = $(this.makeSVG("g", {}));
+			this.map.append(svg, {});
+			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", d: obstacles.paths.map(ptPolySVGString).join(" ") }));
+
+		return;
+		*/
+
+		let obstacleVerts = points;
+		let obstacleEdges = edges;
+		this.collectVerticesEdgesFromShape(obstacleVerts, obstacleEdges, obstacles);
+		
+		/*
 		for (let i=0; i<obstacleEdges.length; i++) {
 			obstacleEdges[i][0] += 4;
 			obstacleEdges[i][1] += 4;
 		}
-		edges = edges.concat(obstacleEdges);
+		*/
+		
 
-
-		if (true) { // testing only
-			points = obstacleVerts;
-			edges = obstacleEdges;
-		}
+		//points = obstacleVerts;
+		//edges = obstacleEdges;
+		
 		
 		cleanPSLG(points, edges);
 		let cdt = cdt2d(points, edges, {interior:true, exterior:false});
@@ -1231,11 +1265,13 @@ class SVGCityReader {
 		
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(points, tri)}));
 
-		var svg = $(this.makeSVG("g", {}));
+		if (this._PREVIEW_MODE) {
+			var svg = $(this.makeSVG("g", {}));
 			this.map.append(svg, {});
-			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", d: navmesh.regions.map(polygonSVGString).join(" ") }));
-			svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
-		//return {vertices:points, edges:edges, cdt:cdt};
+			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+			//return {vertices:points, edges:edges, cdt:cdt};
+		}
 
 		return navmesh;
 	}
@@ -1484,7 +1520,7 @@ class SVGCityReader {
 						});
 
 						buildingTopIndices.length = bti;
-						//buildingTopIndices.reverse();
+						buildingTopIndices.reverse();
 						this.roofMethod(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset );
 
 					});
@@ -2320,6 +2356,38 @@ class SVGCityReader {
 			el.setAttribute(k, attrs[k]);
 		return el;
 	}
+	
+	collectVerticesEdgesFromShape(vertices, edges, shape) {
+		let paths = shape.paths;
+		// let mapVerts = new Map();
+		paths.forEach((points)=>{
+			let baseCount = vertices.length;
+
+			let count = baseCount;
+			points.forEach((p, index)=> {
+				
+				if (index >= 1) edges.push([count-1, count]);
+				if (index === points.length - 1) edges.push([count, baseCount]);
+				count++;
+				vertices.push([p.X, p.Y]);
+
+				// note caveat: non welded
+				/*
+				let key = p.X + "," + p[0].Y;
+				let key2 =  p[1].X + "," + p[1].Y;
+				if (!mapVerts.has(key)) {
+					vertices.push([seg[0].X, seg[0].Y]);
+					mapVerts.set(key, vi++);
+				}
+				if (!mapVerts.has(key2)) {
+					vertices.push(([seg[1].X, seg[1].Y]));
+					mapVerts.set(key2, vi++);
+				}
+				edges[ei++] = [mapVerts.get(key), mapVerts.get(key2)];
+				*/
+			});
+		});
+	}
 
 	collectVerticesEdgesFromCSG(vertices, edges, csg) {
 		let segments = csg.segments;
@@ -2339,6 +2407,31 @@ class SVGCityReader {
 			}
 			edges[ei++] = [mapVerts.get(key), mapVerts.get(key2)];
 		});
+	}
+
+	getPointsListUnion(pointsList, processPointsMethod) {
+		let polygonsListCSG = [];
+		pointsList.forEach((points, index)=> {
+			if (processPointsMethod) points = processPointsMethod(points, index);
+			polygonsListCSG.push(CSG.fromPolygons([points]))
+		});
+
+		let csg = polygonsListCSG[0];
+		for (let i=1; i<polygonsListCSG.length; i++) {
+			csg = csg.union(polygonsListCSG[i]);
+		}
+
+		return csg;
+	}
+
+	getPointsListShape(pointsList, processPointsMethod) {
+		let polygonsListCSG = [];
+		pointsList.forEach((points, index)=> {
+			if (processPointsMethod) points = processPointsMethod(points, index);
+			polygonsListCSG.push(points.map(pointToShapePt));
+		});
+		let csg = new Shape(polygonsListCSG);
+		return csg;
 	}
 
 	getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
