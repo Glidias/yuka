@@ -2444,8 +2444,8 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 		return csg;
 	}
 
-		/*
-	getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
+	//	/*
+	getCDTObjFromPointsListUnion2(pointsList, cleanup, params, processPointsMethod) {
 		let polygonsListCSG = [];
 		pointsList.forEach((points, index)=> {
 			if (processPointsMethod) points = processPointsMethod(points, index);
@@ -2468,7 +2468,7 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 		let cdt = cdt2d(vertices, edges, (params ? params : {exterior:true}));
 		return {vertices:vertices, edges:edges, cdt:cdt};
 	}
-	*/
+	//*/
 
 	getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
 		let polygonsListCSG = [];
@@ -2749,7 +2749,7 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 		);
 		*/
 	
-		this.citadelWallCDTBoundary = this.getCDTObjFromPointsListUnion(this.citadelWallSegments, true, {exterior:false});
+		this.citadelWallCDTBoundary = this.getCDTObjFromPointsListUnion2(this.citadelWallSegments, true, {exterior:false});
 		/*
 		g.append(
 			this.makeSVG("path", {"fill":"rgba(155,111,122,0.7)", "stroke-width":0.1, "stroke":"red",
