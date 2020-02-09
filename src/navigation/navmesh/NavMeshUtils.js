@@ -83,12 +83,13 @@ class NavMeshUtils {
      * Sets up triangulated data for 3D rendering from  polygon references to be extruded
      * @param {*} collector An object of existing "vertices" and "indices" array to push values into
      * @param {Array} polygons Assumed all polygons in this list share a unique exclusive set of vertices for them only
-     * @param {Boolean} yVal Extrude downwards by yVal of current polygon's y values, otherwise, extrude down to yBottom if yBottom is defined number, with  yVAl is treated as fixed y value to extrude from.
-     * @param {Boolean} xzScale The scale for output vertices in XZ direction
+     * @param {Number} yVal Extrude downwards by yVal of current polygon's y values, otherwise, extrude down to yBottom if yBottom is defined number, with  yVAl is treated as fixed y value to extrude from.
+     * @param {Number} xzScale The scale for output vertices in XZ direction
      * @param {Boolean|Number} yBottom   If yBottom is set to boolean true instead, than yVal is treated as the absolute "bottom" value instead to extrude downwards towards from current polygons' y positions.
      * @param {Number} yBottomMin If yBottom isn't specified as an absolute number, this additional optional parameter limits how far down a polygon can extrude downwards by an absolute y value
+     * @param {Object} extraParams Extra extrusion params added to the default set of parameters
      */
-    static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin) {
+    static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin, extraParams) {
         transformId++;
 
         const vertices = collector.vertices;
@@ -109,6 +110,11 @@ class NavMeshUtils {
             yBottomMin: yBottomMin,
             yVal: yVal
         };
+        if (extraParams) {
+            for (let p in extraParams) {
+                defaultExtrudeParams[p] = extraParams[p];
+            }
+        }
         let extrudeParams;
 
         // to map extrudeParams to a map of vertex ids to extrusion vertex ids
@@ -164,7 +170,7 @@ class NavMeshUtils {
                 }
                 //*/
 
-                if (!extrudeParams.bordersOnly ? edge.twin === null && considerEdges : (polygon.edgeMask & (1<<edgeIndex)) ) {
+                if (extrudeParams.useEdgeMask ? ((polygon.edgeMask ? polygon.edgeMask : 0) & (1<<edgeIndex)) : edge.twin === null && considerEdges) {
                     ///*
                     let a;
                     let b;
@@ -233,25 +239,29 @@ class NavMeshUtils {
                 edgeIndex++;
             } while(edge !== polygon.edge)
 
-            // set up upper top face indices
-            let fLen = fi - 1;
-            let f;
-            for (let f=1; f< fLen; f++) {
-                indices[ii++] = faceIndices[0];
-                indices[ii++] = faceIndices[f];
-                indices[ii++] = faceIndices[f+1]
-            }
+          
+            if (!extrudeParams.bordersOnly) {
+                 let fLen = fi - 1;
+              
+                // set up upper top face indices
+                if (!extrudeParams.excludeTopFaceRender) {
+                   
+                    for (let f=1; f< fLen; f++) {
+                        indices[ii++] = faceIndices[0];
+                        indices[ii++] = faceIndices[f];
+                        indices[ii++] = faceIndices[f+1]
+                    }
+                }
 
-            // set up lower bottom face indices if needed
-            ///*
-            if (!extrudeParams.bordersOnly && extrudeParams.yBottom !== true) {
-                for (let f=1; f< fLen; f++) {
-                    indices[ii++] = profile.get(faceIndices[f+1]);
-                    indices[ii++] = profile.get(faceIndices[f]);
-                    indices[ii++] = profile.get(faceIndices[0]);
+                // set up lower bottom face indices if needed
+                if (extrudeParams.yBottom !== true || !extrudeParams.excludeBottomFaceRender) {
+                    for (let f=1; f< fLen; f++) {
+                        indices[ii++] = profile.get(faceIndices[f+1]);
+                        indices[ii++] = profile.get(faceIndices[f]);
+                        indices[ii++] = profile.get(faceIndices[0]);
+                    }
                 }
             }
-            //*/
         }
 
         return collector;

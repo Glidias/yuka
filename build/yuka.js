@@ -27480,12 +27480,13 @@ return d[d.length-1];};return ", funcName].join("");
 	     * Sets up triangulated data for 3D rendering from  polygon references to be extruded
 	     * @param {*} collector An object of existing "vertices" and "indices" array to push values into
 	     * @param {Array} polygons Assumed all polygons in this list share a unique exclusive set of vertices for them only
-	     * @param {Boolean} yVal Extrude downwards by yVal of current polygon's y values, otherwise, extrude down to yBottom if yBottom is defined number, with  yVAl is treated as fixed y value to extrude from.
-	     * @param {Boolean} xzScale The scale for output vertices in XZ direction
+	     * @param {Number} yVal Extrude downwards by yVal of current polygon's y values, otherwise, extrude down to yBottom if yBottom is defined number, with  yVAl is treated as fixed y value to extrude from.
+	     * @param {Number} xzScale The scale for output vertices in XZ direction
 	     * @param {Boolean|Number} yBottom   If yBottom is set to boolean true instead, than yVal is treated as the absolute "bottom" value instead to extrude downwards towards from current polygons' y positions.
 	     * @param {Number} yBottomMin If yBottom isn't specified as an absolute number, this additional optional parameter limits how far down a polygon can extrude downwards by an absolute y value
+	     * @param {Object} extraParams Extra extrusion params added to the default set of parameters
 	     */
-	    static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin) {
+	    static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin, extraParams) {
 	        transformId++;
 
 	        const vertices = collector.vertices;
@@ -27506,6 +27507,11 @@ return d[d.length-1];};return ", funcName].join("");
 	            yBottomMin: yBottomMin,
 	            yVal: yVal
 	        };
+	        if (extraParams) {
+	            for (let p in extraParams) {
+	                defaultExtrudeParams[p] = extraParams[p];
+	            }
+	        }
 	        let extrudeParams;
 
 	        // to map extrudeParams to a map of vertex ids to extrusion vertex ids
@@ -27561,7 +27567,7 @@ return d[d.length-1];};return ", funcName].join("");
 	                }
 	                //*/
 
-	                if (!extrudeParams.bordersOnly ? edge.twin === null && considerEdges : (polygon.edgeMask & (1<<edgeIndex)) ) {
+	                if (extrudeParams.useEdgeMask ? ((polygon.edgeMask ? polygon.edgeMask : 0) & (1<<edgeIndex)) : edge.twin === null && considerEdges) {
 	                    ///*
 	                    let a;
 	                    let b;
@@ -27630,24 +27636,29 @@ return d[d.length-1];};return ", funcName].join("");
 	                edgeIndex++;
 	            } while(edge !== polygon.edge)
 
-	            // set up upper top face indices
-	            let fLen = fi - 1;
-	            for (let f=1; f< fLen; f++) {
-	                indices[ii++] = faceIndices[0];
-	                indices[ii++] = faceIndices[f];
-	                indices[ii++] = faceIndices[f+1];
-	            }
+	          
+	            if (!extrudeParams.bordersOnly) {
+	                 let fLen = fi - 1;
+	              
+	                // set up upper top face indices
+	                if (!extrudeParams.excludeTopFaceRender) {
+	                   
+	                    for (let f=1; f< fLen; f++) {
+	                        indices[ii++] = faceIndices[0];
+	                        indices[ii++] = faceIndices[f];
+	                        indices[ii++] = faceIndices[f+1];
+	                    }
+	                }
 
-	            // set up lower bottom face indices if needed
-	            ///*
-	            if (!extrudeParams.bordersOnly && extrudeParams.yBottom !== true) {
-	                for (let f=1; f< fLen; f++) {
-	                    indices[ii++] = profile.get(faceIndices[f+1]);
-	                    indices[ii++] = profile.get(faceIndices[f]);
-	                    indices[ii++] = profile.get(faceIndices[0]);
+	                // set up lower bottom face indices if needed
+	                if (extrudeParams.yBottom !== true || !extrudeParams.excludeBottomFaceRender) {
+	                    for (let f=1; f< fLen; f++) {
+	                        indices[ii++] = profile.get(faceIndices[f+1]);
+	                        indices[ii++] = profile.get(faceIndices[f]);
+	                        indices[ii++] = profile.get(faceIndices[0]);
+	                    }
 	                }
 	            }
-	            //*/
 	        }
 
 	        return collector;
@@ -28143,8 +28154,6 @@ return d[d.length-1];};return ", funcName].join("");
 	const lineSegment$2 = new LineSegment();
 	const pointOnLineSegment$2 = new Vector3();
 
-	const WALL_RADIUS = 1;
-
 	const CITADEL_WARD_INDEX = -1;
 	const T_EPSILON =  1e-7;
 
@@ -28264,7 +28273,7 @@ return d[d.length-1];};return ", funcName].join("");
 	}
 
 
-	function explode2DArray(arr) {
+	function explode2DArray(arr, truncateLength) {
 		let newArr = [];
 		let len = arr.length;
 		for (let i=0; i<len; i++) {
@@ -28273,6 +28282,9 @@ return d[d.length-1];};return ", funcName].join("");
 			for (let u=0; u < uLen; u++) {
 				newArr.push(a[u]);
 			}
+		}
+		if (truncateLength) {
+			newArr = newArr.slice(0, newArr.length - truncateLength);
 		}
 		return newArr;
 	}
@@ -28600,6 +28612,10 @@ return d[d.length-1];};return ", funcName].join("");
 	function getBBoxCenter(rect) {
 		return new Vector3(rect.x + rect.width*.5, 0, rect.y + rect.height*.5);
 	}
+
+	function triSVGString(vertSoup, tri) {
+		return `M${vertSoup[tri[2]][0]},${vertSoup[tri[2]][1]} L${vertSoup[tri[1]][0]},${vertSoup[tri[1]][1]} L${vertSoup[tri[0]][0]},${vertSoup[tri[0]][1]} Z`;
+	}
 	function getTriPolygon(vertSoup, tri) {
 		let poly = new Polygon().fromContour([
 			new Vector3(vertSoup[tri[2]][0], 0, vertSoup[tri[2]][1]),
@@ -28687,6 +28703,7 @@ return d[d.length-1];};return ", funcName].join("");
 			// City wall settings
 			this.cityWallPillarByAABBCenter = true;
 			this.wallPillarRadius = 1.3;
+			this.wallRadius = 1;
 
 			this.entranceWallPillarRadius = 0;
 			this.entCitadelPillarRadiusScale = 1.4;
@@ -29017,7 +29034,9 @@ return d[d.length-1];};return ", funcName].join("");
 			let gLevel  = this.innerWardAltitude;
 			if (this.navmeshCityWall) {
 				// City Wall
-				deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(),NavMeshUtils.seperateMarkedPolygonsVertices(this.navmeshCityWall.regions), gLevel, this.exportScaleXZ, true, gLevel);
+				deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(),NavMeshUtils.seperateMarkedPolygonsVertices(this.navmeshCityWall.regions), gLevel, this.exportScaleXZ, true, gLevel, this.navmeshCityWallWalk ? {bordersOnly:true} : undefined);
+				if (this.navmeshCityWallWalk) deployGeom.cityWallWalk = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.navmeshCityWallWalk.regions, 0, this.exportScaleXZ, false);
+				
 				// City wall towers
 				if (this.cityWallTowerCeilingPolies) {
 					deployGeom.cityWallTowerCeiling = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerCeilingPolies), this.cityWallCeilThickness, this.exportScaleXZ);
@@ -29113,10 +29132,6 @@ return d[d.length-1];};return ", funcName].join("");
 				[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]
 			];
 			var canvasSubject = new Shape([points.map(pointToShapePt)]);
-			
-			var edges = [
-				[0,1], [1,2], [2,3], [3,0]
-			];
 			const pointsList = [];
 		
 
@@ -29129,56 +29144,25 @@ return d[d.length-1];};return ", funcName].join("");
 
 					let len = b.length;
 					let i = 0;
-					let bi = points.length;
 					points.push([b[i]*previewMult, b[i+1]*previewMult]);
 					buildingPoints.push([b[i]*previewMult, b[i+1]*previewMult]);
 					for (i=2; i<len; i+=2) {
-						edges.push([points.length - 1, points.length]);
-						points.push([b[i]*previewMult, b[i+1]*previewMult]);
+						//edges.push([points.length - 1, points.length]);
+						//points.push([b[i]*previewMult, b[i+1]*previewMult]);
 						buildingPoints.push([b[i]*previewMult, b[i+1]*previewMult]);
 					}
-					edges.push([points.length-1, bi]);
+					//edges.push([points.length-1, bi]);
 				});
 			});
-			let bpLen = points.length;
 
-			/* // not needed. already done earlier
-			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
-			let wallRadius = WALL_RADIUS;
-			let cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
-				true, {exterior:false},
-				(points, index)=>{
-					//points = points.slice(0).reverse();
-					points = points.concat().reverse();
-					return  index < lineSegments.length ? this.extrudePathOfPoints(points, wallRadius, true, true) : points;
-				});
-
-			this.cityWallCDTObj = {
-				vertices: cdtObj.vertices,
-				edges: cdtObj.edges	
-			};
-			*/
-			
-			points = points.concat(this.cityWallCDTObj.vertices);
-			let cityWallEdges = this.cityWallCDTObj.edges;
-			let cityWallVertices = this.cityWallCDTObj.vertices;
-			cityWallEdges.forEach((e, index, array)=> {
-				edges.push([e[0]+bpLen, e[1]+bpLen]);
-			});
-			/*
-			cityWallVertices.forEach((v)=> {
-				segmentPoints.push(v);
-			});
-			*/
-
+		
 			/* // Shape library not working
 			let buildingsShape = new Shape(pointsList);
 			let wallsShape = new Shape(pointsListWall);
 			let obstacles = buildingsShape.union(wallsShape);
 			*/
-		
 
-			let wallRadius = WALL_RADIUS;
+			let wallRadius = this.wallRadius;
 			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
 			
 			
@@ -29194,8 +29178,9 @@ return d[d.length-1];};return ", funcName].join("");
 			var wallsShape = cityWallUnion;
 			let obstacles = wallsShape.union(buildingsShape);
 		
-			//if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
-			//obstacles = canvasSubject.difference(obstacles);
+			
+			obstacles = canvasSubject.difference(obstacles);
+			
 			// if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
 			/*
 			var svg = $(this.makeSVG("g", {}));
@@ -29205,8 +29190,8 @@ return d[d.length-1];};return ", funcName].join("");
 			return;
 			*/
 
-			let obstacleVerts = points;
-			let obstacleEdges = edges;
+			let obstacleVerts = []; //points;
+			let obstacleEdges = []; //edges;
 			this.collectVerticesEdgesFromShape(obstacleVerts, obstacleEdges, obstacles);
 			
 			/*
@@ -29221,13 +29206,13 @@ return d[d.length-1];};return ", funcName].join("");
 			//edges = obstacleEdges;
 			
 			
-			cleanPSLG(points, edges);
-			let cdt = cdt2d_1(points, edges, {interior:true, exterior:false});
+			cleanPSLG(obstacleVerts, obstacleEdges);
+			let cdt = cdt2d_1(obstacleVerts, obstacleEdges, {interior:true, exterior:false});
 
 			let navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
 			
-			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(points, tri)}));
+			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
 
 			if (this._PREVIEW_MODE) {
 				var svg = $(this.makeSVG("g", {}));
@@ -29480,7 +29465,7 @@ return d[d.length-1];};return ", funcName].join("");
 							});
 
 							buildingTopIndices.length = bti;
-							buildingTopIndices.reverse();
+							//buildingTopIndices.reverse();
 							this.roofMethod(wardCollector, wardRoofCollector, buildingTopIndices, vertexNormals, buildingInset );
 
 						});
@@ -30293,7 +30278,7 @@ return d[d.length-1];};return ", funcName].join("");
 			return el;
 		}
 		
-		collectVerticesEdgesFromShape(vertices, edges, shape) {
+	collectVerticesEdgesFromShape(vertices, edges, shape) {
 			let paths = shape.paths;
 			// let mapVerts = new Map();
 			paths.forEach((points)=>{
@@ -30306,24 +30291,49 @@ return d[d.length-1];};return ", funcName].join("");
 					if (index === points.length - 1) edges.push([count, baseCount]);
 					count++;
 					vertices.push([p.X, p.Y]);
-
-					// note caveat: non welded
-					/*
-					let key = p.X + "," + p[0].Y;
-					let key2 =  p[1].X + "," + p[1].Y;
-					if (!mapVerts.has(key)) {
-						vertices.push([seg[0].X, seg[0].Y]);
-						mapVerts.set(key, vi++);
-					}
-					if (!mapVerts.has(key2)) {
-						vertices.push(([seg[1].X, seg[1].Y]));
-						mapVerts.set(key2, vi++);
-					}
-					edges[ei++] = [mapVerts.get(key), mapVerts.get(key2)];
-					*/
 				});
 			});
 		}
+
+		///*
+			collectVerticesEdgesFromShape2(vertices, edges, shape) {
+			let paths = shape.paths;
+			let mapVerts = new Map();
+			let vi = vertices.length;
+
+			let ei = edges.length;
+			paths.forEach((points)=>{
+				points.forEach((p, index)=> {
+					let key = p.X + "," + p.Y;
+					if (!mapVerts.has(key)) {
+						vertices.push([p.X, p.Y]);
+						mapVerts.set(key, vi++);
+					}
+				});
+			});
+
+			
+			paths.forEach((points)=>{
+				
+			
+				points.forEach((p, index, array)=> {
+					
+					let key = p.X + "," + p.Y;
+					let key2;
+					if (index >= 1) {
+						key2 = array[index-1].X + "," + array[index-1].Y;
+						edges.push([mapVerts.get(key2), mapVerts.get(key)]);
+					}
+					else if (index === points.length - 1) {
+						key2 = array[0].X + "," + array[0].Y;
+						edges.push([mapVerts.get(key), mapVerts.get(key2)]);
+					} 
+
+		
+				});
+			});
+		}
+		//*/
 
 		collectVerticesEdgesFromCSG(vertices, edges, csg) {
 			let segments = csg.segments;
@@ -30345,11 +30355,25 @@ return d[d.length-1];};return ", funcName].join("");
 			});
 		}
 
-		getPointsListUnion(pointsList, processPointsMethod) {
+		getPointsListShape(pointsList, processPointsMethod) {
 			let polygonsListCSG = [];
 			pointsList.forEach((points, index)=> {
 				if (processPointsMethod) points = processPointsMethod(points, index);
-				polygonsListCSG.push(csg2d.fromPolygons([points]));
+				polygonsListCSG.push(new Shape([points.map(pointToShapePt)]));
+			});
+			let csg = polygonsListCSG[0];
+			for (let i=1; i<polygonsListCSG.length; i++) {
+				csg = csg.union(polygonsListCSG[i]);
+			}
+			return csg;
+		}
+
+		
+		getCDTObjFromPointsListUnion2(pointsList, cleanup, params, processPointsMethod) {
+			let polygonsListCSG = [];
+			pointsList.forEach((points, index)=> {
+				if (processPointsMethod) points = processPointsMethod(points, index);
+				polygonsListCSG.push(new Shape([points.map(pointToShapePt)]));
 			});
 
 			let csg = polygonsListCSG[0];
@@ -30357,18 +30381,18 @@ return d[d.length-1];};return ", funcName].join("");
 				csg = csg.union(polygonsListCSG[i]);
 			}
 
-			return csg;
-		}
+			let vertices = params.vertices ? params.vertices.slice(0) : [];
+			let edges = params.edges ? params.edges.slice(0) : [];
+			this.collectVerticesEdgesFromShape(vertices, edges, csg);
 
-		getPointsListShape(pointsList, processPointsMethod) {
-			let polygonsListCSG = [];
-			pointsList.forEach((points, index)=> {
-				if (processPointsMethod) points = processPointsMethod(points, index);
-				polygonsListCSG.push(points.map(pointToShapePt));
-			});
-			let csg = new Shape(polygonsListCSG);
-			return csg;
+			if (cleanup) {
+				cleanPSLG(vertices, edges);
+			}
+
+			let cdt = cdt2d_1(vertices, edges, (params ? params : {exterior:true}));
+			return {vertices:vertices, edges:edges, cdt:cdt};
 		}
+		
 
 		getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
 			let polygonsListCSG = [];
@@ -30393,6 +30417,7 @@ return d[d.length-1];};return ", funcName].join("");
 			let cdt = cdt2d_1(vertices, edges, (params ? params : {exterior:true}));
 			return {vertices:vertices, edges:edges, cdt:cdt};
 		}
+
 
 		//convertCSGPolygonsTo
 
@@ -30520,6 +30545,8 @@ return d[d.length-1];};return ", funcName].join("");
 		//	let ref = this.cityWallSegmentsUpper[0].slice(0);
 		//	this.cityWallSegmentsUpper[0] = ref.slice(8).concat(ref.slice(1, 8));
 
+		
+
 
 			//this.cityWallSegmentsUpper[0] = this.cityWallSegmentsUpper[0].concat(ref.slice(0,8)); //.concat(ref.slice(0, 8))
 			this.citadelWallSegmentsUpper = [];
@@ -30604,7 +30631,7 @@ return d[d.length-1];};return ", funcName].join("");
 
 
 				this.citadelWallSegmentsUpper = [explode2DArray(this.citadelWallSegments)]; // todo: break and rearrange from start/end citadel
-		
+				
 				/*
 				g.append(
 						this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
@@ -30656,22 +30683,13 @@ return d[d.length-1];};return ", funcName].join("");
 			);
 			*/
 
-			let wallRadius = WALL_RADIUS;
+			let wallRadius = this.wallRadius;
 			let verticesSoup = [];
 			verticesSoup.push([-this.svgWidth*.5, -this.svgHeight*.5]);
 			verticesSoup.push([this.svgWidth*.5, -this.svgHeight*.5]);
 			verticesSoup.push([this.svgWidth*.5, this.svgHeight*.5]);
 			verticesSoup.push([-this.svgWidth*.5, this.svgHeight*.5]);
 
-			/* // kiv, not easily possible to identify city wall regions for citadel  unless seperate out initially
-			this.citadelWallSegments.forEach((s)=>{
-
-				s.forEach((p)=>{
-					p.citadel = true;
-				});
-
-			});
-			*/
 
 			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
 			
@@ -30681,52 +30699,58 @@ return d[d.length-1];};return ", funcName].join("");
 				true, {exterior:false},
 				(points, index)=>{
 					//points = points.slice(0).reverse();
-					return  index < lineSegments.length ? this.extrudePathOfPoints(points, wallRadius, true, true) : points;
+					//points = points.slice(0);
+					return this.extrudePathOfPoints(points, wallRadius, true, true);
 				});
 
 			cdt = cdtObj.cdt;
 
+			//cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
+
+			//console.log(this.citadelWallSegments);
+			//console.log(this.citadelWallSegmentsUpper);
+			//console.log(this.cityWallSegmentsUpper);
+
+			let navmesh = new NavMesh();
+			navmesh.attemptBuildGraph = false;
+
+			
+			
+			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)}));
+			NavMeshUtils.weldVertices(navmesh);
+			
+			///*
+			// warning hack to circumvent holes issue for city wall
+			lineSegments = [this.citadelWallSegments[1]].concat(this.citadelWallSegmentsUpper).concat(this.cityWallSegmentsUpper);
+		
+			 cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
+				true, {exterior:false},
+				(points, index)=>{
+					points = points.slice(0);
+					//points = points.slice(0).reverse();
+					return this.extrudePathOfPoints(points, wallRadius, true, true);
+				});
+
+			cdt = cdtObj.cdt;
+
+			let cityWallWalkNavmesh = new NavMesh();
+			cityWallWalkNavmesh.attemptBuildGraph = false;
+			
+			cityWallWalkNavmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)}));
+			NavMeshUtils.weldVertices(navmesh);
 			this.cityWallCDTObj = {
 				vertices: cdtObj.vertices,
 				edges: cdtObj.edges	
 			};
-			//cdt = cdt.filter((tri)=>{return tri[0] >= 4 && tri[1] >=4 && tri[2] >=4});
-
-
-			let navmesh = new NavMesh();
-			navmesh.attemptBuildGraph = false;
-			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)}));
-			/*
-			navmesh.regions.forEach((r)=> {
-				if (!r.convex(true)) {
-					console.error("not convex CCW!");
-				}
-			});
-			*/
-			NavMeshUtils.weldVertices(navmesh);
-
-			/*  // only needed if using non union option cdt
-			let holesArr = NavMeshUtils.patchHoles(navmesh.regions);
-			let combinedRegions = navmesh.regions.concat(holesArr); //NavMeshUtils.unlinkPolygons();
-			navmesh.regions = combinedRegions;
+			this.navmeshCityWallWalk = cityWallWalkNavmesh;
 			//*/
-
-			//navmesh = new NavMesh();
-			//navmesh.attemptBuildGraph = false;
-			//navmesh.fromPolygons(combinedRegions);
-
-			// comm awa
-			//g.append(this.makeSVG("path", {stroke:"blue", fill:"rgba(255,255,0,0.4)", "stroke-width":0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 			
-			
-			//g.append(this.makeSVG("path", {stroke:"red", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
-			/*
+			///*
 			g.append(
-				this.makeSVG("path", {"fill":"rgba(255,255,0,1)", "stroke-width":0.1, "stroke":"red",
+				this.makeSVG("path", {"fill":"rgba(0,255,0,1)", "stroke-width":0.1, "stroke":"red",
 					d: cdt.map((tri)=>{return triSVGString(cdtObj.vertices, tri)}).join(" ")})
 			);
-			*/
-
+			//*/
 			let errors = [];
 
 			// slightly problematic..need lenient for now
@@ -30761,6 +30785,7 @@ return d[d.length-1];};return ", funcName].join("");
 				g.append(this.makeSVG("circle", {r:0.5, "stroke":"red", fill:"white", cx:e.x, cy:e.z}));
 			});
 
+			if (this.navmeshCityWallWalk) NavMeshUtils.setAbsAltitudeOfAllPolygons(this.navmeshCityWallWalk.regions, this.cityWallAltitude);
 			NavMeshUtils.setAbsAltitudeOfAllPolygons(navmesh.regions, this.cityWallAltitude);
 
 			return navmesh;
@@ -30779,14 +30804,16 @@ return d[d.length-1];};return ", funcName].join("");
 			this.cityWallTowerWallPolies = [];
 			refPts.forEach((pt)=>{
 				if (!pt.region) return;
-				g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.5, d: polygonSVGString(pt.region)  }));
+
+
+				//g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.5, d: polygonSVGString(pt.region)  }));
 
 				//console.log("Walling:"+NavMeshUtils.countBorderEdges(pt.region));
 
 				NavMeshUtils.getBorderEdges(pt.region).forEach((e)=>{
 					let poly = NavMeshUtils.getNewExtrudeEdgePolygon(e, this.extrudeCityWallTowerWall);
 					this.cityWallTowerWallPolies.push(poly);
-					g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.2, d: polygonSVGString(poly)  }));
+					//g.append(this.makeSVG("path", {stroke:"purple", "stroke-width":0.2, d: polygonSVGString(poly)  }));
 				});
 			});
 
@@ -31390,9 +31417,14 @@ return d[d.length-1];};return ", funcName].join("");
 				yBottom: false
 			};
 
+			if (this.navmeshCityWallWalk) {
+				cityWallEntranceExtrudeParams.excludeTopFaceRender = true;
+			}
+
 			const cityWallEntranceWallParams = {
 				yVal: rampDownLevel,
 				bordersOnly: true,
+				useEdgeMask: true,
 				yBottom: true
 			};
 
