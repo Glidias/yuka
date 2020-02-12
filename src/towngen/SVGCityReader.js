@@ -1238,6 +1238,7 @@ class SVGCityReader {
 		navmesh.attemptBuildGraph = false;
 
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
+		NavMeshUtils.weldVertices(navmesh);
 
 		if (this._PREVIEW_MODE) {
 			var svg = $(this.makeSVG("g", {}));
@@ -1245,6 +1246,10 @@ class SVGCityReader {
 			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 			//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 			//return {vertices:points, edges:edges, cdt:cdt};
+		}
+
+		if (inset !== 0) {
+			NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
 		}
 
 		return navmesh;
