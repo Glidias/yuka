@@ -121,6 +121,10 @@ function pointInTriangle(px, py, c, b, a ) {
 function pointToShapePt(pt) {
 	return {X:pt[0], Y:pt[1]};
 }
+function shapePtToPoint(pt) {
+	return [pt.X, pt.Y];
+}
+
 
 function withinVincityOfPointSet(pt, points, dist) {
 	dist *= dist;
@@ -1190,15 +1194,14 @@ class SVGCityReader {
 
 
 		let cityWallUnion = this.cityWallCSGObj.csg;
-		/*this.getPointsListShape(lineSegments,
-			(points, index)=>{
-				 points = points.slice(0);
-				//points = points.slice(0).reverse();
-				return this.extrudePathOfPoints(points, wallRadius, true, true);
-		});
+		/*
+		let buildingsUnion = this.getPointsListShape(pointsList, null, inset !== 0 ?
+			(shape) => {
+			return shape.offset(inset);
+		} : null);
+		CSG.fromPolygons(buildingsUnion.paths.map((grp)=>{return grp.map(shapePtToPoint)}))
 		*/
-
-		var buildingsShape = CSG.fromPolygons(pointsList); //new Shape(pointsList.map((grp)=>{return grp.map(pointToShapePt)})); // CSG.fromPolygons(pointsList);
+		var buildingsShape =CSG.fromPolygons(pointsList); //new Shape(pointsList.map((grp)=>{return grp.map(pointToShapePt)})); // CSG.fromPolygons(pointsList);
 		var wallsShape = cityWallUnion;
 		let obstacles = buildingsShape.subtract(wallsShape);
 		//if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
@@ -1235,6 +1238,7 @@ class SVGCityReader {
 		let cdt = cdt2d(obstacleVerts, obstacleEdges, {interior:true, exterior:false});
 
 		let navmesh = new NavMesh();
+		// navmesh.attemptMergePolies = false;
 		navmesh.attemptBuildGraph = false;
 
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
@@ -2409,11 +2413,28 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 		});
 	}
 
-	getPointsListShape(pointsList, processPointsMethod) {
+	getPointsListCSG(pointsList, processPointsMethod, csgUnitFactoryMethod) {
 		let polygonsListCSG = [];
 		pointsList.forEach((points, index)=> {
 			if (processPointsMethod) points = processPointsMethod(points, index);
-			polygonsListCSG.push(new Shape([points.map(pointToShapePt)]))
+			let csgUnit = !csgUnitFactoryMethod ? CSG.fromPolygons([points]) : csgUnitFactoryMethod(points);
+			polygonsListCSG.push(csgUnit);
+		});
+
+		let csg = polygonsListCSG[0];
+		for (let i=1; i<polygonsListCSG.length; i++) {
+			csg = csg.union(polygonsListCSG[i]);
+		}
+		return csg;
+	}
+
+	getPointsListShape(pointsList, processPointsMethod, processCSGShapeMethod) {
+		let polygonsListCSG = [];
+		pointsList.forEach((points, index)=> {
+			if (processPointsMethod) points = processPointsMethod(points, index);
+			let shape = new Shape([points.map(pointToShapePt)]);
+			if (processCSGShapeMethod) processCSGShapeMethod(shape);
+			polygonsListCSG.push(shape);
 		});
 		let csg = polygonsListCSG[0];
 		for (let i=1; i<polygonsListCSG.length; i++) {
