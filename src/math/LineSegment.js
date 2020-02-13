@@ -10,7 +10,7 @@ function sqDistBetween2DVector(a, b)
 	var dy = b.z - a.z;
 	return dx * dx + dy * dy;
 }
-	
+
 function rBetween2DVec(a, b, c)
 {
 	var dx = b.x - a.x;
@@ -119,8 +119,8 @@ class LineSegment {
 
 	/**
 	 * Calculates intersection result with other line segment
-	 * @param {LineSegment} other 
-	 * @param {Object} result Holds t result and potentially other info.
+	 * @param {LineSegment} other
+	 * @param {Object} result Holds r and s result timings. R represents timing of intersection along second line segment, S represents timing along first line segment
 	 * @return Whether ray hits
 	 */
 	getIntersects(other, result = null)
@@ -132,7 +132,8 @@ class LineSegment {
 		let denominator = ((b.x - a.x) * (d.z - c.z)) - ((b.z - a.z) * (d.x - c.x));
 		let numerator1 = ((a.z - c.z) * (d.x - c.x)) - ((a.x - c.x) * (d.z - c.z));
 		let numerator2 = ((a.z - c.z) * (b.x - a.x)) - ((a.x - c.x) * (b.z - a.z));
-		
+		let r;
+		let s;
 		// Detect coincident lines (has a problem, read below)
 		if (denominator == 0)
 		{
@@ -144,15 +145,15 @@ class LineSegment {
 			return false; // (r >= 0) && (s >= 0 && s <= 1);
 				//  return numerator1 == 0 && numerator2 == 0;
 		}
-		
-		let r = numerator1 / denominator;
-		let t = numerator2 / denominator;
+
+		r = numerator1 / denominator;
+		s = numerator2 / denominator;
 		if (result !== null) {
 			result.r = r;
-			result.t = t;
+			result.s = s;
 		}
-		// && r <= 1  // (r >= 0) &&
-		return (t >= 0 && t <= 1);
+		//
+		return s >= 0 && s <= 1 && r <= 1 && r >= 0;
 	}
 
 

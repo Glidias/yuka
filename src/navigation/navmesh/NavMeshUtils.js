@@ -49,7 +49,7 @@ function searchEdge(map, builtContour, edge, startingEdge, bi) {
 
 function setToPerp(vec, result) {
     if (!result) result = vec;
-        
+
     var dx = vec.x;
     var dz = vec.z;
     result.x = dz;
@@ -249,13 +249,13 @@ class NavMeshUtils {
                 edgeIndex++;
             } while(edge !== polygon.edge)
 
-          
+
             if (!extrudeParams.bordersOnly) {
                  let fLen = fi - 1;
-              
+
                 // set up upper top face indices
                 if (!extrudeParams.excludeTopFaceRender) {
-                   
+
                     for (let f=1; f< fLen; f++) {
                         indices[ii++] = faceIndices[0];
                         indices[ii++] = faceIndices[f];
@@ -780,10 +780,10 @@ class NavMeshUtils {
 
 
     /**
-     * 
+     *
      * @param {NavMesh}  navMesh
      * @param {Number}  inset   The amount to inset navmesh by
-     * @return A Map to map vertices/borders of current navmesh with insetted/offseted lines 
+     * @return A Map to map vertices/borders of current navmesh with insetted/offseted lines
      */
     static getBorderEdgeOffsetProjections(navMesh, inset) {
 
@@ -817,50 +817,54 @@ class NavMeshUtils {
             dz/=d;
             setToPerp(e.dir = new Vector3(dx, 0, dz), e.normal = new Vector3());
         }
-        
+
         let arr;
         let arr2;
-        
+
           for(let i=0; i<len; i++) {
             let edge = navMesh._borderEdges[i];
              if (vertexToEdgesMap.has(edge.prev.vertex)) {
 
                 arr = vertexToEdgesMap.get(edge.prev.vertex);
                 if (arr.length >=2) {
-                
+
                     if (arr.length !== 2) {
                     arr = arr.filter(function(e){return e.polygon===edge.polygon;});
                        // console.log("FILTERING!!");
-                    } 
+                    }
                     if (arr.length !==2) {
                     // throw new Error( "COULD NOT reduce to 2 common edges for border!");
-                        console.warn( "COULD NOT reduce to 2 common edges for border!");
-                      
-                    } 
+                        //console.warn( "COULD NOT reduce to 2 common edges for border!");
+
+                    }
                 }
             } else {
                 throw new Error( "Isolated border found..should not happen?");
             }
-            
-            var filtered = false;
+
+
             if (vertexToEdgesMap.has(edge.vertex)) {
 
                 arr2 = vertexToEdgesMap.get(edge.vertex);
                 if (arr2.length >=2) {
-                
+
                     if (arr2.length !== 2) {
                     arr2 = arr2.filter(function(e){return e.polygon===edge.polygon;});
-                        filtered = true;
-                    } 
+                        //console.log("FILTERING!!");
+                    }
                     if (arr2.length !==2) {
                     // throw new Error( "222; COULD NOT reduce to 2 common edges for border!");
-                        console.warn( "222; COULD NOT reduce to 2 common edges for border!");
-                    } 
+                       // console.warn( "222; COULD NOT reduce to 2 common edges for border!");
+                        if (arr.length !==2) {
+                           // console.warn( "222; COULD NOT reduce to 2 common edges for border!");
+
+                        }
+                    }
                 }
             } else {
                 throw new Error( "222; Isolated border found..should not happen?");
             }
-            
+
         }
 
         // iterate through all vertices incident to border edges to set up their vertex normal plane boundaries
@@ -877,20 +881,23 @@ class NavMeshUtils {
 
            // collinear edges case on opposite directions
            if (plane.x * plane.x + plane.z * plane.z < 1e-7) {
-                setToPerp(e.normal, plane);
-                // todo: how to validate above perp direction as to whether to flip or not?
+                let sampleEdge = edges[0];
+                plane.copy(sampleEdge.dir).multiplyScalar(sampleEdge.vertex === vertex ? 1 : -1);
            }
            let vx = vertex.x + plane.x * inset;
            let vz = vertex.z + plane.y * inset;
            plane.x = -plane.x;
            plane.z = -plane.z;
            plane.w = vx * plane.x + vz * plane.z;
-           
+
            vertex.plane = plane;
+
+
+           // resultMap.set(vertex, edges[0]);  // testing
 
         });
 
-        // iterate through each border edge to expand and stretch 
+        // iterate through each border edge to expand and stretch
         for(let i=0;i<len; i++) {
             e = navMesh._borderEdges[i];
             e.vertex.value = new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset);
@@ -899,27 +906,33 @@ class NavMeshUtils {
         }
 
         for (let i =0; i<len; i++) {
+            e = navMesh._borderEdges[i];
             let neighborEdge;
             let arr;
-
            arr = vertexToEdgesMap.get(e.vertex);
            neighborEdge = arr[0] === e ? arr[1] : arr[0];
            if (neighborEdge) { // forwardDir for e.vertex
-                LINE.from.copy(e.prev.vertex.value);
-                LINE.to.copy(e.vertex.value);
+                if (!e.vertex.result) {
+                    LINE.from.copy(e.prev.vertex.value);
+                    LINE.to.copy(e.vertex.value);
 
-                LINE2.from.copy(neighborEdge.prev.vertex.value);
-                LINE2.to.copy(neighborEdge.vertex.value);
+                    LINE2.from.copy(neighborEdge.prev.vertex.value);
+                    LINE2.to.copy(neighborEdge.vertex.value);
 
-                // if intersected neighborLine
-                if (LINE.getIntersects(LINE2, LINE_RESULT)) {
-
-                } else {
-                    console.warn("SHOULD NOT HAPPEN");
+                    // if intersected neighborLine
+                    if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+                        LINE.at(LINE_RESULT.r, e.vertex.result = new Vector3());
+                        console.log('got intersect');
+                    } else {
+                        // TODO normal plane intersection and consider weld or chamfer later
+                        e.vertex.result = new Vector3().copy(e.vertex);
+                        resultMap.set(e.vertex, e);  // testing
+                        console.log('no intersect');
+                    }
                 }
 
            } else {
-               console.error("failed to find neighbor edge")
+                throw new Error("Failed to find neighbnor edge!");
            }
             // consider e.vertex stretch VERSUS neighboring borderEdge or respective plane bonudary
 
@@ -928,23 +941,31 @@ class NavMeshUtils {
             arr = vertexToEdgesMap.get(e.prev.vertex);
            neighborEdge = arr[0] === e ? arr[1] : arr[0];
            if (neighborEdge) { // reverseDir for e.prev.vertex
-             LINE.from.copy(e.vertex.value);
-             LINE.to.copy(e.prev.vertex.value);
+                if (!e.prev.vertex.result) {
+                    LINE.from.copy(e.vertex.value);
+                    LINE.to.copy(e.prev.vertex.value);
 
-            LINE2.from.copy(neighborEdge.prev.vertex.value);
-            LINE2.to.copy(neighborEdge.vertex.value);
+                    LINE2.from.copy(neighborEdge.prev.vertex.value);
+                    LINE2.to.copy(neighborEdge.vertex.value);
 
-            if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+                    if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+                        LINE.at(LINE_RESULT.r, e.prev.vertex.result = new Vector3());
 
-            }
-
-
+                    } else {
+                        // TODO normal plane intersection and consider weld or chamfer later
+                        //console.warn("SHOULD NOT HAPPEN");
+                        e.prev.vertex.result = new Vector3().copy(e.prev.vertex);
+                        resultMap.set(e.prev.vertex, e);  // testing
+                    }
+                }
            } else {
-               console.error("failed to find neighbor edge2")
+              throw new Error("Failed to find neighbnor edge 222!");
            }
+
+
         }
 
-        
+
         return resultMap;
     }
 

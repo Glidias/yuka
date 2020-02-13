@@ -570,6 +570,10 @@ function polygonSVGString(polygon) {
 }
 
 function lineSegmentSVGStr(v1, v2) {
+	if (!v2) {
+		v2 = v1.to;
+		v1 = v1.from;
+	}
 	let str = "M"+v1.x+","+v1.z + " ";
 	str += "L"+v2.x+","+v2.z + " ";
 	return str;
@@ -1244,16 +1248,34 @@ class SVGCityReader {
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
 		NavMeshUtils.weldVertices(navmesh);
 
+		var svg;
 		if (this._PREVIEW_MODE) {
-			var svg = $(this.makeSVG("g", {}));
+			svg = $(this.makeSVG("g", {}));
 			this.map.append(svg, {});
 			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 			//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 			//return {vertices:points, edges:edges, cdt:cdt};
 		}
 
+
 		if (inset !== 0) {
-			NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
+			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
+			/*
+			if (this._PREVIEW_MODE) {
+				svg = $(this.makeSVG("g", {}));
+				this.map.append(svg, {});
+				resultMap.forEach( (edge, vertex) => {
+				//	svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edgeSVGString(edge) }));
+					svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"white", "stroke-width": 0.15, d:lineSegmentSVGStr(new LineSegment(vertex, new Vector3().copy(vertex).add(new Vector3().copy(vertex.plane).multiplyScalar(-0.4)))) }));
+				});
+			}
+			*/
+
+			if (this._PREVIEW_MODE) {
+				svg = $(this.makeSVG("g", {}));
+				this.map.append(svg, {});
+				svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d: navmesh._borderEdges.map((b)=>{return lineSegmentSVGStr(b.prev.vertex.result, b.vertex.result)}).join(" ") }));
+			}
 		}
 
 		return navmesh;
