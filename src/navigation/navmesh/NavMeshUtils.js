@@ -900,8 +900,8 @@ class NavMeshUtils {
         // iterate through each border edge to expand and stretch
         for(let i=0;i<len; i++) {
             e = navMesh._borderEdges[i];
-            e.vertex.value = new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset);
-            e.prev.vertex.value = new Vector3(e.prev.vertex.x + e.normal.x * inset, 0, e.prev.vertex.z + e.normal.z * inset);
+            e.value = new LineSegment(new Vector3(e.prev.vertex.x + e.normal.x * inset, 0, e.prev.vertex.z + e.normal.z * inset)
+            , new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset));
             // nice to have: get proper height value of vertex over edge's triangle polygon
         }
 
@@ -912,24 +912,27 @@ class NavMeshUtils {
            arr = vertexToEdgesMap.get(e.vertex);
            neighborEdge = arr[0] === e ? arr[1] : arr[0];
            if (neighborEdge) { // forwardDir for e.vertex
-                if (!e.vertex.result) {
-                    LINE.from.copy(e.prev.vertex.value);
-                    LINE.to.copy(e.vertex.value);
+               //if (!e.vertex.result) {
+                    LINE.from.copy(e.value.from);
+                    LINE.to.copy(e.value.to);
 
-                    LINE2.from.copy(neighborEdge.prev.vertex.value);
-                    LINE2.to.copy(neighborEdge.vertex.value);
+                    LINE2.from.copy(neighborEdge.value.from);
+                    LINE2.to.copy(neighborEdge.value.to);
 
                     // if intersected neighborLine
                     if (LINE.getIntersects(LINE2, LINE_RESULT)) {
-                        LINE.at(LINE_RESULT.r, e.vertex.result = new Vector3());
-                        console.log('got intersect');
+                        LINE.at(LINE_RESULT.s, e.vertex.result = new Vector3());
+                        //console.log('got intersect');
+                         resultMap.set(e.vertex, e);  // testing
+                        
                     } else {
                         // TODO normal plane intersection and consider weld or chamfer later
-                        e.vertex.result = new Vector3().copy(e.vertex);
-                        resultMap.set(e.vertex, e);  // testing
-                        console.log('no intersect');
+                        
+                        //e.vertex.result = new Vector3().copy(e.vertex);
+                       
+                       // console.log('no intersect');
                     }
-                }
+                //}
 
            } else {
                 throw new Error("Failed to find neighbnor edge!");
@@ -939,25 +942,29 @@ class NavMeshUtils {
 
             // consider e.prev.vertex stretch VERSUS borderEdge or respectivee plane boundary
             arr = vertexToEdgesMap.get(e.prev.vertex);
+            let lastNeighborEdge = neighborEdge;
            neighborEdge = arr[0] === e ? arr[1] : arr[0];
            if (neighborEdge) { // reverseDir for e.prev.vertex
-                if (!e.prev.vertex.result) {
-                    LINE.from.copy(e.vertex.value);
-                    LINE.to.copy(e.prev.vertex.value);
+                //if (!e.prev.vertex.result) {
+                    LINE.from.copy(e.value.to);
+                    LINE.to.copy(e.value.from);
 
-                    LINE2.from.copy(neighborEdge.prev.vertex.value);
-                    LINE2.to.copy(neighborEdge.vertex.value);
+                    LINE2.from.copy(neighborEdge.value.from);
+                    LINE2.to.copy(neighborEdge.value.to);
+
+                    if (lastNeighborEdge === neighborEdge) throw new Error("SHOULD NOT BE SAME NEIGHBOR EDGE For opposite end!");
 
                     if (LINE.getIntersects(LINE2, LINE_RESULT)) {
-                        LINE.at(LINE_RESULT.r, e.prev.vertex.result = new Vector3());
-
+                        LINE.at(LINE_RESULT.s, e.prev.vertex.result = new Vector3());
+                        resultMap.set(e.prev.vertex, e);  // testing
                     } else {
                         // TODO normal plane intersection and consider weld or chamfer later
                         //console.warn("SHOULD NOT HAPPEN");
-                        e.prev.vertex.result = new Vector3().copy(e.prev.vertex);
-                        resultMap.set(e.prev.vertex, e);  // testing
+                      
+                      //  e.prev.vertex.result = new Vector3().copy(e.prev.vertex);
+                      
                     }
-                }
+                //}
            } else {
               throw new Error("Failed to find neighbnor edge 222!");
            }

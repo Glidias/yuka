@@ -1270,12 +1270,24 @@ class SVGCityReader {
 				});
 			}
 			*/
-
+			/*
 			if (this._PREVIEW_MODE) {
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
 				svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d: navmesh._borderEdges.map((b)=>{return lineSegmentSVGStr(b.prev.vertex.result, b.vertex.result)}).join(" ") }));
 			}
+			*/
+			///*
+			if (this._PREVIEW_MODE) {
+				svg = $(this.makeSVG("g", {}));
+				this.map.append(svg, {});
+				resultMap.forEach( (edge, vertex) => {
+					svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:lineSegmentSVGStr(edge.value.from, edge.value.to) }));
+					svg.append(this.makeSVG("circle", {r:0.15, fill:"white", cx:vertex.result.x, cy:vertex.result.z}));
+					//svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"white", "stroke-width": 0.15, d:lineSegmentSVGStr(new LineSegment(vertex, new Vector3().copy(vertex).add(new Vector3().copy(vertex.plane).multiplyScalar(-0.4)))) }));
+				});
+			}
+			//*/
 		}
 
 		return navmesh;
