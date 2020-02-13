@@ -5,6 +5,7 @@ import { Vector3 } from '../../math/Vector3.js';
 import { Polygon } from '../../math/Polygon.js';
 import { Plane } from '../../math/Plane.js';
 import {HalfEdge} from '../../math/HalfEdge.js';
+import {LineSegment} from '../../math/LineSegment.js';
 
 var MAX_HOLE_LEN = 16;
 
@@ -45,6 +46,15 @@ function searchEdge(map, builtContour, edge, startingEdge, bi) {
     }
     return 0;
 }
+
+function setToPerp(vec, result) {
+    if (!result) result = vec;
+        
+    var dx = vec.x;
+    var dz = vec.z;
+    result.x = dz;
+    result.z = -dx;
+};
 
 var transformId = 0;
 
@@ -588,6 +598,7 @@ class NavMeshUtils {
         let regions = navmesh.regions || navmesh;
         let len = regions.length;
         let map = new Map();
+        let weldCount = 0;
         let r;
         let edge;
         for (let i=0; i< len; i++) {
@@ -598,11 +609,13 @@ class NavMeshUtils {
                 if (!map.has(key)) {
                     map.set(key, edge.vertex);
                 } else {
+                    weldCount += edge.vertex !== map.get(key);
                     edge.vertex = map.get(key);
                 }
                 edge = edge.next;
             } while (edge !== r.edge)
         }
+        console.log("NAvmesh Welded vertices count:" + weldCount);
     }
 
     static divideEdgeByVertex(splitVertex, edge) {
@@ -762,6 +775,177 @@ class NavMeshUtils {
             } while (edge !== r.edge)
         }
         return holesAdded;
+    }
+
+
+
+    /**
+     * 
+     * @param {NavMesh}  navMesh
+     * @param {Number}  inset   The amount to inset navmesh by
+     * @return A Map to map vertices/borders of current navmesh with insetted/offseted lines 
+     */
+    static getBorderEdgeOffsetProjections(navMesh, inset) {
+
+        const LINE = new LineSegment();
+        const LINE2 = new LineSegment();
+        const LINE_RESULT = {};
+
+        let resultMap = new Map();
+        // offseted vertex map
+
+        // vertex to incident [edges] map
+        var vertexToEdgesMap = new Map();
+        let len = navMesh._borderEdges.length;
+        var e;
+        for(let i=0; i<len; i++) {
+            e = navMesh._borderEdges[i];
+            if (!vertexToEdgesMap.has(e.vertex)) {
+                vertexToEdgesMap.set(e.vertex, [e]);
+            } else {
+                vertexToEdgesMap.get(e.vertex).push(e);
+            }
+            if (!vertexToEdgesMap.has(e.prev.vertex)) {
+                vertexToEdgesMap.set(e.prev.vertex, [e]);
+            } else {
+                vertexToEdgesMap.get(e.prev.vertex).push(e);
+            }
+            let dx = e.vertex.x - e.prev.vertex.x;
+            let dz = e.vertex.z - e.prev.vertex.z;
+            let d = Math.sqrt(dx*dx + dz*dz);
+            dx/=d;
+            dz/=d;
+            setToPerp(e.dir = new Vector3(dx, 0, dz), e.normal = new Vector3());
+        }
+        
+        let arr;
+        let arr2;
+        
+          for(let i=0; i<len; i++) {
+            let edge = navMesh._borderEdges[i];
+             if (vertexToEdgesMap.has(edge.prev.vertex)) {
+
+                arr = vertexToEdgesMap.get(edge.prev.vertex);
+                if (arr.length >=2) {
+                
+                    if (arr.length !== 2) {
+                    arr = arr.filter(function(e){return e.polygon===edge.polygon;});
+                       // console.log("FILTERING!!");
+                    } 
+                    if (arr.length !==2) {
+                    // throw new Error( "COULD NOT reduce to 2 common edges for border!");
+                        console.warn( "COULD NOT reduce to 2 common edges for border!");
+                      
+                    } 
+                }
+            } else {
+                throw new Error( "Isolated border found..should not happen?");
+            }
+            
+            var filtered = false;
+            if (vertexToEdgesMap.has(edge.vertex)) {
+
+                arr2 = vertexToEdgesMap.get(edge.vertex);
+                if (arr2.length >=2) {
+                
+                    if (arr2.length !== 2) {
+                    arr2 = arr2.filter(function(e){return e.polygon===edge.polygon;});
+                        filtered = true;
+                    } 
+                    if (arr2.length !==2) {
+                    // throw new Error( "222; COULD NOT reduce to 2 common edges for border!");
+                        console.warn( "222; COULD NOT reduce to 2 common edges for border!");
+                    } 
+                }
+            } else {
+                throw new Error( "222; Isolated border found..should not happen?");
+            }
+            
+        }
+
+        // iterate through all vertices incident to border edges to set up their vertex normal plane boundaries
+        vertexToEdgesMap.forEach((edges, vertex)=> {
+           let len = edges.length;
+           let plane = new Vector3(0, 0, 0);
+           for (let i = 0; i< len; i++) {
+                e = edges[i];
+                plane.x += e.normal.x;
+                plane.z += e.normal.z;
+           }
+           plane.x /= len;
+           plane.z /= len;
+
+           // collinear edges case on opposite directions
+           if (plane.x * plane.x + plane.z * plane.z < 1e-7) {
+                setToPerp(e.normal, plane);
+                // todo: how to validate above perp direction as to whether to flip or not?
+           }
+           let vx = vertex.x + plane.x * inset;
+           let vz = vertex.z + plane.y * inset;
+           plane.x = -plane.x;
+           plane.z = -plane.z;
+           plane.w = vx * plane.x + vz * plane.z;
+           
+           vertex.plane = plane;
+
+        });
+
+        // iterate through each border edge to expand and stretch 
+        for(let i=0;i<len; i++) {
+            e = navMesh._borderEdges[i];
+            e.vertex.value = new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset);
+            e.prev.vertex.value = new Vector3(e.prev.vertex.x + e.normal.x * inset, 0, e.prev.vertex.z + e.normal.z * inset);
+            // nice to have: get proper height value of vertex over edge's triangle polygon
+        }
+
+        for (let i =0; i<len; i++) {
+            let neighborEdge;
+            let arr;
+
+           arr = vertexToEdgesMap.get(e.vertex);
+           neighborEdge = arr[0] === e ? arr[1] : arr[0];
+           if (neighborEdge) { // forwardDir for e.vertex
+                LINE.from.copy(e.prev.vertex.value);
+                LINE.to.copy(e.vertex.value);
+
+                LINE2.from.copy(neighborEdge.prev.vertex.value);
+                LINE2.to.copy(neighborEdge.vertex.value);
+
+                // if intersected neighborLine
+                if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+
+                } else {
+                    console.warn("SHOULD NOT HAPPEN");
+                }
+
+           } else {
+               console.error("failed to find neighbor edge")
+           }
+            // consider e.vertex stretch VERSUS neighboring borderEdge or respective plane bonudary
+
+
+            // consider e.prev.vertex stretch VERSUS borderEdge or respectivee plane boundary
+            arr = vertexToEdgesMap.get(e.prev.vertex);
+           neighborEdge = arr[0] === e ? arr[1] : arr[0];
+           if (neighborEdge) { // reverseDir for e.prev.vertex
+             LINE.from.copy(e.vertex.value);
+             LINE.to.copy(e.prev.vertex.value);
+
+            LINE2.from.copy(neighborEdge.prev.vertex.value);
+            LINE2.to.copy(neighborEdge.vertex.value);
+
+            if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+
+            }
+
+
+           } else {
+               console.error("failed to find neighbor edge2")
+           }
+        }
+
+        
+        return resultMap;
     }
 
 }
