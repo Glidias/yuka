@@ -1281,10 +1281,22 @@ class SVGCityReader {
 			if (this._PREVIEW_MODE) {
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
-				resultMap.forEach( (edge, vertex) => {
-					svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:lineSegmentSVGStr(edge.value.from, edge.value.to) }));
-					svg.append(this.makeSVG("circle", {r:0.15, fill:"white", cx:vertex.result.x, cy:vertex.result.z}));
-					//svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"white", "stroke-width": 0.15, d:lineSegmentSVGStr(new LineSegment(vertex, new Vector3().copy(vertex).add(new Vector3().copy(vertex.plane).multiplyScalar(-0.4)))) }));
+				resultMap.forEach( (edges, vertex) => {
+					let isArr = Array.isArray(edges);
+					if (isArr && !edges.coincident) {
+						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
+						svg.append(this.makeSVG("circle", {r:0.15, fill:"white", cx:vertex.result.x, cy:vertex.result.z}));
+						//svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"white", "stroke-width": 0.15, d:lineSegmentSVGStr(new LineSegment(vertex, new Vector3().copy(vertex).add(new Vector3().copy(vertex.plane).multiplyScalar(-0.4)))) }));
+					} else {
+						if (isArr) {
+							// coincident case of intersetion
+							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[0].value.from,edges[0].value.to)}));
+							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[1].value.from,edges[1].value.to)}));
+						}
+						else svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"red", "stroke-width": 0.15, d:lineSegmentSVGStr(edges.value.from,edges.value.to)}));
+
+						svg.append(this.makeSVG("circle", {r:0.15, fill:isArr ? "violet" : "red", cx:vertex.x, cy:vertex.z}));
+					}
 				});
 			}
 			//*/

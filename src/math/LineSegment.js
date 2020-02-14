@@ -120,7 +120,7 @@ class LineSegment {
 	/**
 	 * Calculates intersection result with other line segment
 	 * @param {LineSegment} other
-	 * @param {Object} result Holds r and s result timings. R represents timing of intersection along second line segment, S represents timing along first line segment
+	 * @param {Object} result Holds r and s result timings. R represents timing of intersection along first line segment, S represents timing along second line segment
 	 * @return Whether ray hits
 	 */
 	getIntersects(other, result = null)
@@ -141,7 +141,11 @@ class LineSegment {
 			s = sqDistBetween2DVector(a, c) < sqDistBetween2DVector(a, d) ? 0 : 1;
 			r = s != 0 ? rBetween2DVec(a, b, d) : rBetween2DVec(a, b, c);
 			// throw new Error("DETECT");
-			result.coincident = true;
+			if (result !== null) {
+				result.r = r;
+				result.s = s;
+				result.coincident = true;
+			}
 			return false; // (r >= 0) && (s >= 0 && s <= 1);
 				//  return numerator1 == 0 && numerator2 == 0;
 		}
@@ -151,6 +155,7 @@ class LineSegment {
 		if (result !== null) {
 			result.r = r;
 			result.s = s;
+			result.coincident = false;
 		}
 		//
 		return s >= 0 && s <= 1 && r <= 1 && r >= 0;
