@@ -1282,20 +1282,20 @@ class SVGCityReader {
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
 				resultMap.forEach( (edges, vertex) => {
-					let isArr = Array.isArray(edges);
-					if (isArr && !edges.coincident) {
-						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
-						svg.append(this.makeSVG("circle", {r:0.15, fill:"white", cx:vertex.result.x, cy:vertex.result.z}));
-						//svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"white", "stroke-width": 0.15, d:lineSegmentSVGStr(new LineSegment(vertex, new Vector3().copy(vertex).add(new Vector3().copy(vertex.plane).multiplyScalar(-0.4)))) }));
-					} else {
-						if (isArr) {
+					if (!vertex.chamfer) {
+						if (!edges.coincident) {
+							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
+							svg.append(this.makeSVG("circle", {r:0.15, fill:vertex.welded ? "red" : "white", cx:vertex.result.x, cy:vertex.result.z}));
+						} else {
 							// coincident case of intersetion
 							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"yellow", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[0].value.from,edges[0].value.to)}));
 							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"violet", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[1].value.from,edges[1].value.to)}));
+							svg.append(this.makeSVG("circle", {r:0.15, fill:"yellow", cx:vertex.result.x, cy:vertex.result.z}));
 						}
-						else svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"red", "stroke-width": 0.15, d:lineSegmentSVGStr(edges.value.from,edges.value.to)}));
-
-						svg.append(this.makeSVG("circle", {r:0.15, fill:isArr ? "yellow" : "red", cx:vertex.x, cy:vertex.z}));
+					} else {
+						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
+						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(vertex.chamfer.from, vertex.chamfer.to)).join(" ")}));
+						svg.append(this.makeSVG("circle", {r:0.15, fill:!vertex.chamfer.exceedCount ? "red" : "pink", cx:vertex.x, cy:vertex.z}));
 					}
 				});
 			}

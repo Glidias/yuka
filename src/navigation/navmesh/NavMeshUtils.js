@@ -28,6 +28,17 @@ function searchEdgeList(map, builtContour, startingEdge) {
     return 0;
 }
 
+function length2DSegment(segment) {
+    let dx = segment.to.x - segment.from.x;
+    let dz = segment.to.z - segment.from.z;
+    return Math.sqrt(dx*dx + dz*dz);
+}
+
+function lengthSq2DSegment(segment) {
+    let dx = segment.to.x - segment.from.x;
+    let dz = segment.to.z - segment.from.z;
+    return dx*dx + dz*dz;
+}
 
 function searchEdge(map, builtContour, edge, startingEdge, bi) {
     if (bi >= MAX_HOLE_LEN) return 0;
@@ -834,14 +845,15 @@ class NavMeshUtils {
      *
      * @param {NavMesh}  navMesh
      * @param {Number}  inset   The amount to inset navmesh by
+     * @param {Number}  minChamferLength   The minimum chamfer distance
      * @return A Map to map vertices/borders of current navmesh with insetted/offseted lines
      */
-    static getBorderEdgeOffsetProjections(navMesh, inset) {
+    static getBorderEdgeOffsetProjections(navMesh, inset, minChamferDist = 1e-5) {
 
         const LINE = new LineSegment();
         const LINE2 = new LineSegment();
         const LINE_RESULT = {};
-
+        const minChamferDistSq = minChamferDist*minChamferDist;
         // TODO: project zero y values
 
         let resultMap = new Map();
@@ -890,7 +902,6 @@ class NavMeshUtils {
 
         let plane = new Vector3();
         let tPlane;
-        let delta = new Vector3();
         let snapT;
         let deltaLength;
         let splitVertex;
@@ -911,34 +922,50 @@ class NavMeshUtils {
                     LINE2.to.copy(neighborEdge.value.to);
 
                     // if intersected neighborLine
-                    if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+                    if (LINE.getIntersects(LINE2, LINE_RESULT) && !e.vertex.chamfer) {
                         LINE.at(LINE_RESULT.r, e.vertex.result = new Vector3());
                         //console.log('got intersect');
 
                          //console.log((LINE_RESULT.r * LINE.delta(delta).length()) + ' vs ' + getIntersectionTimeToPlaneBound(LINE.from, e.dir.x, e.dir.z, neighborEdge.reverseNormal));
                          resultMap.set(e.vertex, [e, neighborEdge]);  // testing
+
+                         if (e.vertex.chamfer) {
+                             throw new Error("Already got chamfer!");
+                             e.vertex.chamfer = null;
+                         }
                          //resultMap.set(e.vertex, neighborEdge);  // testing
 
                     } else {
-                        if (LINE_RESULT.coincident) {
-                            let tester = [e, neighborEdge];
-                            tester.coincident = true;
-                            e.vertex.result = new Vector3(e.value.from.x, e.value.from.y, e.value.from.z);
+                        if (LINE_RESULT.coincident) { 
+                            let coincidentArr = [e, neighborEdge];
+                            coincidentArr.coincident = true;
+                            e.vertex.result = new Vector3(e.value.to.x, e.value.to.y, e.value.to.z);
                             //console.log("coincident detected", e, neighborEdge);
-                            resultMap.set(e.prev.vertex, tester);
+                            resultMap.set(e.vertex, coincidentArr);
                         }
                         else {
-                            snapT = LINE_RESULT.r * (deltaLength = LINE.delta(delta).length());
+                            snapT = LINE_RESULT.r * (deltaLength = length2DSegment(LINE));
 
                             plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.vertex, inset, plane);
                             tPlane = getIntersectionTimeToPlaneBound(LINE.from, e.dir.x, e.dir.z, plane);
-                            splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z, e);
-                            resultMap.set(splitVertex, e);
-                            if (tPlane > deltaLength && tPlane < snapT) {
-                                console.log(tPlane + ' vs ' + snapT);
+                            splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z);
+                            if (LINE_RESULT.r > 1 && tPlane > deltaLength && tPlane < snapT) {
+                                // console.log(tPlane + ' vs ' + snapT + ' >>>' + deltaLength);
                                 splitVertex.x = LINE.from.x + tPlane * e.dir.x;
                                 splitVertex.z = LINE.from.z + tPlane * e.dir.z;
                             }
+                            if (!e.vertex.chamfer) {
+                                 e.vertex.chamfer = new LineSegment(null,null);
+                                 e.vertex.chamfer.count = 0;
+                                 resultMap.set(e.vertex, [e, neighborEdge]);
+                            }
+                            //if (e.vertex.chamfer.from) {
+                                //throw new Error("Already assigned .from chamfer");
+                               // console.error("Already assigned .from chamfer");
+                                //console.log(e.vertex.chamfer.from.x + ' , '+e.vertex.chamfer.from.z + ' vs ' + splitVertex.x + ', '+splitVertex.z);
+                            //}
+                            e.vertex.chamfer.count++;
+                            e.vertex.chamfer.from = splitVertex;
 
                             //if (tPlane * tPlane >= )
                             //console.log(tPlane);
@@ -947,7 +974,7 @@ class NavMeshUtils {
                 }
 
            } else {
-                throw new Error("Failed to find neighbnor edge!");
+                throw new Error("Failed to find complementary neighbnor edge!");
            }
             // consider e.vertex stretch VERSUS neighboring borderEdge or respective plane bonudary
 
@@ -967,38 +994,94 @@ class NavMeshUtils {
                     LINE2.from.copy(neighborEdge.value.from);
                     LINE2.to.copy(neighborEdge.value.to);
 
-                    if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+                    if (LINE.getIntersects(LINE2, LINE_RESULT) && !e.prev.vertex.chamfer) {
                         LINE.at(LINE_RESULT.r, e.prev.vertex.result = new Vector3());
                         //console.log((LINE_RESULT.r * LINE.delta(delta).length()) + ' vss ' + getIntersectionTimeToPlaneBound(LINE.from, -e.dir.x, -e.dir.z, neighborEdge.reverseNormal));
-                        resultMap.set(e.prev.vertex, [e, neighborEdge]);  // testing
+                        resultMap.set(e.prev.vertex, [neighborEdge, e]);  // testing
+
+                         if (e.prev.vertex.chamfer) {
+                             throw new Error("Already got chamfer 222!");
+                             e.prev.vertex.chamfer = null;
+                         }
                     } else {
                         if (LINE_RESULT.coincident) {
-                            let tester = [e, neighborEdge];
-                            tester.coincident = true;
+                            let coincidentArr = [neighborEdge, e];
+                            coincidentArr.coincident = true;
                             e.prev.vertex.result = new Vector3(e.value.from.x, e.value.from.y, e.value.from.z);
                             //console.log("coincident detected", e, neighborEdge);
-                            resultMap.set(e.prev.vertex, tester);
+                            resultMap.set(e.prev.vertex, coincidentArr);
                         }
                         else {
-                            snapT = LINE_RESULT.r * (deltaLength = LINE.delta(delta).length());
+                            snapT = LINE_RESULT.r * (deltaLength = length2DSegment(LINE));
                             plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.prev.vertex, inset, plane);
                             tPlane = getIntersectionTimeToPlaneBound(LINE.from, -e.dir.x, -e.dir.z, plane);
-                            splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z, e);
-                            resultMap.set(splitVertex, e);
-                            if (tPlane > deltaLength && tPlane < snapT) {
-                                console.log(tPlane + ' vss ' + snapT);
+                            splitVertex =  new Vector3(LINE.to.x, 0, LINE.to.z);
+                            if (LINE_RESULT.r > 1 && tPlane > deltaLength && tPlane < snapT) {
+                                //console.log(tPlane + ' vss ' + snapT + ' >>> '+deltaLength);
                                 splitVertex.x = LINE.from.x + tPlane * -e.dir.x;
                                 splitVertex.z = LINE.from.z + tPlane * -e.dir.z;
-                            }
 
+                            }
+                            if (!e.prev.vertex.chamfer) {
+                                e.prev.vertex.chamfer = new LineSegment(null, null);
+                                e.prev.vertex.chamfer.count = 0;
+                                resultMap.set(e.prev.vertex, [neighborEdge, e]);
+                            }
+                            //if (e.prev.vertex.chamfer.to) {
+                                //throw new Error("Already assigned .to chamfer");
+                               // console.error("Alread assigned .to chamfer");
+                                // console.log(e.prev.vertex.chamfer.to.x + ' , '+e.prev.vertex.chamfer.to.z + ' vs ' + splitVertex.x + ', '+splitVertex.z)
+                            //} 
+                            e.prev.vertex.chamfer.count++;
+                            e.prev.vertex.chamfer.to = splitVertex;
+                           
                         }
                     }
                 }
            } else {
-              throw new Error("Failed to find neighbnor edge 222!");
+              throw new Error("Failed to find complementary neighbnor edge 222!");
            }
 
 
+        }
+
+        // validate resultMap, resolve and weld
+        let errorCount = 0;
+        resultMap.forEach((edges, vertex) => {
+            if (vertex.chamfer) {
+                if (!vertex.chamfer.from || !vertex.chamfer.to) {
+                    errorCount++;
+                    console.error("Missing complement vertex chamfer!:" + vertex.chamfer.from + ', ' + vertex.chamfer.to  + ", "+ vertex.result + ", " + !!edges.coincident + " >>"+vertex.chamfer.count)
+                } else {
+                  
+                    // todo: check if close enough chamfer to consider welding as vertex.result instead
+                    if (lengthSq2DSegment(vertex.chamfer) <= minChamferDistSq) { // welded chamfer vertex result
+                        //console.log('TODO: weld chamfer');
+                        vertex.result = vertex.chamfer.from; // temp
+                        vertex.result.welded = true;
+                        vertex.chamfer = null;
+                        edges[0].value.to = vertex.result;
+                        edges[1].value.from = vertex.result;
+                        return;
+                    }
+
+                    // chamfer vertex
+                    edges[0].value.to = vertex.chamfer.from;
+                    edges[1].value.from = vertex.chamfer.to;
+                }
+                if (vertex.chamfer.count !== 2) {
+                   // errorCount++;
+                   vertex.chamfer.exceedCount = vertex.chamfer.count;
+                    console.error("Exceeded count assignment! " + vertex.chamfer.count)
+                }
+
+            } else { // intersected vertex
+                edges[0].value.to = vertex.result;
+                edges[1].value.from = vertex.result;
+            }
+        });
+        if (errorCount > 0) {
+            throw new Error("Validation failed!");
         }
 
 
