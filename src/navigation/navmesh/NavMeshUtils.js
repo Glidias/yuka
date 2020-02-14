@@ -27,6 +27,8 @@ function searchEdgeList(map, builtContour, startingEdge) {
     }
     return 0;
 }
+
+
 function searchEdge(map, builtContour, edge, startingEdge, bi) {
     if (bi >= MAX_HOLE_LEN) return 0;
     let edgeList = map.get(edge.vertex);
@@ -55,6 +57,41 @@ function setToPerp(vec, result) {
     result.x = dz;
     result.z = -dx;
 }
+
+/**
+ *
+ * @param {HalfEdge} edge Assumes edge.normal/edge.dir already precaulcated
+ * @param {HalfEdge} neighborEdge Assumes neighborEdge.normal/neighborEdge.dir already precaulcated
+ * @param {Vector3} vertex
+ * @param {Number} inset
+ * @param {Vector3} plane Will save additional w property representing offset along plane
+ */
+function calcPlaneBoundaryBetweenEdges(edge, neighborEdge, vertex, inset, plane) {
+    if (plane === undefined) plane = new Vector3();
+
+    let planeX = (neighborEdge.normal.x + edge.normal.x) * 0.5;
+    let planeZ = (neighborEdge.normal.z + edge.normal.z) * 0.5;
+    if (planeX * planeX + planeZ * planeZ < 1e-7) {
+        plane.copy(edge.dir).multiplyScalar(edge.vertex === vertex ? 1 : -1);
+    } else {
+        plane.x = -planeX;
+        plane.z = -planeZ;
+        plane.w = vertex.x * plane.x + vertex.z * plane.z - inset;
+    }
+    return plane;
+}
+
+function getIntersectionTimeToPlaneBound(origin, dx, dz, plane) {
+    let denom = dx * plane.x + dz * plane.z;
+    //t = - ( this.origin.dot( plane.normal ) + plane.constant ) / denominator;
+
+    let numerator = -((origin.x * plane.x + origin.z * plane.z) - plane.w); // difference in offset
+    //t = (d-(O.N))/(D.N)
+    return numerator/denom;
+}
+
+
+
 
 function findNeighborEdgeCompHead(edges, vertex) {
     let len = edges.length;
@@ -805,6 +842,8 @@ class NavMeshUtils {
         const LINE2 = new LineSegment();
         const LINE_RESULT = {};
 
+        // TODO: project zero y values
+
         let resultMap = new Map();
         // offseted vertex map
 
@@ -830,43 +869,16 @@ class NavMeshUtils {
             dx/=d;
             dz/=d;
             setToPerp(e.dir = new Vector3(dx, 0, dz), e.normal = new Vector3());
+            e.normal.w = e.vertex.x * e.normal.x + e.vertex.z * e.normal.z;
+
+            // for testing only
+            e.reverseNormal = new Vector3(-e.normal.x, -e.normal.y, -e.normal.z);
+            e.reverseNormal.w = e.vertex.x * e.reverseNormal.x + e.vertex.z * e.reverseNormal.z;
         }
+
 
         let arr;
         let arr2;
-
-        // iterate through all vertices incident to border edges to set up their vertex normal plane boundaries
-        /*
-        vertexToEdgesMap.forEach((edges, vertex)=> {
-           let len = edges.length;
-           if (len > 2) {
-
-           }
-           let plane = new Vector3(0, 0, 0);
-           for (let i = 0; i< len; i++) {
-                e = edges[i];
-                plane.x += e.normal.x;
-                plane.z += e.normal.z;
-           }
-           plane.x /= len;
-           plane.z /= len;
-
-           // collinear edges case on opposite directions
-           if (plane.x * plane.x + plane.z * plane.z < 1e-7) {
-                let sampleEdge = edges[0];
-                plane.copy(sampleEdge.dir).multiplyScalar(sampleEdge.vertex === vertex ? 1 : -1);
-           }
-           let vx = vertex.x + plane.x * inset;
-           let vz = vertex.z + plane.y * inset;
-           plane.x = -plane.x;
-           plane.z = -plane.z;
-           plane.w = vx * plane.x + vz * plane.z;
-
-           vertex.plane = plane;
-           // resultMap.set(vertex, edges[0]);  // testing
-
-        });
-        */
 
         // iterate through each border edge to expand and stretch
         for(let i=0;i<len; i++) {
@@ -875,6 +887,13 @@ class NavMeshUtils {
             , new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset));
             // nice to have: get proper height value of vertex over edge's triangle polygon
         }
+
+        let plane = new Vector3();
+        let tPlane;
+        let delta = new Vector3();
+        let snapT;
+        let deltaLength;
+        let splitVertex;
 
         for (let i =0; i<len; i++) {
             e = navMesh._borderEdges[i];
@@ -895,6 +914,8 @@ class NavMeshUtils {
                     if (LINE.getIntersects(LINE2, LINE_RESULT)) {
                         LINE.at(LINE_RESULT.r, e.vertex.result = new Vector3());
                         //console.log('got intersect');
+
+                         //console.log((LINE_RESULT.r * LINE.delta(delta).length()) + ' vs ' + getIntersectionTimeToPlaneBound(LINE.from, e.dir.x, e.dir.z, neighborEdge.reverseNormal));
                          resultMap.set(e.vertex, [e, neighborEdge]);  // testing
                          //resultMap.set(e.vertex, neighborEdge);  // testing
 
@@ -902,15 +923,26 @@ class NavMeshUtils {
                         if (LINE_RESULT.coincident) {
                             let tester = [e, neighborEdge];
                             tester.coincident = true;
-                            console.log("coincident detected", e, neighborEdge);
+                            e.vertex.result = new Vector3(e.value.from.x, e.value.from.y, e.value.from.z);
+                            //console.log("coincident detected", e, neighborEdge);
                             resultMap.set(e.prev.vertex, tester);
                         }
-                        else  resultMap.set(e.vertex, e);
-                        // TODO normal plane intersection and consider weld or chamfer later
+                        else {
+                            snapT = LINE_RESULT.r * (deltaLength = LINE.delta(delta).length());
 
-                        //e.vertex.result = new Vector3().copy(e.vertex);
+                            plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.vertex, inset, plane);
+                            tPlane = getIntersectionTimeToPlaneBound(LINE.from, e.dir.x, e.dir.z, plane);
+                            splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z, e);
+                            resultMap.set(splitVertex, e);
+                            if (tPlane > deltaLength && tPlane < snapT) {
+                                console.log(tPlane + ' vs ' + snapT);
+                                splitVertex.x = LINE.from.x + tPlane * e.dir.x;
+                                splitVertex.z = LINE.from.z + tPlane * e.dir.z;
+                            }
 
-                       // console.log('no intersect');
+                            //if (tPlane * tPlane >= )
+                            //console.log(tPlane);
+                        }
                     }
                 }
 
@@ -923,6 +955,7 @@ class NavMeshUtils {
             // consider e.prev.vertex stretch VERSUS borderEdge or respectivee plane boundary
             arr = vertexToEdgesMap.get(e.prev.vertex);
 
+
            neighborEdge = findNeighborEdgeCompTail(arr, e.prev.vertex); //arr[0] === e ? arr[1] : arr[0];
            //if (neighborEdge.vertex !== e.prev.vertex) console.error("Failed assertion case");
            if (neighborEdge) { // reverseDir for e.prev.vertex
@@ -934,23 +967,31 @@ class NavMeshUtils {
                     LINE2.from.copy(neighborEdge.value.from);
                     LINE2.to.copy(neighborEdge.value.to);
 
-
                     if (LINE.getIntersects(LINE2, LINE_RESULT)) {
                         LINE.at(LINE_RESULT.r, e.prev.vertex.result = new Vector3());
+                        //console.log((LINE_RESULT.r * LINE.delta(delta).length()) + ' vss ' + getIntersectionTimeToPlaneBound(LINE.from, -e.dir.x, -e.dir.z, neighborEdge.reverseNormal));
                         resultMap.set(e.prev.vertex, [e, neighborEdge]);  // testing
-                        //resultMap.set(e.prev.vertex, neighborEdge);  // testing
                     } else {
                         if (LINE_RESULT.coincident) {
                             let tester = [e, neighborEdge];
                             tester.coincident = true;
+                            e.prev.vertex.result = new Vector3(e.value.from.x, e.value.from.y, e.value.from.z);
+                            //console.log("coincident detected", e, neighborEdge);
                             resultMap.set(e.prev.vertex, tester);
                         }
-                        else resultMap.set(e.prev.vertex, e);
-                        // TODO normal plane intersection and consider weld or chamfer later
-                        //console.warn("SHOULD NOT HAPPEN");
+                        else {
+                            snapT = LINE_RESULT.r * (deltaLength = LINE.delta(delta).length());
+                            plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.prev.vertex, inset, plane);
+                            tPlane = getIntersectionTimeToPlaneBound(LINE.from, -e.dir.x, -e.dir.z, plane);
+                            splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z, e);
+                            resultMap.set(splitVertex, e);
+                            if (tPlane > deltaLength && tPlane < snapT) {
+                                console.log(tPlane + ' vss ' + snapT);
+                                splitVertex.x = LINE.from.x + tPlane * -e.dir.x;
+                                splitVertex.z = LINE.from.z + tPlane * -e.dir.z;
+                            }
 
-                      //  e.prev.vertex.result = new Vector3().copy(e.prev.vertex);
-
+                        }
                     }
                 }
            } else {

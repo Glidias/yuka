@@ -1290,12 +1290,12 @@ class SVGCityReader {
 					} else {
 						if (isArr) {
 							// coincident case of intersetion
-							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[0].value.from,edges[0].value.to)}));
-							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[1].value.from,edges[1].value.to)}));
+							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"yellow", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[0].value.from,edges[0].value.to)}));
+							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"violet", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[1].value.from,edges[1].value.to)}));
 						}
 						else svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"red", "stroke-width": 0.15, d:lineSegmentSVGStr(edges.value.from,edges.value.to)}));
 
-						svg.append(this.makeSVG("circle", {r:0.15, fill:isArr ? "violet" : "red", cx:vertex.x, cy:vertex.z}));
+						svg.append(this.makeSVG("circle", {r:0.15, fill:isArr ? "yellow" : "red", cx:vertex.x, cy:vertex.z}));
 					}
 				});
 			}
