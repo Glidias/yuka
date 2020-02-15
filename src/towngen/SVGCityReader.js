@@ -1186,13 +1186,6 @@ class SVGCityReader {
 			});
 		});
 
-
-		/* // Shape library not working
-		let buildingsShape = new Shape(pointsList);
-		let wallsShape = new Shape(pointsListWall);
-		let obstacles = buildingsShape.union(wallsShape);
-		*/
-
 		let wallRadius = this.wallRadius;
 		let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
 
@@ -1260,24 +1253,6 @@ class SVGCityReader {
 
 		if (inset !== 0) {
 			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
-			/*
-			if (this._PREVIEW_MODE) {
-				svg = $(this.makeSVG("g", {}));
-				this.map.append(svg, {});
-				resultMap.forEach( (edge, vertex) => {
-				//	svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edgeSVGString(edge) }));
-					svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"white", "stroke-width": 0.15, d:lineSegmentSVGStr(new LineSegment(vertex, new Vector3().copy(vertex).add(new Vector3().copy(vertex.plane).multiplyScalar(-0.4)))) }));
-				});
-			}
-			*/
-			/*
-			if (this._PREVIEW_MODE) {
-				svg = $(this.makeSVG("g", {}));
-				this.map.append(svg, {});
-				svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d: navmesh._borderEdges.map((b)=>{return lineSegmentSVGStr(b.prev.vertex.result, b.vertex.result)}).join(" ") }));
-			}
-			*/
-			///*
 			if (this._PREVIEW_MODE) {
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
@@ -1298,6 +1273,14 @@ class SVGCityReader {
 						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
 						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(vertex.chamfer.from, vertex.chamfer.to)).join(" ")}));
 						svg.append(this.makeSVG("circle", {r:(!vertex.chamfer.exceedCount ? 0.15 : 0.3), fill:!vertex.chamfer.exceedCount ? "red" : "pink", cx:vertex.x, cy:vertex.z}));
+					}
+					if (vertex.resultArr) {
+						vertex.resultArr.forEach((result) => {
+							if (result instanceof LineSegment) {
+								// console.log('added chamfers found+');
+								svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"pink", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(result.from, result.to)).join(" ")}));
+							}
+						});
 					}
 				});
 			}

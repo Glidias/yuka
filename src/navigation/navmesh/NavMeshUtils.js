@@ -932,6 +932,8 @@ class NavMeshUtils {
             e = navMesh._borderEdges[i];
             e.value = new LineSegment(new Vector3(e.prev.vertex.x + e.normal.x * inset, 0, e.prev.vertex.z + e.normal.z * inset)
             , new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset));
+            e.value.from.t = 0;
+            e.value.to.t = 0;
             // nice to have: get proper height value of vertex over edge's triangle polygon
         }
 
@@ -970,6 +972,7 @@ class NavMeshUtils {
                         // if intersected neighborLine
                         if (LINE.getIntersects(LINE2, LINE_RESULT)) {
                             LINE.at(LINE_RESULT.r, intersectPtOrChamfer = new Vector3());
+                            intersectPtOrChamfer.t = (LINE_RESULT.r - 1) * length2DSegment(LINE);
                             if (!resultMap.has(e.vertex)) {
                                 resultMap.set(e.vertex, [e, neighborEdge]); 
                                 e.vertex.result = intersectPtOrChamfer;
@@ -981,6 +984,7 @@ class NavMeshUtils {
                         } else {
                             if (LINE_RESULT.coincident) { // todo: normal case for this
                                 intersectPtOrChamfer = new Vector3(e.value.to.x, e.value.to.y, e.value.to.z);
+                                intersectPtOrChamfer.t = 0;
                                 if (!resultMap.has(e.vertex)) {
                                     resultMap.set(e.vertex, coincideArr=[e, neighborEdge]); 
                                     e.vertex.result = intersectPtOrChamfer;
@@ -1047,6 +1051,7 @@ class NavMeshUtils {
 
                         if (LINE.getIntersects(LINE2, LINE_RESULT)) {
                             LINE.at(LINE_RESULT.r, intersectPtOrChamfer = new Vector3());
+                            intersectPtOrChamfer.t = (LINE_RESULT.r - 1) * length2DSegment(LINE);
                             if (!resultMap.has(e.prev.vertex)) {
                                 resultMap.set(e.prev.vertex, [neighborEdge, e]); 
                                 e.prev.vertex.result = intersectPtOrChamfer;
@@ -1058,6 +1063,7 @@ class NavMeshUtils {
                         } else {
                             if (LINE_RESULT.coincident) {
                                 intersectPtOrChamfer= new Vector3(e.value.from.x, e.value.from.y, e.value.from.z);
+                                intersectPtOrChamfer.t = 0;
                                 if (!resultMap.has(e.prev.vertex)) {
                                     resultMap.set(e.prev.vertex, coincideArr=[neighborEdge, e]); 
                                     e.prev.vertex.result = intersectPtOrChamfer;
@@ -1106,38 +1112,60 @@ class NavMeshUtils {
 
         }
 
-        // validate resultMap, resolve and weld
+        // validate resultMap, resolve extents and weld
         let errorCount = 0;
         resultMap.forEach((edges, vertex) => {
             if (vertex.chamfer) {
-                if (!vertex.chamfer.from || !vertex.chamfer.to) {
-                    errorCount++;
-                    console.error("Missing complement vertex chamfer!:" + vertex.chamfer.from + ', ' + vertex.chamfer.to  + ", "+ vertex.result + ", " + !!edges.coincident)
+                // todo: check if close enough chamfer to consider proper welding as vertex.result instead
+                if (lengthSq2DSegment(vertex.chamfer) <= minChamferDistSq) { // welded chamfer vertex result
+                    //console.log('TODO: weld chamfer');
+                    vertex.result = vertex.chamfer.from;  // temp... should be intersection between both edges
+                    vertex.result.welded = true;
+                    vertex.chamfer = null;
+                    edges[0].value.to = vertex.result;
+                    edges[1].value.from = vertex.result;
+                    
                 } else {
-                  
-                    // todo: check if close enough chamfer to consider welding as vertex.result instead
-                    if (lengthSq2DSegment(vertex.chamfer) <= minChamferDistSq) { // welded chamfer vertex result
-                        //console.log('TODO: weld chamfer');
-                        vertex.result = vertex.chamfer.from; // temp
-                        vertex.result.welded = true;
-                        vertex.chamfer = null;
-                        edges[0].value.to = vertex.result;
-                        edges[1].value.from = vertex.result;
-                        return;
-                    }
-                    // chamfer vertex
+                     // chamfer vertex
                     edges[0].value.to = vertex.chamfer.from;
                     edges[1].value.from = vertex.chamfer.to;
                 }
-
             } else { // intersected vertex
                 edges[0].value.to = vertex.result;
                 edges[1].value.from = vertex.result;
             }
 
             if (vertex.resultArr !== undefined) {
-                  // split
-                  console.log('todo split index case')
+                  vertex.resultArr.forEach((result, index)=> {
+                    if (result instanceof LineSegment) { // assumed chamfer joint segment
+                        if (lengthSq2DSegment(result) <= minChamferDistSq) { // welded chamfer vertex result
+                            //console.log('TODO: weld chamfer');
+                            result = result.from; // temp... should be intersection between both edges
+                            result.welded = true;
+                            if (edges[0].value.to.t < result.t ) {
+                                edges[0].value.to = result;
+                            }
+                            if (edges[1].value.from.t < result.t) {
+                                edges[1].value.from = result;
+                            }
+                            vertex.resultArr[index] = result;
+                        } else {
+                             if (edges[0].value.to.t < result.from.t ) {
+                                edges[0].value.to = result.from;
+                            }
+                            if (edges[1].value.from.t < result.to.t) {
+                                edges[1].value.from = result.to;
+                            }
+                        }
+                    } else { // assumed Vector3 intersection point
+                        if (edges[0].value.to.t < result.t ) {
+                            edges[0].value.to = result;
+                        }
+                        if (edges[1].value.from.t < result.t) {
+                            edges[1].value.from = result;
+                        }
+                    }
+                  });
             }
         });
         if (errorCount > 0) {
