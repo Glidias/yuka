@@ -1282,7 +1282,8 @@ class SVGCityReader {
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
 				resultMap.forEach( (edges, vertex) => {
-					if (!vertex.chamfer) {
+					let ei = 0;
+					if (vertex.result) {
 						if (!edges.coincident) {
 							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
 							svg.append(this.makeSVG("circle", {r:0.15, fill:vertex.welded ? "red" : "white", cx:vertex.result.x, cy:vertex.result.z}));
@@ -1292,10 +1293,11 @@ class SVGCityReader {
 							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"violet", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[1].value.from,edges[1].value.to)}));
 							svg.append(this.makeSVG("circle", {r:0.15, fill:"yellow", cx:vertex.result.x, cy:vertex.result.z}));
 						}
-					} else {
+					} 
+					if (vertex.chamfer) {
 						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
 						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(vertex.chamfer.from, vertex.chamfer.to)).join(" ")}));
-						svg.append(this.makeSVG("circle", {r:0.15, fill:!vertex.chamfer.exceedCount ? "red" : "pink", cx:vertex.x, cy:vertex.z}));
+						svg.append(this.makeSVG("circle", {r:(!vertex.chamfer.exceedCount ? 0.15 : 0.3), fill:!vertex.chamfer.exceedCount ? "red" : "pink", cx:vertex.x, cy:vertex.z}));
 					}
 				});
 			}

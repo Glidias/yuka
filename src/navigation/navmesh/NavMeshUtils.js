@@ -905,6 +905,7 @@ class NavMeshUtils {
         let snapT;
         let deltaLength;
         let splitVertex;
+        let splitVertex2;
 
         for (let i =0; i<len; i++) {
             e = navMesh._borderEdges[i];
@@ -914,7 +915,7 @@ class NavMeshUtils {
            neighborEdge = findNeighborEdgeCompHead(arr, e.vertex);
 
            if (neighborEdge) { // forwardDir for e.vertex
-               if (!e.vertex.result) {
+               if (!(e.vertex.result || e.vertex.chamfer)) {
                     LINE.from.copy(e.value.from);
                     LINE.to.copy(e.value.to);
 
@@ -944,15 +945,18 @@ class NavMeshUtils {
                             resultMap.set(e.vertex, coincidentArr);
                         }
                         else {
-                            snapT = LINE_RESULT.r * (deltaLength = length2DSegment(LINE));
+                            snapT = (LINE_RESULT.r - 1) * (deltaLength = length2DSegment(LINE));
 
                             plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.vertex, inset, plane);
-                            tPlane = getIntersectionTimeToPlaneBound(LINE.from, e.dir.x, e.dir.z, plane);
+                            tPlane = getIntersectionTimeToPlaneBound(LINE.to, e.dir.x, e.dir.z, plane);
                             splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z);
-                            if (LINE_RESULT.r > 1 && tPlane > deltaLength && tPlane < snapT) {
+                            splitVertex2 = new Vector3(LINE2.from.x, 0, LINE2.from.z);
+                            if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT) {
                                 // console.log(tPlane + ' vs ' + snapT + ' >>>' + deltaLength);
-                                splitVertex.x = LINE.from.x + tPlane * e.dir.x;
-                                splitVertex.z = LINE.from.z + tPlane * e.dir.z;
+                                splitVertex.x = LINE.to.x + tPlane * e.dir.x;
+                                splitVertex.z = LINE.to.z + tPlane * e.dir.z;
+                                splitVertex2.x = LINE2.from.x + tPlane * -neighborEdge.dir.x;
+                                splitVertex2.z = LINE2.from.z + tPlane * -neighborEdge.dir.z;
                             }
                             if (!e.vertex.chamfer) {
                                  e.vertex.chamfer = new LineSegment(null,null);
@@ -966,6 +970,7 @@ class NavMeshUtils {
                             //}
                             e.vertex.chamfer.count++;
                             e.vertex.chamfer.from = splitVertex;
+                            e.vertex.chamfer.to = splitVertex2;
 
                             //if (tPlane * tPlane >= )
                             //console.log(tPlane);
@@ -987,12 +992,12 @@ class NavMeshUtils {
            //if (neighborEdge.vertex !== e.prev.vertex) console.error("Failed assertion case");
            if (neighborEdge) { // reverseDir for e.prev.vertex
 
-                if (!e.prev.vertex.result) {
+                if (!(e.prev.vertex.result || e.prev.vertex.chamfer)) {
                     LINE.from.copy(e.value.to);
                     LINE.to.copy(e.value.from);
 
-                    LINE2.from.copy(neighborEdge.value.from);
-                    LINE2.to.copy(neighborEdge.value.to);
+                    LINE2.from.copy(neighborEdge.value.to);
+                    LINE2.to.copy(neighborEdge.value.from);
 
                     if (LINE.getIntersects(LINE2, LINE_RESULT) && !e.prev.vertex.chamfer) {
                         LINE.at(LINE_RESULT.r, e.prev.vertex.result = new Vector3());
@@ -1012,14 +1017,17 @@ class NavMeshUtils {
                             resultMap.set(e.prev.vertex, coincidentArr);
                         }
                         else {
-                            snapT = LINE_RESULT.r * (deltaLength = length2DSegment(LINE));
+                            snapT = (LINE_RESULT.r - 1) * (deltaLength = length2DSegment(LINE));
                             plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.prev.vertex, inset, plane);
-                            tPlane = getIntersectionTimeToPlaneBound(LINE.from, -e.dir.x, -e.dir.z, plane);
+                            tPlane = getIntersectionTimeToPlaneBound(LINE.to, -e.dir.x, -e.dir.z, plane);
                             splitVertex =  new Vector3(LINE.to.x, 0, LINE.to.z);
-                            if (LINE_RESULT.r > 1 && tPlane > deltaLength && tPlane < snapT) {
+                            splitVertex2 =  new Vector3(LINE2.from.x, 0, LINE2.from.z);
+                            if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT) {
                                 //console.log(tPlane + ' vss ' + snapT + ' >>> '+deltaLength);
-                                splitVertex.x = LINE.from.x + tPlane * -e.dir.x;
-                                splitVertex.z = LINE.from.z + tPlane * -e.dir.z;
+                                splitVertex.x = LINE.to.x + tPlane * -e.dir.x;
+                                splitVertex.z = LINE.to.z + tPlane * -e.dir.z;
+                                splitVertex2.x = LINE2.from.x + tPlane * neighborEdge.dir.x;
+                                splitVertex2.z = LINE2.from.z + tPlane * neighborEdge.dir.z;
 
                             }
                             if (!e.prev.vertex.chamfer) {
@@ -1034,6 +1042,7 @@ class NavMeshUtils {
                             //} 
                             e.prev.vertex.chamfer.count++;
                             e.prev.vertex.chamfer.to = splitVertex;
+                            e.prev.vertex.chamfer.from = splitVertex2;
                            
                         }
                     }
@@ -1069,7 +1078,7 @@ class NavMeshUtils {
                     edges[0].value.to = vertex.chamfer.from;
                     edges[1].value.from = vertex.chamfer.to;
                 }
-                if (vertex.chamfer.count !== 2) {
+                if (vertex.chamfer.count !== 1) {
                    // errorCount++;
                    vertex.chamfer.exceedCount = vertex.chamfer.count;
                     console.error("Exceeded count assignment! " + vertex.chamfer.count)
