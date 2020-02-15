@@ -945,6 +945,7 @@ class NavMeshUtils {
         let intersectPtOrChamfer;
         //let neighborEdge;
         let neighborEdgeArr;
+        let coincideArr;
 
         for (let i =0; i<len; i++) {
             e = navMesh._borderEdges[i];
@@ -981,14 +982,14 @@ class NavMeshUtils {
                             if (LINE_RESULT.coincident) { // todo: normal case for this
                                 intersectPtOrChamfer = new Vector3(e.value.to.x, e.value.to.y, e.value.to.z);
                                 if (!resultMap.has(e.vertex)) {
-                                    resultMap.set(e.vertex, [e, neighborEdge]); 
+                                    resultMap.set(e.vertex, coincideArr=[e, neighborEdge]); 
                                     e.vertex.result = intersectPtOrChamfer;
-                                    e.vertex.coincident = 0;
+                                   coincideArr.coincident = 1;
                                 } else {
-                                    resultMap.get(e.vertex).push(e, neighborEdge);
+                                    (coincideArr = resultMap.get(e.vertex)).push(e, neighborEdge);
                                     if (!e.vertex.resultArr) e.vertex.resultArr = [];
                                     e.vertex.resultArr.push(intersectPtOrChamfer);
-                                    e.vertex.coincident |= (1 << (e.vertex.resultArr.length));
+                                    coincideArr.coincident |= (1 << (e.vertex.resultArr.length));
                                 }
                             }
                             else {
@@ -1010,12 +1011,10 @@ class NavMeshUtils {
                                     splitVertex2.t = tPlane;
                                 }
 
-                                intersectPtOrChamfer = new LineSegment(null,null);
+                                intersectPtOrChamfer = new LineSegment(splitVertex, splitVertex2);
                                 if (!resultMap.has(e.vertex)) {
                                     e.vertex.chamfer = intersectPtOrChamfer;
                                     resultMap.set(e.vertex, [e, neighborEdge]);
-                                    e.vertex.chamfer.from = splitVertex;
-                                    e.vertex.chamfer.to = splitVertex2;
                                 } else {
                                     resultMap.get(e.vertex).push(e, neighborEdge);
                                     if (!e.vertex.resultArr) e.vertex.resultArr = [];
@@ -1060,14 +1059,14 @@ class NavMeshUtils {
                             if (LINE_RESULT.coincident) {
                                 intersectPtOrChamfer= new Vector3(e.value.from.x, e.value.from.y, e.value.from.z);
                                 if (!resultMap.has(e.prev.vertex)) {
-                                    resultMap.set(e.prev.vertex, [neighborEdge, e]); 
+                                    resultMap.set(e.prev.vertex, coincideArr=[neighborEdge, e]); 
                                     e.prev.vertex.result = intersectPtOrChamfer;
-                                    e.prev.vertex.coincident = 1;
+                                    coincideArr.coincident = 1;
                                 } else {
-                                    resultMap.get(e.prev.vertex).push(neighborEdge, e);
+                                    (coincideArr=resultMap.get(e.prev.vertex)).push(neighborEdge, e);
                                     if (!e.prev.vertex.resultArr) e.prev.vertex.resultArr = [];
                                     e.prev.vertex.resultArr.push(intersectPtOrChamfer);
-                                    e.prev.vertex.coincident |= (1 << (e.prev.vertex.resultArr.length));
+                                   coincideArr.coincident |= (1 << (e.prev.vertex.resultArr.length));
                                 }
                             }
                             else {
@@ -1087,12 +1086,10 @@ class NavMeshUtils {
                                     splitVertex.t = tPlane;
                                     splitVertex2.t = tPlane;
                                 }
-                                intersectPtOrChamfer = new LineSegment(null,null);
+                                intersectPtOrChamfer = new LineSegment(splitVertex2, splitVertex);
                                 if (!resultMap.has(e.prev.vertex)) {
                                     e.prev.vertex.chamfer = intersectPtOrChamfer;
                                     resultMap.set(e.prev.vertex, [neighborEdge, e]);
-                                    e.prev.vertex.chamfer.to = splitVertex;
-                                    e.prev.vertex.chamfer.from = splitVertex2;
                                 } else {
                                     resultMap.get(e.prev.vertex).push(neighborEdge, e);
                                     if (!e.prev.vertex.resultArr) e.prev.vertex.resultArr = [];
