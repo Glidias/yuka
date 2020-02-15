@@ -84,11 +84,10 @@ function calcPlaneBoundaryBetweenEdges(edge, neighborEdge, vertex, inset, plane)
     let planeZ = (neighborEdge.normal.z + edge.normal.z) * 0.5;
     if (planeX * planeX + planeZ * planeZ < 1e-7) {
         plane.copy(edge.dir).multiplyScalar(edge.vertex === vertex ? 1 : -1);
-    } else {
-        plane.x = -planeX;
-        plane.z = -planeZ;
-        plane.w = vertex.x * plane.x + vertex.z * plane.z - inset;
     }
+    plane.x = -planeX;
+    plane.z = -planeZ;
+    plane.w = vertex.x * plane.x + vertex.z * plane.z - inset;
     return plane;
 }
 
@@ -136,6 +135,7 @@ function findNeighborEdgeCompHeadArr(edges, edge, vertex, visitedEdgePairs, edge
             edgeKey = getKeyEdgePair(edge, candidate, edgeLen);
             if (!visitedEdgePairs.has(edgeKey)) arr.push(candidate);
             foundCount++;
+            //break;
         }
     }
     return foundCount > 0 ? arr : null;
@@ -152,6 +152,7 @@ function findNeighborEdgeCompTailArr(edges, edge, vertex, visitedEdgePairs, edge
             edgeKey = getKeyEdgePair(edge, candidate, edgeLen);
             if (!visitedEdgePairs.has(edgeKey)) arr.push(candidate);
             foundCount++;
+            //break;
         } 
     }
     return foundCount > 0 ? arr : null;
@@ -961,7 +962,7 @@ class NavMeshUtils {
                 neighborEdgeArr.forEach( (neighborEdge) => {
                     edgePairKey = getKeyEdgePair(e, neighborEdge, len);
                 //
-                if (!visitedEdgePairs.has(edgePairKey)) { //  !(e.vertex.result || e.vertex.chamfer)
+                //if (!visitedEdgePairs.has(edgePairKey)) { //  !(e.vertex.result || e.vertex.chamfer)
                     visitedEdgePairs.add(edgePairKey);
                         LINE.from.copy(e.value.from);
                         LINE.to.copy(e.value.to);
@@ -1006,7 +1007,7 @@ class NavMeshUtils {
                                 splitVertex.t = 0;
                                 splitVertex2.t = 0;
                                 if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT) {
-                                    // console.log(tPlane + ' vs ' + snapT + ' >>>' + deltaLength);
+                                    //console.log(tPlane + ' vs ' + snapT + ' >>>' + deltaLength + ', ' + LINE_RESULT.r);
                                     splitVertex.x = LINE.to.x + tPlane * e.dir.x;
                                     splitVertex.z = LINE.to.z + tPlane * e.dir.z;
                                     splitVertex2.x = LINE2.from.x + tPlane * -neighborEdge.dir.x;
@@ -1026,7 +1027,7 @@ class NavMeshUtils {
                                 }
                             }
                         }
-                    }
+                    //}
                 });
            } else {
                 throw new Error("Failed to find complementary neighbnor edge!");
@@ -1084,7 +1085,7 @@ class NavMeshUtils {
                                 splitVertex.t = 0;
                                 splitVertex2.t = 0;
                                 if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT) {
-                                    //console.log(tPlane + ' vss ' + snapT + ' >>> '+deltaLength);
+                                    //console.log(tPlane + ' vss ' + snapT + ' >>> '+deltaLength+ ', ' + LINE_RESULT.r);
                                     splitVertex.x = LINE.to.x + tPlane * -e.dir.x;
                                     splitVertex.z = LINE.to.z + tPlane * -e.dir.z;
                                     splitVertex2.x = LINE2.from.x + tPlane * neighborEdge.dir.x;
