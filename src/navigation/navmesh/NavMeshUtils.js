@@ -790,7 +790,6 @@ class NavMeshUtils {
 
 
         let result =  [new Polygon().fromContour(polyContours), new Polygon().fromContour(polyContours2)];
-        console.log(result[0].convex(true), result[1].convex(true))
         return result;
     }
 
@@ -821,7 +820,68 @@ class NavMeshUtils {
         return [new Polygon().fromContour(polyContours), new Polygon().fromContour(polyContours2)];
     }
 
+    /**
+     * Get obstructing obstacle polygon over a given flat yPosition surface given a sloping polgon.
+     * Note that for any polygon area that lies below yPosition + agentHeight, assumed blocking always. 
+     * Only polygon volume of y >= agentHeight + yPosition considered non-blocking/obstructing. If y goes below yPosition itself,
+     * by default, no ground plane clipping is done, so if obstructing volume goes below ground yPos, it's still counted
+     * as a projected blocking polygon if it's obstructing the floor itself even though it's buried underneath (ie.  not clipped by yPos plane).
+     * (future consideration: feature to auto-clip polygon by yPosition plane as well, or a seperate function for that?)
+     * @param {Polgon} polygon A typically sloping polygon in relation to flat y ground postion
+     * @param {Number} yPos The flat y position ground surface in relation to polygon
+     * @param {Number} agentHeight The agent height used to represent required height clearance from the given polyon
+     * @return A new clipped polygon based off the obstructed height clearance position
+     */
+    static getObstructingPolyOverFlatLevel(polygon, yPos, agentHeight) {
+        let contours = [];
+        let edge = polygon.edge;
+        
+        let heightLimit = yPos + agentHeight;
+        let lastBlockedPoint = null;
 
+        // y = mx + c;
+        // heightLimit <= mx + c
+        // 
+        let dx;
+        let dy;
+        let dz;
+        
+        let t;
+        let startBlockedState;
+        let endBlockedState;
+        do {
+            startBlockedState = edge.prev.vertex.y < heightLimit;
+            endBlockedState = edge.vertex.y < heightLimit;
+
+            if (endBlockedState !== startBlockedState) {
+                // clipping of edge required on either start/or end
+                dx = edge.vertex.x - edge.prev.vertex.x;
+                dz = edge.vertex.z - edge.prev.vertex.z;
+                dy = edge.vertex.y - edge.prev.vertex.y;
+
+                t = (edge.prev.vertex.y - heightLimit) / -dy;
+               
+                if (!startBlockedState ) { // clip from start
+                    // assumed/assert dy < 0
+                    if (dy >= 0) throw new Error("Gradient sign assertion failed! dy < 0");
+                    contours.push( new Vector3(edge.prev.vertex.x + t * dx, heightLimit, edge.prev.vertex.z + t * dz) );
+                    contours.push(edge.vertex.clone());
+
+                } else { // clip from end
+                    // assumed/assert dy > 0
+                    if (dy <= 0) throw new Error("Gradient sign assertion failed! dy > 0");
+                    contours.push( new Vector3(edge.prev.vertex.x + t * dx, heightLimit, edge.prev.vertex.z + t * dz) );
+                }  
+            } else if (startBlockedState) { // thus also === endBlockedState                 
+                contours.push(edge.vertex.clone());
+            }
+            
+            edge = edge.next;
+        } while ( edge !== polygon.edge)
+        return contours.length >= 3 ? new Polygon().fromContour(contours) : null;
+    }
+
+    /* // yagni
     static patchHoles(navmesh, holesAdded) {
         if (!holesAdded) holesAdded = [];
 
@@ -879,6 +939,9 @@ class NavMeshUtils {
         }
         return holesAdded;
     }
+    */
+
+
 
     /**
      *

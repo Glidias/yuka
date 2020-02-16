@@ -63,6 +63,11 @@ function getNewGeometryCollector() {
 	}
 }
 
+function pointArrEquals(arr, arr2) {
+	return arr2.length === arr.length && arr2.toString() === arr.toString();
+}
+
+
 /**
  *
  * @param {NavMesh} navmesh
@@ -790,6 +795,7 @@ class SVGCityReader {
 		this.outerRoadAltitude = 0;
 		// this.innerWardRoadAltitude = 0;
 		this.innerWardAltitude = 0;
+		
 
 		this.cityWallCeilThickness = 1;
 		// extude thickness, if negative value, will sink into ground exclude bottom base faces
@@ -798,6 +804,8 @@ class SVGCityReader {
 		this.wardRoadExtrudeThickness = 0.7;
 		this.outerRoadExtrudeThickness = 0;
 		this.rampedBuildingExtrudeThickness = -1;
+
+		this.agentHeight = 2.5;
 
 		this.buildingMinHeight = 3;
 		this.buildingMaxHeight = 7;
@@ -1169,7 +1177,7 @@ class SVGCityReader {
 			[0,1], [1,2], [2,3], [3,0]
 		];
 		const pointsList = [];
-
+		let groundLevel = this.innerWardAltitude;
 
 		// assumed buildings are non-intersecting
 
@@ -1257,9 +1265,23 @@ class SVGCityReader {
 		}
 
 		// for this context only, arbitarily add ramp borderEdges of projected low enough polygons over over assumed flat ground
+		if (this.navmeshRoad) {
+			//let rampNavmesh = new NavMesh();
+			//rampNavmesh.attemptBuildGraph = false;
+			///rampNavmesh.attemptMergePolies = true;
+			let rampPolygons = NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY_RAMP, true);
+			//rampNavmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices();
+			
+			rampPolygons = rampPolygons.map((poly)=> {
+				return NavMeshUtils.getObstructingPolyOverFlatLevel(poly, groundLevel, this.agentHeight - this.rampedBuildingExtrudeThickness);
+			}).filter((poly)=>{return poly!==null});
 
-
-
+			svg.append(this.makeSVG("path", {fill:"white", stroke:"blue", "stroke-width": 0.2, d: rampPolygons.map(polygonSVGString).join(" ") }));
+			///svg.append(this.makeSVG("path", {fill:"none", stroke:"blue", "stroke-width": 0.2, d: rampNavmesh._borderEdges.map(edgeSVGString).join(" ") }));
+			//.highways = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
+			//this.highwayExtrudeThickness >= 0 ? this.highwayExtrudeThickness : this.innerWardAltitude, scaleXZ, this.highwayExtrudeThickness < 0, this.innerWardRoadAltitude);
+		}
+		
 		if (inset !== 0) {
 			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
 			if (false && this._PREVIEW_MODE) {
@@ -1368,11 +1390,15 @@ class SVGCityReader {
 						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"red", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}));
 					} 
 				});
+				
+				return navmesh;
 
-				let ptArr = vertexArr; //vertexArr.map(vecToPoint);
+				let ptArr = vertexArr.slice(0); //vertexArr.map(vecToPoint);
 				//console.log(ptArr, edgeConstraints);
 				cleanPSLG(ptArr, edgeConstraints);
 				
+				//console.log(pointArrEquals(ptArr.slice(0,vertexArr.length), vertexArr));
+		
 				let cdt = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
 				wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 			}
