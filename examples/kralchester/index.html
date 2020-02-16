@@ -32,7 +32,7 @@
 		var cityReader = new YUKA.SVGCityReader();
 		cityReader._PREVIEW_MODE = true;
 		cityReader.parse(document.getElementById('svgholder').innerHTML, document.getElementById("svgpreview"));
-		console.log( cityReader.getNavmeshExtrudedGeometry() );
+		//console.log( cityReader.getNavmeshExtrudedGeometry() );
 		console.log( cityReader.getWardBuildingsGeometry(0.00) );
 		cityReader.buildGroundNavmesh(0.5);
 		window.document.body.style.zoom = "400%";

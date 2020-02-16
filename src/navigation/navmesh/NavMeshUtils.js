@@ -134,6 +134,7 @@ function findNeighborEdgeCompHeadArr(edges, edge, vertex, visitedEdgePairs, edge
         if (candidate.prev.vertex === vertex) {
             edgeKey = getKeyEdgePair(edge, candidate, edgeLen);
             if (!visitedEdgePairs.has(edgeKey)) arr.push(candidate);
+            else console.warn("already found pair"); // seems this will never happen
             foundCount++;
             //break;
         }
@@ -999,14 +1000,15 @@ class NavMeshUtils {
                             }
                             else {
                                 snapT = (LINE_RESULT.r - 1) * (deltaLength = length2DSegment(LINE));
-
+                                if (snapT < 0) snapT = 0;
+                                //if (snapT > inset*2) snapT = inset*2;
                                 plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.vertex, inset, plane);
                                 tPlane = getIntersectionTimeToPlaneBound(LINE.to, e.dir.x, e.dir.z, plane);
                                 splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z);
                                 splitVertex2 = new Vector3(LINE2.from.x, 0, LINE2.from.z);
                                 splitVertex.t = 0;
                                 splitVertex2.t = 0;
-                                if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT) {
+                                if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT && Math.abs(neighborEdge.dir.dot(e.dir)) < 1-1e-7   ) {
                                     //console.log(tPlane + ' vs ' + snapT + ' >>>' + deltaLength + ', ' + LINE_RESULT.r);
                                     splitVertex.x = LINE.to.x + tPlane * e.dir.x;
                                     splitVertex.z = LINE.to.z + tPlane * e.dir.z;
@@ -1015,8 +1017,9 @@ class NavMeshUtils {
                                     splitVertex.t = tPlane;
                                     splitVertex2.t = tPlane;
                                 }
-
                                 intersectPtOrChamfer = new LineSegment(splitVertex, splitVertex2);
+                                if (snapT > inset*2) snapT = inset*2;
+                                intersectPtOrChamfer.snap =  new Vector3(LINE.to.x + snapT * e.dir.x, 0, LINE.to.z + snapT * e.dir.z);
                                 if (!resultMap.has(e.vertex)) {
                                     e.vertex.chamfer = intersectPtOrChamfer;
                                     resultMap.set(e.vertex, [e, neighborEdge]);
@@ -1034,83 +1037,7 @@ class NavMeshUtils {
            }
 
 
-           // tail vertex on considered edge
-            arr = vertexToEdgesMap.get(e.prev.vertex);
-
-           neighborEdgeArr = findNeighborEdgeCompTailArr(arr, e.prev, e.prev.vertex, visitedEdgePairs, len); //arr[0] === e ? arr[1] : arr[0];
-           //if (neighborEdge.vertex !== e.prev.vertex) console.error("Failed assertion case");
-           if (neighborEdgeArr) { // reverseDir for e.prev.vertex
-                neighborEdgeArr.forEach( (neighborEdge) => {
-                    edgePairKey = getKeyEdgePair(e, neighborEdge, len);
-                    if (!visitedEdgePairs.has(edgePairKey)) { //!(e.prev.vertex.result || e.prev.vertex.chamfer)
-                        visitedEdgePairs.add(edgePairKey);
-                        LINE.from.copy(e.value.to);
-                        LINE.to.copy(e.value.from);
-
-                        LINE2.from.copy(neighborEdge.value.to);
-                        LINE2.to.copy(neighborEdge.value.from);
-
-                        if (LINE.getIntersects(LINE2, LINE_RESULT)) {
-                            LINE.at(LINE_RESULT.r, intersectPtOrChamfer = new Vector3());
-                            intersectPtOrChamfer.t = (LINE_RESULT.r - 1) * length2DSegment(LINE);
-                            if (!resultMap.has(e.prev.vertex)) {
-                                resultMap.set(e.prev.vertex, [neighborEdge, e]); 
-                                e.prev.vertex.result = intersectPtOrChamfer;
-                            } else {
-                                resultMap.get(e.prev.vertex).push(neighborEdge, e);
-                                if (!e.prev.vertex.resultArr) e.prev.vertex.resultArr = [];
-                                e.prev.vertex.resultArr.push(intersectPtOrChamfer);
-                            }
-                        } else {
-                            if (LINE_RESULT.coincident) {
-                                intersectPtOrChamfer= new Vector3(e.value.from.x, e.value.from.y, e.value.from.z);
-                                intersectPtOrChamfer.t = 0;
-                                if (!resultMap.has(e.prev.vertex)) {
-                                    resultMap.set(e.prev.vertex, coincideArr=[neighborEdge, e]); 
-                                    e.prev.vertex.result = intersectPtOrChamfer;
-                                    coincideArr.coincident = 1;
-                                } else {
-                                    (coincideArr=resultMap.get(e.prev.vertex)).push(neighborEdge, e);
-                                    if (!e.prev.vertex.resultArr) e.prev.vertex.resultArr = [];
-                                    e.prev.vertex.resultArr.push(intersectPtOrChamfer);
-                                   coincideArr.coincident |= (1 << (e.prev.vertex.resultArr.length));
-                                }
-                            }
-                            else {
-                                snapT = (LINE_RESULT.r - 1) * (deltaLength = length2DSegment(LINE));
-                                plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.prev.vertex, inset, plane);
-                                tPlane = getIntersectionTimeToPlaneBound(LINE.to, -e.dir.x, -e.dir.z, plane);
-                                splitVertex =  new Vector3(LINE.to.x, 0, LINE.to.z);
-                                splitVertex2 =  new Vector3(LINE2.from.x, 0, LINE2.from.z);
-                                splitVertex.t = 0;
-                                splitVertex2.t = 0;
-                                if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT) {
-                                    //console.log(tPlane + ' vss ' + snapT + ' >>> '+deltaLength+ ', ' + LINE_RESULT.r);
-                                    splitVertex.x = LINE.to.x + tPlane * -e.dir.x;
-                                    splitVertex.z = LINE.to.z + tPlane * -e.dir.z;
-                                    splitVertex2.x = LINE2.from.x + tPlane * neighborEdge.dir.x;
-                                    splitVertex2.z = LINE2.from.z + tPlane * neighborEdge.dir.z;
-                                    splitVertex.t = tPlane;
-                                    splitVertex2.t = tPlane;
-                                }
-                                intersectPtOrChamfer = new LineSegment(splitVertex2, splitVertex);
-                                if (!resultMap.has(e.prev.vertex)) {
-                                    e.prev.vertex.chamfer = intersectPtOrChamfer;
-                                    resultMap.set(e.prev.vertex, [neighborEdge, e]);
-                                } else {
-                                    resultMap.get(e.prev.vertex).push(neighborEdge, e);
-                                    if (!e.prev.vertex.resultArr) e.prev.vertex.resultArr = [];
-                                    e.prev.vertex.resultArr.push(intersectPtOrChamfer);
-                                }
-                            }
-                        }
-                    }
-                });
-           } else {
-              throw new Error("Failed to find complementary neighbnor edge 222!");
-           }
-
-
+          
         }
 
         // validate resultMap, resolve extents and weld
@@ -1119,8 +1046,7 @@ class NavMeshUtils {
             if (vertex.chamfer) {
                 // todo: check if close enough chamfer to consider proper welding as vertex.result instead
                 if (lengthSq2DSegment(vertex.chamfer) <= minChamferDistSq) { // welded chamfer vertex result
-                    //console.log('TODO: weld chamfer');
-                    vertex.result = vertex.chamfer.from;  // temp... should be intersection between both edges
+                    vertex.result = vertex.chamfer.snap; 
                     vertex.result.welded = true;
                     vertex.chamfer = null;
                     edges[0].value.to = vertex.result;
@@ -1140,8 +1066,7 @@ class NavMeshUtils {
                   vertex.resultArr.forEach((result, index)=> {
                     if (result instanceof LineSegment) { // assumed chamfer joint segment
                         if (lengthSq2DSegment(result) <= minChamferDistSq) { // welded chamfer vertex result
-                            //console.log('TODO: weld chamfer');
-                            result = result.from; // temp... should be intersection between both edges
+                            result = result.snap;
                             result.welded = true;
                             if (edges[0].value.to.t < result.t ) {
                                 edges[0].value.to = result;
@@ -1153,10 +1078,9 @@ class NavMeshUtils {
                         } else {
                              if (edges[0].value.to.t < result.from.t ) {
                                 edges[0].value.to = result.from;
-                            }
-                            if (edges[1].value.from.t < result.to.t) {
                                 edges[1].value.from = result.to;
                             }
+                            
                         }
                     } else { // assumed Vector3 intersection point
                         if (edges[0].value.to.t < result.t ) {

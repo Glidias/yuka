@@ -124,6 +124,12 @@ function pointToShapePt(pt) {
 function shapePtToPoint(pt) {
 	return [pt.X, pt.Y];
 }
+function vecToPoint(v) {
+	return [v.x, v.z];
+}
+function pointToVec(pt) {
+	return new Vector3(pt[0], 0, pt[1]);
+}
 
 
 function withinVincityOfPointSet(pt, points, dist) {
@@ -1245,19 +1251,21 @@ class SVGCityReader {
 		if (this._PREVIEW_MODE) {
 			svg = $(this.makeSVG("g", {}));
 			this.map.append(svg, {});
-			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 			//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 			//return {vertices:points, edges:edges, cdt:cdt};
 		}
 
+		// for this context only, arbitarily add ramp borderEdges of projected low enough polygons over over assumed flat ground
+
+
 
 		if (inset !== 0) {
 			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
-			if (this._PREVIEW_MODE) {
+			if (false && this._PREVIEW_MODE) {
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
 				resultMap.forEach( (edges, vertex) => {
-					let ei = 0;
 					if (vertex.result) {
 						if (!edges.coincident) {
 							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
@@ -1283,6 +1291,90 @@ class SVGCityReader {
 						});
 					}
 				});
+			} else {
+				// debugging svg
+				svg = $(this.makeSVG("g", {}));
+				let wireSVG =  $(this.makeSVG("g", {}));
+				this.map.append(wireSVG, {});
+				this.map.append(svg, {});
+
+				let vertexArr = [	[-this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+					[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+					[this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ],
+					[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]];
+				let vertexCount = vertexArr.length;
+				let edgeConstraints = [[0,1], [1,2], [2,3], [3,0]];
+				let slicePolygonList = [];
+				navmesh._borderEdges.forEach((edge) => {
+					if (edge.vertex.index === undefined) {
+						vertexArr[vertexCount] = [edge.vertex.x, edge.vertex.z];
+						edge.vertex.index = vertexCount++;
+					}
+					if (edge.prev.vertex.index === undefined) {
+						vertexArr[vertexCount] = [edge.prev.vertex.x, edge.prev.vertex.z];
+						edge.prev.vertex.index = vertexCount++;
+					}
+					if (edge.value.from.index === undefined) {
+						vertexArr[vertexCount] = [edge.value.from.x, edge.value.from.z];
+						edge.value.from.index = vertexCount++;
+					}
+					if (edge.value.to.index === undefined) {
+						vertexArr[vertexCount] = [edge.value.to.x, edge.value.to.z];
+						edge.value.to.index = vertexCount++;
+					}
+					
+					// add border slice solid...
+					edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
+					slicePolygonList.push(new Polygon().fromContour([edge.value.to, edge.vertex, edge.prev.vertex, edge.value.from]));
+
+					svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));
+				});
+				resultMap.forEach( (edges, vertex) => {
+					let fromChamferIndex = -1;
+					let toChamferIndex = -1;
+					let theChamfer = null;
+					if (vertex.chamfer) {
+						// add chamfer solid
+						if (fromChamferIndex < 0 && vertex.chamfer.from.index !== undefined) {
+							fromChamferIndex = vertex.chamfer.from.index;
+						}
+						if(toChamferIndex < 0 && vertex.chamfer.to.index !== undefined) {
+							toChamferIndex = vertex.chamfer.to.index;
+						}
+						if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+							theChamfer = vertex.chamfer;
+						}
+						
+					}
+					if (vertex.resultArr && !theChamfer) {
+						vertex.resultArr.forEach((result, index) => {
+							let baseI = (index+1) * 2;
+							if (result instanceof LineSegment) {
+								if (fromChamferIndex < 0 && result.from.index !== undefined) {
+									fromChamferIndex = result.from.index;
+								}
+								if(toChamferIndex < 0 && result.to.index !== undefined) {
+									toChamferIndex = result.to.index;
+								}
+								if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+									theChamfer = vertex.chamfer;
+								}
+							} 
+						});
+					}
+					if (theChamfer) {
+						slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
+						// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
+						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"red", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}));
+					} 
+				});
+
+				let ptArr = vertexArr; //vertexArr.map(vecToPoint);
+				//console.log(ptArr, edgeConstraints);
+				cleanPSLG(ptArr, edgeConstraints);
+				
+				let cdt = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
+				wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 			}
 			//*/
 		}
