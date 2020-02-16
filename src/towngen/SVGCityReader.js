@@ -1,5 +1,6 @@
 import { Vector3 } from "../math/Vector3.js";
 import { Polygon } from "../math/Polygon.js";
+import { HalfEdge } from "../math/HalfEdge.js";
 import { AABB } from "../math/AABB.js";
 import { LineSegment } from "../math/LineSegment.js";
 import {Delaunay} from "d3-delaunay";
@@ -1244,6 +1245,8 @@ class SVGCityReader {
 		//points = obstacleVerts;
 		//edges = obstacleEdges;
 
+		var svg;
+
 
 		cleanPSLG(obstacleVerts, obstacleEdges);
 		let cdt = cdt2d(obstacleVerts, obstacleEdges, {interior:true, exterior:false});
@@ -1255,7 +1258,7 @@ class SVGCityReader {
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
 		NavMeshUtils.weldVertices(navmesh);
 
-		var svg;
+	
 		if (this._PREVIEW_MODE) {
 			svg = $(this.makeSVG("g", {}));
 			this.map.append(svg, {});
@@ -1264,25 +1267,57 @@ class SVGCityReader {
 			//return {vertices:points, edges:edges, cdt:cdt};
 		}
 
+		let rampShadowPolygons = null;
 		// for this context only, arbitarily add ramp borderEdges of projected low enough polygons over over assumed flat ground
 		if (this.navmeshRoad) {
-			//let rampNavmesh = new NavMesh();
-			//rampNavmesh.attemptBuildGraph = false;
-			///rampNavmesh.attemptMergePolies = true;
-			let rampPolygons = NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY_RAMP, true);
-			//rampNavmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices();
-			
-			rampPolygons = rampPolygons.map((poly)=> {
+			rampShadowPolygons = NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY_RAMP, true);
+
+			// get the height clearance blockage polygons for sloping ramp overheads
+			rampShadowPolygons = rampShadowPolygons.map((poly)=> {
 				return NavMeshUtils.getObstructingPolyOverFlatLevel(poly, groundLevel, this.agentHeight - this.rampedBuildingExtrudeThickness);
 			}).filter((poly)=>{return poly!==null});
 
-			svg.append(this.makeSVG("path", {fill:"white", stroke:"blue", "stroke-width": 0.2, d: rampPolygons.map(polygonSVGString).join(" ") }));
-			///svg.append(this.makeSVG("path", {fill:"none", stroke:"blue", "stroke-width": 0.2, d: rampNavmesh._borderEdges.map(edgeSVGString).join(" ") }));
-			//.highways = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
-			//this.highwayExtrudeThickness >= 0 ? this.highwayExtrudeThickness : this.innerWardAltitude, scaleXZ, this.highwayExtrudeThickness < 0, this.innerWardRoadAltitude);
+			svg = $(this.makeSVG("g", {}));
+			this.map.append(svg, {});
+			svg.append(this.makeSVG("path", {fill:"white", stroke:"blue", "stroke-width": 0.2, d: rampShadowPolygons.map(polygonSVGString).join(" ") }));
 		}
+
 		
 		if (inset !== 0) {
+
+			if (rampShadowPolygons !== null) {
+				let rampShadowNavmesh = new NavMesh();
+				rampShadowNavmesh.attemptBuildGraph = false;
+				rampShadowNavmesh.attemptMergePolies = false; // already merged beforehand from existing road navmesh
+				rampShadowNavmesh.fromPolygons(rampShadowPolygons);
+				let isNotGroundLevel = (b)=> {
+					return (b.vertex.y !== groundLevel || b.prev.vertex.y !== groundLevel); 
+				};
+			
+				let rampShadowNavmeshEdges = rampShadowNavmesh._borderEdges; // rampShadowNavmesh._borderEdges.filter(isNotGroundLevel);
+				/*
+				rampShadowNavmesh._borderEdges.filter((b)=>{return !isNotGroundLevel(b)}).forEach((e)=>{
+					let edge = e.next;		
+					do {
+						let he;
+						let nextEdge = edge.next;
+						if (edge.vertex === e.prev.vertex) { // right lane edge complement
+							rampShadowNavmeshEdges.push(he = new HalfEdge(e.prev.vertex));
+							//edge.next = he;
+							he.prev = edge.prev.vertex;
+						} else if (edge.prev.vertex === e.vertex) { // left lane edge complement
+							rampShadowNavmeshEdges.push(he = new HalfEdge(edge.vertex));
+							//edge.next = he;
+							he.prev = edge;
+						}
+						edge = nextEdge;
+					} while (edge !== e)
+				});
+				*/
+
+				navmesh._borderEdges = navmesh._borderEdges.concat(rampShadowNavmeshEdges);
+			}
+
 			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
 			if (false && this._PREVIEW_MODE) {
 				svg = $(this.makeSVG("g", {}));

@@ -100,29 +100,7 @@ function getIntersectionTimeToPlaneBound(origin, dx, dz, plane) {
     return numerator/denom;
 }
 
-function getKeyEdgePair(edge, edge2, len) {
-    let boo = edge.index < edge2.index;
-    let e1 = boo ? edge.index : edge2.index;
-    let e2 = boo ? edge2.index : edge.index;
-    return e1*len + e2;
-}
 
-
-function findNeighborEdgeCompHead(edges, vertex) {
-    let len = edges.length;
-    for (let i =0; i< len; i++) {
-        if (edges[i].prev.vertex === vertex) return edges[i];
-    }
-    return null;
-}
-
-function findNeighborEdgeCompTail(edges, vertex) {
-    let len = edges.length;
-    for (let i =0; i< len; i++) {
-        if (edges[i].vertex === vertex) return edges[i];
-    }
-    return null;
-}
 
 function findNeighborEdgeCompHeadArr(edges, edge, vertex, visitedEdgePairs, edgeLen) {
     let len = edges.length;
@@ -142,6 +120,31 @@ function findNeighborEdgeCompHeadArr(edges, edge, vertex, visitedEdgePairs, edge
     return foundCount > 0 ? arr : null;
 }
 
+// to depecriate,. kept for debugging/asserting purposes only
+function getKeyEdgePair(edge, edge2, len) {
+    let boo = edge.index < edge2.index;
+    let e1 = boo ? edge.index : edge2.index;
+    let e2 = boo ? edge2.index : edge.index;
+    return e1*len + e2;
+}
+
+/* // depecrated
+function findNeighborEdgeCompHead(edges, vertex) {
+    let len = edges.length;
+    for (let i =0; i< len; i++) {
+        if (edges[i].prev.vertex === vertex) return edges[i];
+    }
+    return null;
+}
+
+function findNeighborEdgeCompTail(edges, vertex) {
+    let len = edges.length;
+    for (let i =0; i< len; i++) {
+        if (edges[i].vertex === vertex) return edges[i];
+    }
+    return null;
+}
+
 function findNeighborEdgeCompTailArr(edges, edge, vertex, visitedEdgePairs, edgeLen) {
     let len = edges.length;
     let arr =[];
@@ -158,6 +161,7 @@ function findNeighborEdgeCompTailArr(edges, edge, vertex, visitedEdgePairs, edge
     }
     return foundCount > 0 ? arr : null;
 }
+*/
 
 var transformId = 0;
 
@@ -825,7 +829,7 @@ class NavMeshUtils {
      * Note that for any polygon area that lies below yPosition + agentHeight, assumed blocking always. 
      * Only polygon volume of y >= agentHeight + yPosition considered non-blocking/obstructing. If y goes below yPosition itself,
      * by default, no ground plane clipping is done, so if obstructing volume goes below ground yPos, it's still counted
-     * as a projected blocking polygon if it's obstructing the floor itself even though it's buried underneath (ie.  not clipped by yPos plane).
+     * as a projected blocking polygon if it's obstructing the floor itself even though it's buried underneath it (ie.  not clipped by yPos plane).
      * (future consideration: feature to auto-clip polygon by yPosition plane as well, or a seperate function for that?)
      * @param {Polgon} polygon A typically sloping polygon in relation to flat y ground postion
      * @param {Number} yPos The flat y position ground surface in relation to polygon
@@ -1024,7 +1028,7 @@ class NavMeshUtils {
            
            if (neighborEdgeArr) { // forwardDir for e.vertex
                 neighborEdgeArr.forEach( (neighborEdge) => {
-                    edgePairKey = getKeyEdgePair(e, neighborEdge, len);
+                // edgePairKey = getKeyEdgePair(e, neighborEdge, len);
                 //
                 //if (!visitedEdgePairs.has(edgePairKey)) { //  !(e.vertex.result || e.vertex.chamfer)
                     visitedEdgePairs.add(edgePairKey);
