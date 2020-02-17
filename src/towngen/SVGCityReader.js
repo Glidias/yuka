@@ -1406,7 +1406,7 @@ class SVGCityReader {
 		if (this._PREVIEW_MODE) {
 			svg = $(this.makeSVG("g", {}));
 			this.map.append(svg, {});
-			svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			svg.append(this.makeSVG("path", {fill:"rgba(55,255,0,0.3)", stroke:"blue", "stroke-width": 0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 			//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 			//return {vertices:points, edges:edges, cdt:cdt};
 		}
@@ -1421,9 +1421,11 @@ class SVGCityReader {
 				return NavMeshUtils.getObstructingPolyOverFlatLevel(poly, groundLevel, this.agentHeight - this.rampedBuildingExtrudeThickness);
 			}).filter((poly)=>{return poly!==null});
 
-			svg = $(this.makeSVG("g", {}));
-			this.map.append(svg, {});
-			svg.append(this.makeSVG("path", {fill:"white", stroke:"blue", "stroke-width": 0.2, d: rampShadowPolygons.map(polygonSVGString).join(" ") }));
+			if (this._PREVIEW_MODE) {
+				svg = $(this.makeSVG("g", {}));
+				this.map.append(svg, {});
+				svg.append(this.makeSVG("path", {fill:"white", stroke:"blue", "stroke-width": 0.2, d: rampShadowPolygons.map(polygonSVGString).join(" ") }));
+			}
 		}
 
 
@@ -1455,41 +1457,45 @@ class SVGCityReader {
 			}
 
 			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
-			if (false && this._PREVIEW_MODE) {
+			if (false && this._PREVIEW_MODE) { // switchero initial testing versus default implementation
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
 				resultMap.forEach( (edges, vertex) => {
 					if (vertex.result) {
 						if (!edges.coincident) {
-							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
+							svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
 							svg.append(this.makeSVG("circle", {r:0.15, fill:vertex.welded ? "red" : "white", cx:vertex.result.x, cy:vertex.result.z}));
 						} else {
 							// coincident case of intersetion
-							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"yellow", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[0].value.from,edges[0].value.to)}));
-							svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"violet", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[1].value.from,edges[1].value.to)}));
+							svg.append(this.makeSVG("path", {fill:"none", stroke:"yellow", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[0].value.from,edges[0].value.to)}));
+							svg.append(this.makeSVG("path", {fill:"none", stroke:"violet", "stroke-width": 0.15, d:lineSegmentSVGStr(edges[1].value.from,edges[1].value.to)}));
 							svg.append(this.makeSVG("circle", {r:0.15, fill:"yellow", cx:vertex.result.x, cy:vertex.result.z}));
 						}
 					}
 					if (vertex.chamfer) {
-						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
-						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(vertex.chamfer.from, vertex.chamfer.to)).join(" ")}));
+						svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(e.value.from,e.value.to)).join(" ")}));
+						svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(vertex.chamfer.from, vertex.chamfer.to)).join(" ")}));
 						svg.append(this.makeSVG("circle", {r:(!vertex.chamfer.exceedCount ? 0.15 : 0.3), fill:!vertex.chamfer.exceedCount ? "red" : "pink", cx:vertex.x, cy:vertex.z}));
 					}
 					if (vertex.resultArr) {
 						vertex.resultArr.forEach((result) => {
 							if (result instanceof LineSegment) {
 								// console.log('added chamfers found+');
-								svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"pink", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(result.from, result.to)).join(" ")}));
+								svg.append(this.makeSVG("path", {fill:"none", stroke:"pink", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(result.from, result.to)).join(" ")}));
 							}
 						});
 					}
 				});
-			} else {
+			} else { // Default generation
 				// debugging svg
-				svg = $(this.makeSVG("g", {}));
-				let wireSVG =  $(this.makeSVG("g", {}));
-				this.map.append(wireSVG, {});
-				this.map.append(svg, {});
+				let wireSVG;
+				if (this._PREVIEW_MODE) {
+					svg = $(this.makeSVG("g", {}));
+					wireSVG = $(this.makeSVG("g", {}));
+
+					this.map.append(wireSVG, {});
+					this.map.append(svg, {});
+				}
 
 				let vertexArr = [	[-this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
 					[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
@@ -1520,7 +1526,7 @@ class SVGCityReader {
 					edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
 					slicePolygonList.push(new Polygon().fromContour([edge.value.from, edge.prev.vertex, edge.vertex, edge.value.to]));
 
-					svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));
+					if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));
 				});
 				resultMap.forEach( (edges, vertex) => {
 					let fromChamferIndex = -1;
@@ -1558,7 +1564,7 @@ class SVGCityReader {
 					if (theChamfer) {
 						slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
 						// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
-						svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"red", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}));
+						if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"none", stroke:"red", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}));
 					}
 				});
 
@@ -1584,7 +1590,8 @@ class SVGCityReader {
 					return pt2DInBVH(cx, cz, navmeshBVH) && !pt2DInBVH(cx, cz, obstaclesBVH); // 2nd should be !..todo
 				});
 				clearStacks();
-				wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
+
+				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 			}
 			//*/
 		}
