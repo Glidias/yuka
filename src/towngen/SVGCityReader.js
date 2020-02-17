@@ -67,27 +67,43 @@ function getNewGeometryCollector() {
 	}
 }
 
-function cdtTriInBVH(points, tri, bvh) {
-	let cx;
-	let cz;
-	cx = (points[tri[0]][0] + points[tri[1]][0] + points[tri[2]][0]) / 3;
-	cz = (points[tri[0]][1] + points[tri[1]][1] + points[tri[2]][1]) / 3;
-	let primitives = query2DInBVH(cx, cz, bvh);
+function pt2DInBVH(x, z, bvh) {
+	let len = query2DInBVH(x, z, bvh);
 	// console.log(primitives[0]);
-	return true;
+	let primitives = PRIMITIVES; 
+	for (let i =0; i< len; i+=3) {
+		if (is_in_triangle(x, z, primitives[i+2], primitives[i+1], primitives[i])) {
+			return true;
+		}
+		
+	}
+	return false;
+}
+
+const STACK = [];
+const PRIMITIVES = [];
+function clearStacks() {
+	STACK.length = 0;
+	PRIMITIVES.length = 0;
 }
 
 function query2DInBVH(x, z, bvh) {
-	let stack = [bvh.root];
+	let stack = STACK;
+	
+	stack[0] = bvh.root;
 	let si = 1;
 	let n;
-	let primitives = [];
+	let primitives = PRIMITIVES;
 	let pi = 0;
+	let l;
+	let count = 0;
 	while(--si >= 0) {
 		n = stack[si];
-		if (n.primitives) {
-			for (let p of n.primitives) {
-				primitives[pi++] = p;
+		if ( (l = n.primitives.length) !== 0) {
+			for ( let i = 0; i < l; i += 9 ) {
+				primitives[count++] = [n.primitives[i], n.primitives[i+2]];
+				primitives[count++] = [n.primitives[i+3], n.primitives[i+5]];
+				primitives[count++] = [n.primitives[i+6], n.primitives[i+8]];
 			}
 		} else if (x>=n.boundingVolume.min.x && x <=n.boundingVolume.max.x && z >=n.boundingVolume.min.z && z <= n.boundingVolume.max.z) {
 			for (let c of n.children) {
@@ -95,7 +111,7 @@ function query2DInBVH(x, z, bvh) {
 			}
 		}
 	}
-	return primitives;
+	return count;
 }
 
 function pointArrEquals(arr, arr2) {
@@ -209,6 +225,32 @@ function pointInTriangle(px, py, c, b, a ) {
 	( ( p.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( p.z - b.z ) ) >= 0 &&
 	( ( p.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( p.z - c.z ) ) >= 0;
 	*/
+}
+	
+function is_in_triangle (px,py,a,b,c){ // triangle winding order doesn't matter for this method
+	let ax = a[0];
+	let ay = a[1];
+	let bx = b[0];
+	let by = b[1];
+	let cx = c[0];
+	let cy = c[1];
+	//credit: http://www.blackpawn.com/texts/pointinpoly/default.html
+	var v0 = [cx-ax,cy-ay];
+	var v1 = [bx-ax,by-ay];
+	var v2 = [px-ax,py-ay];
+
+	var dot00 = (v0[0]*v0[0]) + (v0[1]*v0[1]);
+	var dot01 = (v0[0]*v1[0]) + (v0[1]*v1[1]);
+	var dot02 = (v0[0]*v2[0]) + (v0[1]*v2[1]);
+	var dot11 = (v1[0]*v1[0]) + (v1[1]*v1[1]);
+	var dot12 = (v1[0]*v2[0]) + (v1[1]*v2[1]);
+
+	var invDenom = 1/ (dot00 * dot11 - dot01 * dot01);
+
+	var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+	var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+	return ((u >= 0) && (v >= 0) && (u + v < 1));
 }
 
 function pointToShapePt(pt) {
@@ -1343,7 +1385,19 @@ class SVGCityReader {
 		navmesh.attemptBuildGraph = false;
 
 		// navmesh.bvh = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromCDT(obstacleVerts, groundLevel, cdt));
-		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
+		let navmeshTriPolies = cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)});
+		/*
+		console.log('checking navmesh tris:'+navmeshTriPolies.length);
+		navmeshTriPolies = navmeshTriPolies.map((t)=> {
+			let a = t.edge.prev.vertex;
+			let b = t.edge.vertex;
+			let c = t.edge.next.vertex;
+			let det = ( ( c.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( c.z - a.z ) );
+			if (det < 0) console.warn("detected anticlockwise tri");
+			return det >= 0 ? t : new Polygon().fromContour(c,b,a);
+		});
+		*/
+		navmesh.fromPolygons(navmeshTriPolies);
 		NavMeshUtils.weldVertices(navmesh);
 
 		//navmesh.spatialIndex = new CellSpacePartitioning(this.svgWidth*scaleXZ, this.svgHeight*scaleXZ, 1, 80, 1, cellsZ )
@@ -1464,7 +1518,7 @@ class SVGCityReader {
 
 					// add border slice solid...
 					edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
-					slicePolygonList.push(new Polygon().fromContour([edge.value.to, edge.vertex, edge.prev.vertex, edge.value.from]));
+					slicePolygonList.push(new Polygon().fromContour([edge.value.from, edge.prev.vertex, edge.vertex, edge.value.to]));
 
 					svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));
 				});
@@ -1523,8 +1577,13 @@ class SVGCityReader {
 				let cdt = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
 
 				cdt = cdt.filter((c)=> {
-					return cdtTriInBVH(ptArr, c, navmeshBVH) && cdtTriInBVH(ptArr, c, obstaclesBVH); // 2nd should be !..todo
+					let cx;
+					let cz;
+					cx = (ptArr[c[0]][0] + ptArr[c[1]][0] + ptArr[c[2]][0]) / 3;
+					cz = (ptArr[c[0]][1] + ptArr[c[1]][1] + ptArr[c[2]][1]) / 3;
+					return pt2DInBVH(cx, cz, navmeshBVH) && !pt2DInBVH(cx, cz, obstaclesBVH); // 2nd should be !..todo
 				});
+				clearStacks();
 				wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 			}
 			//*/
