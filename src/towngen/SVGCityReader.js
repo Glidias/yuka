@@ -1523,7 +1523,7 @@ class SVGCityReader {
 				let cdt = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
 
 				cdt = cdt.filter((c)=> {
-					return cdtTriInBVH(points, c, navmeshBVH) && cdtTriInBVH(points, c, obstaclesBVH); // 2nd should be !..todo
+					return cdtTriInBVH(ptArr, c, navmeshBVH) && cdtTriInBVH(ptArr, c, obstaclesBVH); // 2nd should be !..todo
 				});
 				wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 			}
