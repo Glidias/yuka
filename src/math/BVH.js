@@ -79,9 +79,11 @@ class BVH {
 
 		// primitives
 
-		const nonIndexedGeometry = geometry.toTriangleSoup();
+		const nonIndexedGeometry = geometry.indices ? geometry.toTriangleSoup() : geometry;  // only convert if indexed
 		const vertices = nonIndexedGeometry.vertices;
-		this.root.primitives.push( ...vertices );
+
+		// this.root.primitives.push( ...vertices );
+		for (let e of vertices) this.root.primitives.push(e); // somewhat fix for ... operator causing maximum stack size
 
 		// centroids
 

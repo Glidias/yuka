@@ -3,6 +3,8 @@ import { Polygon } from "../math/Polygon.js";
 import { HalfEdge } from "../math/HalfEdge.js";
 import { AABB } from "../math/AABB.js";
 import { LineSegment } from "../math/LineSegment.js";
+// import { CellSpacePartitioning } from "../partitioning/CellSpacePartitioning.js";
+import { BVH } from "../math/BVH.js";
 import {Delaunay} from "d3-delaunay";
 
 import cdt2d from "cdt2d";
@@ -17,6 +19,7 @@ import {MathUtils} from "../math/MathUtils.js";
 
 import {Dijkstra} from "../graph/search/Dijkstra.js";
 import { NavEdge } from "../navigation/core/NavEdge.js";
+import { MeshGeometry } from "../core/MeshGeometry.js";
 
 const lineSegment = new LineSegment();
 const pointOnLineSegment = new Vector3();
@@ -64,9 +67,93 @@ function getNewGeometryCollector() {
 	}
 }
 
+function cdtTriInBVH(points, tri, bvh) {
+	let cx;
+	let cz;
+	cx = (points[tri[0]][0] + points[tri[1]][0] + points[tri[2]][0]) / 3;
+	cz = (points[tri[0]][1] + points[tri[1]][1] + points[tri[2]][1]) / 3;
+	let primitives = query2DInBVH(cx, cz, bvh);
+	// console.log(primitives[0]);
+	return true;
+}
+
+function query2DInBVH(x, z, bvh) {
+	let stack = [bvh.root];
+	let si = 1;
+	let n;
+	let primitives = [];
+	let pi = 0;
+	while(--si >= 0) {
+		n = stack[si];
+		if (n.primitives) {
+			for (let p of n.primitives) {
+				primitives[pi++] = p;
+			}
+		} else if (x>=n.boundingVolume.min.x && x <=n.boundingVolume.max.x && z >=n.boundingVolume.min.z && z <= n.boundingVolume.max.z) {
+			for (let c of n.children) {
+				stack[si++] = c;
+			}
+		}
+	}
+	return primitives;
+}
+
 function pointArrEquals(arr, arr2) {
 	return arr2.length === arr.length && arr2.toString() === arr.toString();
 }
+
+/*
+function getMeshGeometryFromCDT(points, groundRef, cdt) {
+	let len = points.length;
+	let vertices = new Float32Array(len * 3);
+	let c = 0;
+	let p;
+	for (let i=0; i< len; i++) {
+		p = points[i];
+		vertices[c++] = p[0];
+		vertices[c++] = groundRef;
+		vertices[c++] = p[1];
+	}
+
+	len = cdt.length;
+	let indices = new Uint32Array(len * 3);
+	c = 0;
+	for (let i = 0; i<len ;i++) {
+		p = cdt[i];
+		indices[c++] = p[0];
+		indices[c++] = p[1];
+		indices[c++] = p[2];
+	}
+	return new MeshGeometry(vertices, indices);
+}
+*/
+
+function getMeshGeometryFromPolygons(polygons) {
+	let arr = [];
+	let c = 0;
+	let len = polygons.length;
+	for (let i =0; i<len; i++) {
+		let p = polygons[i];
+		let edge = p.edge;
+		let mainP = edge.prev.vertex;
+		edge = edge.next;
+		while (edge !== p.edge.prev) {
+			arr[c++] = edge.prev.vertex.x;
+			arr[c++] = edge.prev.vertex.y;
+			arr[c++] = edge.prev.vertex.z;
+			arr[c++] = edge.vertex.x;
+			arr[c++] = edge.vertex.y;
+			arr[c++] = edge.vertex.z;
+			arr[c++] = mainP.x;
+			arr[c++] = mainP.y;
+			arr[c++] = mainP.z;
+			edge = edge.next;
+		}
+	}
+	return new MeshGeometry(new Float32Array(arr));
+}
+
+
 
 
 /**
@@ -1255,8 +1342,11 @@ class SVGCityReader {
 		// navmesh.attemptMergePolies = false;
 		navmesh.attemptBuildGraph = false;
 
+		// navmesh.bvh = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromCDT(obstacleVerts, groundLevel, cdt));
 		navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
 		NavMeshUtils.weldVertices(navmesh);
+
+		//navmesh.spatialIndex = new CellSpacePartitioning(this.svgWidth*scaleXZ, this.svgHeight*scaleXZ, 1, 80, 1, cellsZ )
 
 
 		if (this._PREVIEW_MODE) {
@@ -1267,7 +1357,7 @@ class SVGCityReader {
 			//return {vertices:points, edges:edges, cdt:cdt};
 		}
 
-		let rampShadowPolygons = null;
+		let rampShadowPolygons = [];
 		// for this context only, arbitarily add ramp borderEdges of projected low enough polygons over over assumed flat ground
 		if (this.navmeshRoad) {
 			rampShadowPolygons = NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY_RAMP, true);
@@ -1290,10 +1380,10 @@ class SVGCityReader {
 				rampShadowNavmesh.attemptBuildGraph = false;
 				rampShadowNavmesh.attemptMergePolies = false; // already merged beforehand from existing road navmesh
 				rampShadowNavmesh.fromPolygons(rampShadowPolygons);
-
-				let rampShadowNavmeshEdges =  rampShadowNavmesh._borderEdges.filter((b)=> {
+				let notGroundLevel = (b)=> {
 					return (b.vertex.y !== groundLevel || b.prev.vertex.y !== groundLevel);
-				});
+				};
+				let rampShadowNavmeshEdges =  rampShadowNavmesh._borderEdges.filter(notGroundLevel);
 				//*
 				rampShadowNavmeshEdges.forEach((e)=>{
 					let he;
@@ -1302,13 +1392,16 @@ class SVGCityReader {
 				});
 				//*/
 
-				console.log("Existing length:"+  navmesh._borderEdges.length);
+				this.connectingRampEdges = rampShadowNavmesh._borderEdges.filter((b)=> {return !notGroundLevel(b)});
+				console.log(this.connectingRampEdges.length + " connecting ramp edges found.");
+
+				console.log("Existing ramp shadow edges length:"+  navmesh._borderEdges.length);
 				navmesh._borderEdges = navmesh._borderEdges.concat(rampShadowNavmeshEdges);
-				console.log("Added to length:"+  navmesh._borderEdges.length);
+				console.log("Added to ramp shadow edges length:"+  navmesh._borderEdges.length);
 			}
 
 			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
-			if (true && this._PREVIEW_MODE) {
+			if (false && this._PREVIEW_MODE) {
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
 				resultMap.forEach( (edges, vertex) => {
@@ -1415,7 +1508,11 @@ class SVGCityReader {
 					}
 				});
 
-				return navmesh;
+				// return navmesh;
+
+				// to filter out upcoming generated cdt
+				let navmeshBVH = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(navmesh.regions));
+				let obstaclesBVH  = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(slicePolygonList.concat(rampShadowPolygons)));
 
 				let ptArr = vertexArr.slice(0); //vertexArr.map(vecToPoint);
 				//console.log(ptArr, edgeConstraints);
@@ -1424,6 +1521,10 @@ class SVGCityReader {
 				//console.log(pointArrEquals(ptArr.slice(0,vertexArr.length), vertexArr));
 
 				let cdt = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
+
+				cdt = cdt.filter((c)=> {
+					return cdtTriInBVH(points, c, navmeshBVH) && cdtTriInBVH(points, c, obstaclesBVH); // 2nd should be !..todo
+				});
 				wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 			}
 			//*/
