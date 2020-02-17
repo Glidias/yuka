@@ -83,12 +83,20 @@ function calcPlaneBoundaryBetweenEdges(edge, neighborEdge, vertex, inset, plane)
     let planeX = (neighborEdge.normal.x + edge.normal.x) * 0.5;
     let planeZ = (neighborEdge.normal.z + edge.normal.z) * 0.5;
     if (planeX * planeX + planeZ * planeZ < 1e-7) {
-        plane.copy(edge.dir).multiplyScalar(edge.vertex === vertex ? 1 : -1);
+        let sc = edge.vertex === vertex ? 1 : -1;
+        planeX = edge.dir.x * sc;
+        planeZ = edge.dir.z * sc;
     }
     plane.x = -planeX;
     plane.z = -planeZ;
     plane.w = vertex.x * plane.x + vertex.z * plane.z - inset;
     return plane;
+}
+
+function isMirroredEdge(edge, neighborEdge) {
+    let res = (edge.dir.x * neighborEdge.dir.x + edge.dir.z * neighborEdge.dir.z === -1);  // <=  + 1e-5
+    // if (res) console.log("Detected mirroed edge:" + edge.index + " ," + neighborEdge.index);
+    return res;
 }
 
 function getIntersectionTimeToPlaneBound(origin, dx, dz, plane) {
@@ -157,7 +165,7 @@ function findNeighborEdgeCompTailArr(edges, edge, vertex, visitedEdgePairs, edge
             if (!visitedEdgePairs.has(edgeKey)) arr.push(candidate);
             foundCount++;
             //break;
-        } 
+        }
     }
     return foundCount > 0 ? arr : null;
 }
@@ -722,7 +730,6 @@ class NavMeshUtils {
                 edge = edge.next;
             } while (edge !== r.edge)
         }
-        console.log("NAvmesh Welded vertices count:" + weldCount);
     }
 
     static divideEdgeByVertex(splitVertex, edge) {
@@ -826,7 +833,7 @@ class NavMeshUtils {
 
     /**
      * Get obstructing obstacle polygon over a given flat yPosition surface given a sloping polgon.
-     * Note that for any polygon area that lies below yPosition + agentHeight, assumed blocking always. 
+     * Note that for any polygon area that lies below yPosition + agentHeight, assumed blocking always.
      * Only polygon volume of y >= agentHeight + yPosition considered non-blocking/obstructing. If y goes below yPosition itself,
      * by default, no ground plane clipping is done, so if obstructing volume goes below ground yPos, it's still counted
      * as a projected blocking polygon if it's obstructing the floor itself even though it's buried underneath it (ie.  not clipped by yPos plane).
@@ -839,17 +846,17 @@ class NavMeshUtils {
     static getObstructingPolyOverFlatLevel(polygon, yPos, agentHeight) {
         let contours = [];
         let edge = polygon.edge;
-        
+
         let heightLimit = yPos + agentHeight;
         let lastBlockedPoint = null;
 
         // y = mx + c;
         // heightLimit <= mx + c
-        // 
+        //
         let dx;
         let dy;
         let dz;
-        
+
         let t;
         let startBlockedState;
         let endBlockedState;
@@ -864,7 +871,7 @@ class NavMeshUtils {
                 dy = edge.vertex.y - edge.prev.vertex.y;
 
                 t = (edge.prev.vertex.y - heightLimit) / -dy;
-               
+
                 if (!startBlockedState ) { // clip from start
                     // assumed/assert dy < 0
                     if (dy >= 0) throw new Error("Gradient sign assertion failed! dy < 0");
@@ -875,11 +882,11 @@ class NavMeshUtils {
                     // assumed/assert dy > 0
                     if (dy <= 0) throw new Error("Gradient sign assertion failed! dy > 0");
                     contours.push( new Vector3(edge.prev.vertex.x + t * dx, heightLimit, edge.prev.vertex.z + t * dz) );
-                }  
-            } else if (startBlockedState) { // thus also === endBlockedState                 
+                }
+            } else if (startBlockedState) { // thus also === endBlockedState
                 contours.push(edge.vertex.clone());
             }
-            
+
             edge = edge.next;
         } while ( edge !== polygon.edge)
         return contours.length >= 3 ? new Polygon().fromContour(contours) : null;
@@ -995,7 +1002,7 @@ class NavMeshUtils {
         let arr;
         let arr2;
         let visitedEdgePairs = new Set();
-        
+
         // iterate through each border edge to expand and stretch
         for(let i=0;i<len; i++) {
             e = navMesh._borderEdges[i];
@@ -1020,12 +1027,12 @@ class NavMeshUtils {
 
         for (let i =0; i<len; i++) {
             e = navMesh._borderEdges[i];
-           
+
            let arr;
             // head vertex on consiered edge
            arr = vertexToEdgesMap.get(e.vertex);
            neighborEdgeArr = findNeighborEdgeCompHeadArr(arr, e, e.vertex, visitedEdgePairs, len)
-           
+
            if (neighborEdgeArr) { // forwardDir for e.vertex
                 neighborEdgeArr.forEach( (neighborEdge) => {
                 // edgePairKey = getKeyEdgePair(e, neighborEdge, len);
@@ -1043,7 +1050,7 @@ class NavMeshUtils {
                             LINE.at(LINE_RESULT.r, intersectPtOrChamfer = new Vector3());
                             intersectPtOrChamfer.t = (LINE_RESULT.r - 1) * length2DSegment(LINE);
                             if (!resultMap.has(e.vertex)) {
-                                resultMap.set(e.vertex, [e, neighborEdge]); 
+                                resultMap.set(e.vertex, [e, neighborEdge]);
                                 e.vertex.result = intersectPtOrChamfer;
                             } else {
                                 resultMap.get(e.vertex).push(e, neighborEdge);
@@ -1051,11 +1058,12 @@ class NavMeshUtils {
                                 e.vertex.resultArr.push(intersectPtOrChamfer);
                             }
                         } else {
-                            if (LINE_RESULT.coincident) { // todo: normal case for this
+                            let detectedMirroredEdge = false;
+                            if (LINE_RESULT.coincident && !(detectedMirroredEdge=isMirroredEdge(e, neighborEdge))) {
                                 intersectPtOrChamfer = new Vector3(e.value.to.x, e.value.to.y, e.value.to.z);
                                 intersectPtOrChamfer.t = 0;
                                 if (!resultMap.has(e.vertex)) {
-                                    resultMap.set(e.vertex, coincideArr=[e, neighborEdge]); 
+                                    resultMap.set(e.vertex, coincideArr=[e, neighborEdge]);
                                     e.vertex.result = intersectPtOrChamfer;
                                    coincideArr.coincident = 1;
                                 } else {
@@ -1071,11 +1079,12 @@ class NavMeshUtils {
                                 //if (snapT > inset*2) snapT = inset*2;
                                 plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.vertex, inset, plane);
                                 tPlane = getIntersectionTimeToPlaneBound(LINE.to, e.dir.x, e.dir.z, plane);
+                                //if (detectedMirroredEdge) console.log("times:" + tPlane + ' vs ' + snapT + " | " +plane.x + ", "+plane.z + "," +plane.w);
                                 splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z);
                                 splitVertex2 = new Vector3(LINE2.from.x, 0, LINE2.from.z);
                                 splitVertex.t = 0;
                                 splitVertex2.t = 0;
-                                if (LINE_RESULT.r > 1 && tPlane > 0 && tPlane < snapT && Math.abs(neighborEdge.dir.dot(e.dir)) < 1-1e-7   ) {
+                                if (tPlane > 0 && ( (LINE_RESULT.r > 1 && tPlane < snapT) || detectedMirroredEdge)) { // && Math.abs(neighborEdge.dir.dot(e.dir)) < 1-1e-7
                                     //console.log(tPlane + ' vs ' + snapT + ' >>>' + deltaLength + ', ' + LINE_RESULT.r);
                                     splitVertex.x = LINE.to.x + tPlane * e.dir.x;
                                     splitVertex.z = LINE.to.z + tPlane * e.dir.z;
@@ -1104,7 +1113,7 @@ class NavMeshUtils {
            }
 
 
-          
+
         }
 
         // validate resultMap, resolve extents and weld
@@ -1113,12 +1122,12 @@ class NavMeshUtils {
             if (vertex.chamfer) {
                 // todo: check if close enough chamfer to consider proper welding as vertex.result instead
                 if (lengthSq2DSegment(vertex.chamfer) <= minChamferDistSq) { // welded chamfer vertex result
-                    vertex.result = vertex.chamfer.snap; 
+                    vertex.result = vertex.chamfer.snap;
                     vertex.result.welded = true;
                     vertex.chamfer = null;
                     edges[0].value.to = vertex.result;
                     edges[1].value.from = vertex.result;
-                    
+
                 } else {
                      // chamfer vertex
                     edges[0].value.to = vertex.chamfer.from;
@@ -1147,7 +1156,7 @@ class NavMeshUtils {
                                 edges[0].value.to = result.from;
                                 edges[1].value.from = result.to;
                             }
-                            
+
                         }
                     } else { // assumed Vector3 intersection point
                         if (edges[0].value.to.t < result.t ) {
