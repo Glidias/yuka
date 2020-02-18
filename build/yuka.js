@@ -10623,6 +10623,22 @@
 	const p1 = new Vector3();
 	const p2 = new Vector3();
 
+	function sqDistBetween2DVector(a, b)
+	{
+		var dx = b.x - a.x;
+		var dy = b.z - a.z;
+		return dx * dx + dy * dy;
+	}
+
+	function rBetween2DVec(a, b, c)
+	{
+		var dx = b.x - a.x;
+		var dy = b.z - a.z;
+		var dx2 = c.x - a.x;
+		var dy2 = c.z - a.z;
+		return dx * dx2 + dy * dy2;
+	}
+
 	/**
 	* Class representing a 3D line segment.
 	*
@@ -10717,10 +10733,53 @@
 		* @return {Vector3} The result vector.
 		*/
 		at( t, result ) {
-
 			return this.delta( result ).multiplyScalar( t ).add( this.from );
-
 		}
+
+		/**
+		 * Calculates intersection result with other line segment
+		 * @param {LineSegment} other
+		 * @param {Object} result Holds r and s result timings. R represents timing of intersection along first line segment, S represents timing along second line segment
+		 * @return Whether ray hits
+		 */
+		getIntersects(other, result = null)
+		{
+			let a = this.from;
+			let b = this.to;
+			let c = other.from;
+			let d = other.to;
+			let denominator = ((b.x - a.x) * (d.z - c.z)) - ((b.z - a.z) * (d.x - c.x));
+			let numerator1 = ((a.z - c.z) * (d.x - c.x)) - ((a.x - c.x) * (d.z - c.z));
+			let numerator2 = ((a.z - c.z) * (b.x - a.x)) - ((a.x - c.x) * (b.z - a.z));
+			let r;
+			let s;
+			// Detect coincident lines (has a problem, read below)
+			if (denominator == 0)
+			{
+				// find between c and d, which is closer to a, clamp to s to 1 and 0, set r to c/d
+				s = sqDistBetween2DVector(a, c) < sqDistBetween2DVector(a, d) ? 0 : 1;
+				r = s != 0 ? rBetween2DVec(a, b, d) : rBetween2DVec(a, b, c);
+				// throw new Error("DETECT");
+				if (result !== null) {
+					result.r = r;
+					result.s = s;
+					result.coincident = true;
+				}
+				return false; // (r >= 0) && (s >= 0 && s <= 1);
+					//  return numerator1 == 0 && numerator2 == 0;
+			}
+
+			r = numerator1 / denominator;
+			s = numerator2 / denominator;
+			if (result !== null) {
+				result.r = r;
+				result.s = s;
+				result.coincident = false;
+			}
+			//
+			return s >= 0 && s <= 1 && r <= 1 && r >= 0;
+		}
+
 
 		/**
 		* Computes the closest point on an infinite line defined by the line segment.
@@ -16164,6 +16223,660 @@
 			}
 			return 1;
 		}
+	}
+
+	const v1$4 = new Vector3();
+	const v2$1 = new Vector3();
+	const v3 = new Vector3();
+
+	const xAxis$1 = new Vector3( 1, 0, 0 );
+	const yAxis$1 = new Vector3( 0, 1, 0 );
+	const zAxis$1 = new Vector3( 0, 0, 1 );
+
+	const triangle = { a: new Vector3(), b: new Vector3(), c: new Vector3() };
+	const intersection = new Vector3();
+	const intersections = new Array();
+
+	/**
+	* Class representing a bounding volume hierarchy. The current implementation
+	* represents single BVH nodes as AABBs. It accepts arbitrary branching factors
+	* and can subdivide the given geometry until a defined hierarchy depth has been reached.
+	* Besides, the hierarchy construction is performed top-down and the algorithm only
+	* performs splits along the cardinal axes.
+	*
+	* Reference: Bounding Volume Hierarchies in Real-Time Collision Detection
+	* by Christer Ericson (chapter 6).
+	*
+	* @author {@link https://github.com/robp94|robp94}
+	* @author {@link https://github.com/Mugen87|Mugen87}
+	*/
+	class BVH {
+
+		/**
+		* Constructs a new BVH.
+		*
+		* @param {Number} branchingFactor - The branching factor.
+		* @param {Number} primitivesPerNode - The minimum amount of primitives per BVH node.
+		* @param {Number} depth - The maximum hierarchical depth.
+		*/
+		constructor( branchingFactor = 2, primitivesPerNode = 1, depth = 10 ) {
+
+			/**
+			* The branching factor (how many nodes per level).
+			* @type Number
+			* @default 2
+			*/
+			this.branchingFactor = branchingFactor;
+
+			/**
+			* The minimum amount of primitives per BVH node.
+			* @type Number
+			* @default 10
+			*/
+			this.primitivesPerNode = primitivesPerNode;
+
+			/**
+			* The maximum hierarchical depth.
+			* @type Number
+			* @default 10
+			*/
+			this.depth = depth;
+
+			/**
+			* The root BVH node.
+			* @type BVHNode
+			* @default null
+			*/
+			this.root = null;
+
+		}
+
+		/**
+		* Computes a BVH for the given mesh geometry.
+		*
+		* @param {MeshGeometry} geometry - The mesh geometry.
+		* @return {BVH} A reference to this BVH.
+		*/
+		fromMeshGeometry( geometry ) {
+
+			this.root = new BVHNode();
+
+			// primitives
+
+			const nonIndexedGeometry = geometry.indices ? geometry.toTriangleSoup() : geometry;  // only convert if indexed
+			const vertices = nonIndexedGeometry.vertices;
+
+			// this.root.primitives.push( ...vertices );
+			for (let e of vertices) this.root.primitives.push(e); // somewhat fix for ... operator causing maximum stack size
+
+			// centroids
+
+			const primitives = this.root.primitives;
+
+			for ( let i = 0, l = primitives.length; i < l; i += 9 ) {
+
+				v1$4.fromArray( primitives, i );
+				v2$1.fromArray( primitives, i + 3 );
+				v3.fromArray( primitives, i + 6 );
+
+				v1$4.add( v2$1 ).add( v3 ).divideScalar( 3 );
+
+				this.root.centroids.push( v1$4.x, v1$4.y, v1$4.z );
+
+			}
+
+			// build
+
+			this.root.build( this.branchingFactor, this.primitivesPerNode, this.depth, 1 );
+
+			return this;
+
+		}
+
+		/**
+		* Executes the given callback for each node of the BVH.
+		*
+		* @param {Function} callback - The callback to execute.
+		* @return {BVH} A reference to this BVH.
+		*/
+		traverse( callback ) {
+
+			this.root.traverse( callback );
+
+			return this;
+
+		}
+
+	}
+
+	/**
+	* A single node in a bounding volume hierarchy (BVH).
+	*
+	* @author {@link https://github.com/robp94|robp94}
+	* @author {@link https://github.com/Mugen87|Mugen87}
+	*/
+	class BVHNode {
+
+		/**
+		* Constructs a BVH node.
+		*/
+		constructor() {
+
+			/**
+			* The parent BVH node.
+			* @type BVHNode
+			* @default null
+			*/
+			this.parent = null;
+
+			/**
+			* The child BVH nodes.
+			* @type Array
+			*/
+			this.children = new Array();
+
+			/**
+			* The bounding volume of this BVH node.
+			* @type AABB
+			*/
+			this.boundingVolume = new AABB();
+
+			/**
+			* The primitives (triangles) of this BVH node.
+			* Only filled for leaf nodes.
+			* @type Array
+			*/
+			this.primitives = new Array();
+
+			/**
+			* The centroids of the node's triangles.
+			* Only filled for leaf nodes.
+			* @type Array
+			*/
+			this.centroids = new Array();
+
+		}
+
+		/**
+		* Returns true if this BVH node is a root node.
+		*
+		* @return {Boolean} Whether this BVH node is a root node or not.
+		*/
+		root() {
+
+			return this.parent === null;
+
+		}
+
+		/**
+		* Returns true if this BVH node is a leaf node.
+		*
+		* @return {Boolean} Whether this BVH node is a leaf node or not.
+		*/
+		leaf() {
+
+			return this.children.length === 0;
+
+		}
+
+		/**
+		* Returns the depth of this BVH node in its hierarchy.
+		*
+		* @return {Number} The hierarchical depth of this BVH node.
+		*/
+		getDepth() {
+
+			let depth = 0;
+
+			let parent = this.parent;
+
+			while ( parent !== null ) {
+
+				parent = parent.parent;
+				depth ++;
+
+			}
+
+			return depth;
+
+		}
+
+		/**
+		* Executes the given callback for this BVH node and its ancestors.
+		*
+		* @param {Function} callback - The callback to execute.
+		* @return {BVHNode} A reference to this BVH node.
+		*/
+		traverse( callback ) {
+
+			callback( this );
+
+			for ( let i = 0, l = this.children.length; i < l; i ++ ) {
+
+				 this.children[ i ].traverse( callback );
+
+			}
+
+			return this;
+
+		}
+
+		/**
+		* Builds this BVH node. That means the respective bounding volume
+		* is computed and the node's primitives are distributed under new child nodes.
+		* This only happens if the maximum hierarchical depth is not yet reached and
+		* the node does contain enough primitives required for a split.
+		*
+		* @param {Number} branchingFactor - The branching factor.
+		* @param {Number} primitivesPerNode - The minimum amount of primitives per BVH node.
+		* @param {Number} maxDepth - The maximum  hierarchical depth.
+		* @param {Number} currentDepth - The current hierarchical depth.
+		* @return {BVHNode} A reference to this BVH node.
+		*/
+		build( branchingFactor, primitivesPerNode, maxDepth, currentDepth ) {
+
+			this.computeBoundingVolume();
+
+			// check depth and primitive count
+
+			const primitiveCount = this.primitives.length / 9;
+			const newPrimitiveCount = Math.floor( primitiveCount / branchingFactor );
+
+			if ( ( currentDepth <= maxDepth ) && ( newPrimitiveCount >= primitivesPerNode ) ) {
+
+				// split (distribute primitives on new child BVH nodes)
+
+				this.split( branchingFactor );
+
+				// proceed with build on the next hierarchy level
+
+				for ( let i = 0; i < branchingFactor; i ++ ) {
+
+					this.children[ i ].build( branchingFactor, primitivesPerNode, maxDepth, currentDepth + 1 );
+
+				}
+
+			}
+
+			return this;
+
+		}
+
+		/**
+		* Computes the AABB for this BVH node.
+		*
+		* @return {BVHNode} A reference to this BVH node.
+		*/
+		computeBoundingVolume() {
+
+			const primitives = this.primitives;
+
+			const aabb = this.boundingVolume;
+
+			// compute AABB
+
+			aabb.min.set( Infinity, Infinity, Infinity );
+			aabb.max.set( - Infinity, - Infinity, - Infinity );
+
+			for ( let i = 0, l = primitives.length; i < l; i += 3 ) {
+
+				v1$4.x = primitives[ i ];
+				v1$4.y = primitives[ i + 1 ];
+				v1$4.z = primitives[ i + 2 ];
+
+				aabb.expand( v1$4 );
+
+			}
+
+			return this;
+
+		}
+
+		/**
+		* Computes the split axis. Right now, only the cardinal axes
+		* are potential split axes.
+		*
+		* @return {Vector3} The split axis.
+		*/
+		computeSplitAxis() {
+
+			let maxX, maxY, maxZ = maxY = maxX = - Infinity;
+			let minX, minY, minZ = minY = minX = Infinity;
+
+			const centroids = this.centroids;
+
+			for ( let i = 0, l = centroids.length; i < l; i += 3 ) {
+
+				const x = centroids[ i ];
+				const y = centroids[ i + 1 ];
+				const z = centroids[ i + 2 ];
+
+				if ( x > maxX ) {
+
+					maxX = x;
+
+				}
+
+				if ( y > maxY ) {
+
+					maxY = y;
+
+				}
+
+				if ( z > maxZ ) {
+
+					maxZ = z;
+
+				}
+
+				if ( x < minX ) {
+
+					minX = x;
+
+				}
+
+				if ( y < minY ) {
+
+					minY = y;
+
+				}
+
+				if ( z < minZ ) {
+
+					minZ = z;
+
+				}
+
+			}
+
+			const rangeX = maxX - minX;
+			const rangeY = maxY - minY;
+			const rangeZ = maxZ - minZ;
+
+			if ( rangeX > rangeY && rangeX > rangeZ ) {
+
+				return xAxis$1;
+
+			} else if ( rangeY > rangeZ ) {
+
+				return yAxis$1;
+
+			} else {
+
+				return zAxis$1;
+
+			}
+
+		}
+
+		/**
+		* Splits the node and distributes node's primitives over new child nodes.
+		*
+		* @param {Number} branchingFactor - The branching factor.
+		* @return {BVHNode} A reference to this BVH node.
+		*/
+		split( branchingFactor ) {
+
+			const centroids = this.centroids;
+			const primitives = this.primitives;
+
+			// create (empty) child BVH nodes
+
+			for ( let i = 0; i < branchingFactor; i ++ ) {
+
+				this.children[ i ] = new BVHNode();
+				this.children[ i ].parent = this;
+
+			}
+
+			// sort primitives along split axis
+
+			const axis = this.computeSplitAxis();
+			const sortedPrimitiveIndices = new Array();
+
+			for ( let i = 0, l = centroids.length; i < l; i += 3 ) {
+
+				v1$4.fromArray( centroids, i );
+
+				// the result from the dot product is our sort criterion.
+				// it represents the projection of the centroid on the split axis
+
+				const p = v1$4.dot( axis );
+				const primitiveIndex = i / 3;
+
+				sortedPrimitiveIndices.push( { index: primitiveIndex, p: p } );
+
+			}
+
+			sortedPrimitiveIndices.sort( sortPrimitives );
+
+			// distribute data
+
+			const primitveCount = sortedPrimitiveIndices.length;
+			const primitivesPerChild = Math.floor( primitveCount / branchingFactor );
+
+			var childIndex = 0;
+			var primitivesIndex = 0;
+
+			for ( let i = 0; i < primitveCount; i ++ ) {
+
+				// selected child
+
+				primitivesIndex ++;
+
+				// check if we try to add more primitives to a child than "primitivesPerChild" defines.
+				// move primitives to the next child
+
+				if ( primitivesIndex > primitivesPerChild ) {
+
+					// ensure "childIndex" does not overflow (meaning the last child takes all remaining primitives)
+
+					if ( childIndex < ( branchingFactor - 1 ) ) {
+
+						primitivesIndex = 1; // reset primitive index
+						childIndex ++; // raise child index
+
+					}
+
+				}
+
+				const child = this.children[ childIndex ];
+
+				// move data to the next level
+
+				// 1. primitives
+
+				const primitiveIndex = sortedPrimitiveIndices[ i ].index;
+				const stride = primitiveIndex * 9; // remember the "primitives" array holds raw vertex data defining triangles
+
+				v1$4.fromArray( primitives, stride );
+				v2$1.fromArray( primitives, stride + 3 );
+				v3.fromArray( primitives, stride + 6 );
+
+				child.primitives.push( v1$4.x, v1$4.y, v1$4.z );
+				child.primitives.push( v2$1.x, v2$1.y, v2$1.z );
+				child.primitives.push( v3.x, v3.y, v3.z );
+
+				// 2. centroid
+
+				v1$4.fromArray( centroids, primitiveIndex * 3 );
+
+				child.centroids.push( v1$4.x, v1$4.y, v1$4.z );
+
+			}
+
+			// remove centroids/primitives after split from this node
+
+			this.centroids.length = 0;
+			this.primitives.length = 0;
+
+			return this;
+
+		}
+
+		/**
+		* Performs a ray/BVH node intersection test and stores the closest intersection point
+		* to the given 3D vector. If no intersection is detected, *null* is returned.
+		*
+		* @param {Ray} ray - The ray.
+		* @param {Vector3} result - The result vector.
+		* @return {Vector3} The result vector.
+		*/
+		intersectRay( ray, result ) {
+
+			// gather all intersection points along the hierarchy
+
+			if ( ray.intersectAABB( this.boundingVolume, result ) !== null ) {
+
+				if ( this.leaf() === true ) {
+
+					const vertices = this.primitives;
+
+					for ( let i = 0, l = vertices.length; i < l; i += 9 ) {
+
+						// remember: we assume primitives are triangles
+
+						triangle.a.fromArray( vertices, i );
+						triangle.b.fromArray( vertices, i + 3 );
+						triangle.c.fromArray( vertices, i + 6 );
+
+						if ( ray.intersectTriangle( triangle, true, result ) !== null ) {
+
+							intersections.push( result.clone() );
+
+						}
+
+					}
+
+				} else {
+
+					// process childs
+
+					for ( let i = 0, l = this.children.length; i < l; i ++ ) {
+
+						this.children[ i ].intersectRay( ray, result );
+
+					}
+
+				}
+
+			}
+
+			// determine the closest intersection point in the root node (so after
+			// the hierarchy was processed)
+
+			if ( this.root() === true ) {
+
+				if ( intersections.length > 0 ) {
+
+					let minDistance = Infinity;
+
+					for ( let i = 0, l = intersections.length; i < l; i ++ ) {
+
+						const squaredDistance = ray.origin.squaredDistanceTo( intersections[ i ] );
+
+						if ( squaredDistance < minDistance ) {
+
+							minDistance = squaredDistance;
+							result.copy( intersections[ i ] );
+
+						}
+
+					}
+
+					// reset array
+
+					intersections.length = 0;
+
+					// return closest intersection point
+
+					return result;
+
+				} else {
+
+					// no intersection detected
+
+					return null;
+
+				}
+
+			} else {
+
+				// always return null for non-root nodes
+
+				return null;
+
+			}
+
+		}
+
+		/**
+		* Performs a ray/BVH node intersection test. Returns either true or false if
+		* there is a intersection or not.
+		*
+		* @param {Ray} ray - The ray.
+		* @return {boolean} Whether there is an intersection or not.
+		*/
+		intersectsRay( ray ) {
+
+			if ( ray.intersectAABB( this.boundingVolume, intersection ) !== null ) {
+
+				if ( this.leaf() === true ) {
+
+					const vertices = this.primitives;
+
+					for ( let i = 0, l = vertices.length; i < l; i += 9 ) {
+
+						// remember: we assume primitives are triangles
+
+						triangle.a.fromArray( vertices, i );
+						triangle.b.fromArray( vertices, i + 3 );
+						triangle.c.fromArray( vertices, i + 6 );
+
+						if ( ray.intersectTriangle( triangle, true, intersection ) !== null ) {
+
+							return true;
+
+						}
+
+					}
+
+					return false;
+
+				} else {
+
+					// process child BVH nodes
+
+					for ( let i = 0, l = this.children.length; i < l; i ++ ) {
+
+						if ( this.children[ i ].intersectsRay( ray ) === true ) {
+
+							return true;
+
+						}
+
+					}
+
+					return false;
+
+				}
+
+			} else {
+
+				return false;
+
+			}
+
+		}
+
+	}
+
+	//
+
+	function sortPrimitives( a, b ) {
+
+		return a.p - b.p;
+
 	}
 
 	const EPSILON = Math.pow(2, -52);
@@ -27403,45 +28116,134 @@ return d[d.length-1];};return ", funcName].join("");
 	});
 	});
 
-	var MAX_HOLE_LEN = 16;
-
 	const PLANE = new Plane();
 	const POINT = new Vector3();
 	const A = new Vector3();
 	const B = new Vector3();
 	const C = new Vector3();
 
-	// dfs search through edges by related mapped edge.prev vertices
-	function searchEdgeList(map, builtContour, startingEdge) {
-	    let edgeList = map.get(startingEdge.vertex);
-	    if (!edgeList) return 0;
-	    let len = edgeList.length;
-	    builtContour[0] = startingEdge;
-	    for (let i=0; i<len; i++) {
-	        let bi = searchEdge(map, builtContour, edgeList[i], startingEdge, 1);
-	        if (bi >= 3) return bi;
-	    }
-	    return 0;
+	function length2DSegment(segment) {
+	    let dx = segment.to.x - segment.from.x;
+	    let dz = segment.to.z - segment.from.z;
+	    return Math.sqrt(dx*dx + dz*dz);
 	}
-	function searchEdge(map, builtContour, edge, startingEdge, bi) {
-	    if (bi >= MAX_HOLE_LEN) return 0;
-	    let edgeList = map.get(edge.vertex);
-	    if (!edgeList) return 0;
-	    let i;
-	    let len = edgeList.length;
-	    builtContour[bi++] = edge;
 
-	    for (i=0; i<len; i++) {
-	        if (edgeList[i] === startingEdge) {
-	            return bi;
-	        }
-	        else {
-	           let result =  searchEdge(map, builtContour, edgeList[i], startingEdge, bi);
-	           if (result >= 3) return result;
+	function lengthSq2DSegment(segment) {
+	    let dx = segment.to.x - segment.from.x;
+	    let dz = segment.to.z - segment.from.z;
+	    return dx*dx + dz*dz;
+	}
+
+	function setToPerp(vec, result) {
+	    if (!result) result = vec;
+
+	    var dx = vec.x;
+	    var dz = vec.z;
+	    result.x = dz;
+	    result.z = -dx;
+	}
+
+	/**
+	 *
+	 * @param {HalfEdge} edge Assumes edge.normal/edge.dir already precaulcated
+	 * @param {HalfEdge} neighborEdge Assumes neighborEdge.normal/neighborEdge.dir already precaulcated
+	 * @param {Vector3} vertex
+	 * @param {Number} inset
+	 * @param {Vector3} plane Will save additional w property representing offset along plane
+	 */
+	function calcPlaneBoundaryBetweenEdges(edge, neighborEdge, vertex, inset, plane) {
+	    if (plane === undefined) plane = new Vector3();
+
+	    let planeX = (neighborEdge.normal.x + edge.normal.x) * 0.5;
+	    let planeZ = (neighborEdge.normal.z + edge.normal.z) * 0.5;
+	    if (planeX * planeX + planeZ * planeZ < 1e-7) {
+	        let sc = edge.vertex === vertex ? 1 : -1;
+	        planeX = edge.dir.x * sc;
+	        planeZ = edge.dir.z * sc;
+	    }
+	    plane.x = -planeX;
+	    plane.z = -planeZ;
+	    plane.w = vertex.x * plane.x + vertex.z * plane.z - inset;
+	    return plane;
+	}
+
+	function isMirroredEdge(edge, neighborEdge) {
+	    let res = (edge.dir.x * neighborEdge.dir.x + edge.dir.z * neighborEdge.dir.z === -1);  // <=  + 1e-5
+	    // if (res) console.log("Detected mirroed edge:" + edge.index + " ," + neighborEdge.index);
+	    return res;
+	}
+
+	function getIntersectionTimeToPlaneBound(origin, dx, dz, plane) {
+	    let denom = dx * plane.x + dz * plane.z;
+	    //t = - ( this.origin.dot( plane.normal ) + plane.constant ) / denominator;
+
+	    let numerator = -((origin.x * plane.x + origin.z * plane.z) - plane.w); // difference in offset
+	    //t = (d-(O.N))/(D.N)
+	    return numerator/denom;
+	}
+
+
+
+	function findNeighborEdgeCompHeadArr(edges, edge, vertex, visitedEdgePairs, edgeLen) {
+	    let len = edges.length;
+	    let arr = [];
+	    let edgeKey;
+	    let foundCount = 0;
+	    for (let i =0; i< len; i++) {
+	        let candidate = edges[i];
+	        if (candidate.prev.vertex === vertex) {
+	            edgeKey = getKeyEdgePair(edge, candidate, edgeLen);
+	            if (!visitedEdgePairs.has(edgeKey)) arr.push(candidate);
+	            else console.warn("already found pair"); // seems this will never happen
+	            foundCount++;
+	            //break;
 	        }
 	    }
-	    return 0;
+	    return foundCount > 0 ? arr : null;
 	}
+
+	// to depecriate,. kept for debugging/asserting purposes only
+	function getKeyEdgePair(edge, edge2, len) {
+	    let boo = edge.index < edge2.index;
+	    let e1 = boo ? edge.index : edge2.index;
+	    let e2 = boo ? edge2.index : edge.index;
+	    return e1*len + e2;
+	}
+
+	/* // depecrated
+	function findNeighborEdgeCompHead(edges, vertex) {
+	    let len = edges.length;
+	    for (let i =0; i< len; i++) {
+	        if (edges[i].prev.vertex === vertex) return edges[i];
+	    }
+	    return null;
+	}
+
+	function findNeighborEdgeCompTail(edges, vertex) {
+	    let len = edges.length;
+	    for (let i =0; i< len; i++) {
+	        if (edges[i].vertex === vertex) return edges[i];
+	    }
+	    return null;
+	}
+
+	function findNeighborEdgeCompTailArr(edges, edge, vertex, visitedEdgePairs, edgeLen) {
+	    let len = edges.length;
+	    let arr =[];
+	    let edgeKey;
+	    let foundCount = 0;
+	    for (let i =0; i< len; i++) {
+	        let candidate = edges[i];
+	        if (candidate.vertex === vertex) {
+	            edgeKey = getKeyEdgePair(edge, candidate, edgeLen);
+	            if (!visitedEdgePairs.has(edgeKey)) arr.push(candidate);
+	            foundCount++;
+	            //break;
+	        }
+	    }
+	    return foundCount > 0 ? arr : null;
+	}
+	*/
 
 	var transformId = 0;
 
@@ -27636,13 +28438,13 @@ return d[d.length-1];};return ", funcName].join("");
 	                edgeIndex++;
 	            } while(edge !== polygon.edge)
 
-	          
+
 	            if (!extrudeParams.bordersOnly) {
 	                 let fLen = fi - 1;
-	              
+
 	                // set up upper top face indices
 	                if (!extrudeParams.excludeTopFaceRender) {
-	                   
+
 	                    for (let f=1; f< fLen; f++) {
 	                        indices[ii++] = faceIndices[0];
 	                        indices[ii++] = faceIndices[f];
@@ -27873,7 +28675,7 @@ return d[d.length-1];};return ", funcName].join("");
 	     * @param {Number} mask Bitmask
 	     * @param {Boolean|Null} clonePolygons Whether to clone entirely new seperate polygons. If set to Null, will not duplciate vertices as well.
 	     */
-	    static filterOutPolygonsByMask(polygons, mask, clonePolygons=false, exactEquals=false) {
+	    static filterOutPolygonsByMask(polygons, mask, clonePolygons=false, exactEquals=false, includeUndefined=false) {
 	        let filteredPolygons = [];
 	        let len = polygons.length;
 	        let vertexMap = new Map();
@@ -27881,7 +28683,7 @@ return d[d.length-1];};return ", funcName].join("");
 	        let c = 0;
 	        for (let i=0; i<len; i++) {
 	            let polygon = polygons[i];
-	            if (polygon.mask === undefined || (exactEquals ? polygon.mask !== mask : !(polygon.mask & mask)) ) {
+	            if ( (polygon.mask === undefined && !includeUndefined)  || (polygon.mask !== undefined && (exactEquals ? polygon.mask !== mask : !(polygon.mask & mask))) ) {
 	                continue;
 	            }
 	            c = 0;
@@ -27981,6 +28783,7 @@ return d[d.length-1];};return ", funcName].join("");
 	        let regions = navmesh.regions || navmesh;
 	        let len = regions.length;
 	        let map = new Map();
+	        let weldCount = 0;
 	        let r;
 	        let edge;
 	        for (let i=0; i< len; i++) {
@@ -27991,6 +28794,7 @@ return d[d.length-1];};return ", funcName].join("");
 	                if (!map.has(key)) {
 	                    map.set(key, edge.vertex);
 	                } else {
+	                    weldCount += edge.vertex !== map.get(key);
 	                    edge.vertex = map.get(key);
 	                }
 	                edge = edge.next;
@@ -28031,7 +28835,6 @@ return d[d.length-1];};return ", funcName].join("");
 	        return polygons;
 	    }
 
-
 	   /**
 	    * Note: This function is 2D and assumed to work only on x and z coordinates of polygons
 	    * @param {Vertex} vertex Vertex is assumed to already lie directly on given edge split
@@ -28067,10 +28870,8 @@ return d[d.length-1];};return ", funcName].join("");
 
 
 	        let result =  [new Polygon().fromContour(polyContours), new Polygon().fromContour(polyContours2)];
-	        console.log(result[0].convex(true), result[1].convex(true));
 	        return result;
 	    }
-
 
 	    static dividePolygonByVertices(splitVertex, fromEdge) {
 	        let fromVertex = fromEdge.vertex;
@@ -28099,6 +28900,438 @@ return d[d.length-1];};return ", funcName].join("");
 	    }
 
 
+	    // KEY navmesh methods
+
+	    static getVertexListFromPolygons(polygons) {
+	        let fullSet = new Set();
+	        let len = polygons.length;
+	        for (let i = 0; i<len ;i++) {
+	           let p = polygons[i];
+	           let edge = p.edge;
+	            do {
+	                fullSet.add(edge.vertex);
+	                edge = edge.next;
+	            } while (edge !== p.edge);
+	        }
+	        return Array.from(fullSet);
+	    }
+
+	    static weldNewPolygonToVertexList(polygon, vertexList, is2D=false, threshold=Infinity) {
+	        let contours = [];
+	        let edge = polygon.edge;
+	        let v;
+	        let dx;
+	        let dy;
+	        let dz;
+	        let d;
+	        let closest;
+	        let closestV;
+	        let len = vertexList.length;
+	        do {
+	            v = edge.vertex;
+	            closest = Infinity;
+	            closestV = null;
+	            for (let i = 0; i < len; i++) {
+	                let v2 = vertexList[i];
+	                dx = v2.x - v.x;
+	                dy = !is2D ? v2.y - v.y : 0;
+	                dz = v2.z - v.z;
+	                d = dx*dx + dy*dy + dz*dz;
+	                if (d < closest && d < threshold) {
+	                    closest = d;
+	                    closestV = v2;
+	                }
+	            }
+	            contours.push(closestV !== null ? closestV : v);
+	            edge = edge.next;
+	        } while(edge !== polygon.edge)
+
+	        return new Polygon().fromContour(contours);
+	    }
+
+
+
+
+	    /**
+	     * Retrieve contigious sets of polygons from a list of polygons or from navmesh itself
+	     * @param {NavMesh|[Polygon]} navmesh
+	     * @param {Number} getBorders  Whether to include borders. Zero to exclude entirely. '1' to include borders amd ordered. '2' to include borders but unordered.
+	     * @return An array of navmesh island definitions: vertices and polygons...and borders (if specified to be included)
+	     */
+	    static getNavmeshIslands(navmesh, getBorders=0) {
+	        let polygons = navmesh.regions ? navmesh.regions : navmesh;
+
+	        var stack = [];
+	        var si;
+	        var i = 0;
+	        var len = polygons.length;
+	        var edge;
+	        var p;
+
+	        var islands = [];
+
+	        var poliesInIsland;
+	        var vertsInIsland;
+	        var bordersInIsland;
+	        var time = 0;
+
+	        while (i < len) {
+	            vertsInIsland = [];
+	            poliesInIsland= [];
+	            if (getBorders) bordersInIsland = [];
+
+	            // DFS
+	            si = 0;
+	            stack[si++] = polygons[i];
+	            polygons[i].done = true;
+	            while(--si > -1) {
+	                p = stack[si];
+	                poliesInIsland.push(p);
+	                edge = p.edge;
+	                do {
+	                    if (edge.twin && !edge.twin.polygon.done ) {
+
+	                            stack[si++] = edge.twin.polygon;
+	                            edge.twin.polygon.done = true;
+
+	                    }
+	                    if (getBorders && !edge.twin && edge.time !== time) {
+	                        bordersInIsland.push(edge);
+	                        edge.time = time;
+	                    }
+	                    if (edge.vertex.time !== time) {
+	                        vertsInIsland.push(edge.vertex);
+	                        edge.vertex.time = time;
+	                    }
+	                    edge = edge.next;
+	                }   while (edge !== p.edge);
+	            }
+
+	            let isle = {polygons:poliesInIsland, vertices:vertsInIsland};
+	            if (getBorders) {
+	                isle.borders = bordersInIsland;
+	            }
+	            islands.push(isle);
+
+	            time++;
+
+	            while (i < len && polygons[i].done) {
+	                i++;
+	            }
+	        }
+
+
+	        if (getBorders === 1) {
+	            islands.forEach((isle)=> {
+	                isle.borders = this.getOrderedIslandBorders(isle.borders);
+	            });
+	        }
+	        return islands;
+	    }
+
+	    /**
+	     * Attempts to create a single loop ordered set of borders from all collected borders from a polygon island.
+	     * Note that it is naively assumed all borders of the island already form a clean (single-direction) loop without branching.
+	     * @param {[HalfEdge]} borders
+	     * @return [HalfEdge] A new array consisting of the ordered set of borders
+	     */
+	    static getOrderedIslandBorders(borders) {
+	        let map = new Map();
+	        let len;
+
+	        let b;
+	        len = borders.length;
+	        for (let i =0; i< len; i++) {
+	            b = borders[i];
+	            map.set(b.prev.vertex, b);
+	        }
+	        b = borders[0];
+	        let startBorder = b;
+	        let arr = [b];
+	        b = map.get(b.vertex);
+	        do {
+	            arr.push(b);
+	            b = map.get(b.vertex);
+	        } while (b !== startBorder)
+	        return arr;
+	    }
+
+
+	    /**
+	     * Get obstructing obstacle polygon over a given flat yPosition surface given a sloping polgon.
+	     * Note that for any polygon area that lies below yPosition + agentHeight, assumed blocking always.
+	     * Only polygon volume of y >= agentHeight + yPosition considered non-blocking/obstructing. If y goes below yPosition itself,
+	     * by default, no ground plane clipping is done, so if obstructing volume goes below ground yPos, it's still counted
+	     * as a projected blocking polygon if it's obstructing the floor itself even though it's buried underneath it (ie.  not clipped by yPos plane).
+	     * (future consideration: feature to auto-clip polygon by yPosition plane as well, or a seperate function for that?)
+	     * @param {Polgon} polygon A typically sloping polygon in relation to flat y ground postion
+	     * @param {Number} yPos The flat y position ground surface in relation to polygon
+	     * @param {Number} agentHeight The agent height used to represent required height clearance from the given polyon
+	     * @return A new clipped polygon based off the obstructed height clearance position
+	     */
+	    static getObstructingPolyOverFlatLevel(polygon, yPos, agentHeight) {
+	        let contours = [];
+	        let edge = polygon.edge;
+
+	        let heightLimit = yPos + agentHeight;
+
+	        // y = mx + c;
+	        // heightLimit <= mx + c
+	        //
+	        let dx;
+	        let dy;
+	        let dz;
+
+	        let t;
+	        let startBlockedState;
+	        let endBlockedState;
+	        do {
+	            startBlockedState = edge.prev.vertex.y < heightLimit;
+	            endBlockedState = edge.vertex.y < heightLimit;
+
+	            if (endBlockedState !== startBlockedState) {
+	                // clipping of edge required on either start/or end
+	                dx = edge.vertex.x - edge.prev.vertex.x;
+	                dz = edge.vertex.z - edge.prev.vertex.z;
+	                dy = edge.vertex.y - edge.prev.vertex.y;
+
+	                t = (edge.prev.vertex.y - heightLimit) / -dy;
+
+	                if (!startBlockedState ) { // clip from start
+	                    // assumed/assert dy < 0
+	                    if (dy >= 0) throw new Error("Gradient sign assertion failed! dy < 0");
+	                    contours.push( new Vector3(edge.prev.vertex.x + t * dx, heightLimit, edge.prev.vertex.z + t * dz) );
+	                    contours.push(edge.vertex.clone());
+
+	                } else { // clip from end
+	                    // assumed/assert dy > 0
+	                    if (dy <= 0) throw new Error("Gradient sign assertion failed! dy > 0");
+	                    contours.push( new Vector3(edge.prev.vertex.x + t * dx, heightLimit, edge.prev.vertex.z + t * dz) );
+	                }
+	            } else if (startBlockedState) { // thus also === endBlockedState
+	                contours.push(edge.vertex.clone());
+	            }
+
+	            edge = edge.next;
+	        } while ( edge !== polygon.edge)
+	        return contours.length >= 3 ? new Polygon().fromContour(contours) : null;
+	    }
+
+	    /**
+	     * Calculate offset/corner projections necessary for navmesh minowski-like operations
+	     * @param {NavMesh}  navMesh
+	     * @param {Number}  inset   The amount to inset navmesh by
+	     * @param {Number}  minChamferLength   The minimum chamfer distance
+	     * @return A Map to map vertices of current navmesh to their respective edge pairs
+	     */
+	    static getBorderEdgeOffsetProjections(navMesh, inset, minChamferDist = 1e-5) {
+
+	        const LINE = new LineSegment();
+	        const LINE2 = new LineSegment();
+	        const LINE_RESULT = {};
+	        const minChamferDistSq = minChamferDist*minChamferDist;
+	        // TODO: project zero y values for actual 3d representation
+
+	        let resultMap = new Map();
+	        // offseted vertex map
+
+	        // vertex to incident [edges] map
+	        var vertexToEdgesMap = new Map();
+	        let len = navMesh._borderEdges.length;
+	        var e;
+	        for(let i=0; i<len; i++) {
+	            e = navMesh._borderEdges[i];
+	            e.index = i;
+	            if (!vertexToEdgesMap.has(e.vertex)) {
+	                vertexToEdgesMap.set(e.vertex, [e]);
+	            } else {
+	                vertexToEdgesMap.get(e.vertex).push(e);
+	            }
+	            if (!vertexToEdgesMap.has(e.prev.vertex)) {
+	                vertexToEdgesMap.set(e.prev.vertex, [e]);
+	            } else {
+	                vertexToEdgesMap.get(e.prev.vertex).push(e);
+	            }
+	            let dx = e.vertex.x - e.prev.vertex.x;
+	            let dz = e.vertex.z - e.prev.vertex.z;
+	            let d = Math.sqrt(dx*dx + dz*dz);
+	            dx/=d;
+	            dz/=d;
+	            setToPerp(e.dir = new Vector3(dx, 0, dz), e.normal = new Vector3());
+	            e.normal.w = e.vertex.x * e.normal.x + e.vertex.z * e.normal.z;
+	        }
+	        let visitedEdgePairs = new Set();
+
+	        // iterate through each border edge to expand and stretch
+	        for(let i=0;i<len; i++) {
+	            e = navMesh._borderEdges[i];
+	            e.value = new LineSegment(new Vector3(e.prev.vertex.x + e.normal.x * inset, 0, e.prev.vertex.z + e.normal.z * inset)
+	            , new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset));
+	            e.value.from.t = 0;
+	            e.value.to.t = 0;
+	            // nice to have: get proper height value of vertex over edge's triangle polygon
+	        }
+
+	        let plane = new Vector3();
+	        let tPlane;
+	        let snapT;
+	        let deltaLength;
+	        let splitVertex;
+	        let splitVertex2;
+	        let edgePairKey;
+	        let intersectPtOrChamfer;
+	        //let neighborEdge;
+	        let neighborEdgeArr;
+	        let coincideArr;
+
+	        for (let i =0; i<len; i++) {
+	            e = navMesh._borderEdges[i];
+
+	           let arr;
+	            // head vertex on consiered edge
+	           arr = vertexToEdgesMap.get(e.vertex);
+	           neighborEdgeArr = findNeighborEdgeCompHeadArr(arr, e, e.vertex, visitedEdgePairs, len);
+
+	           if (neighborEdgeArr) { // forwardDir for e.vertex
+	                neighborEdgeArr.forEach( (neighborEdge) => {
+	                // edgePairKey = getKeyEdgePair(e, neighborEdge, len);
+	                //
+	                //if (!visitedEdgePairs.has(edgePairKey)) { //  !(e.vertex.result || e.vertex.chamfer)
+	                    visitedEdgePairs.add(edgePairKey);
+	                        LINE.from.copy(e.value.from);
+	                        LINE.to.copy(e.value.to);
+
+	                        LINE2.from.copy(neighborEdge.value.from);
+	                        LINE2.to.copy(neighborEdge.value.to);
+
+	                        // if intersected neighborLine
+	                        if (LINE.getIntersects(LINE2, LINE_RESULT)) {
+	                            LINE.at(LINE_RESULT.r, intersectPtOrChamfer = new Vector3());
+	                            intersectPtOrChamfer.t = (LINE_RESULT.r - 1) * length2DSegment(LINE);
+	                            if (!resultMap.has(e.vertex)) {
+	                                resultMap.set(e.vertex, [e, neighborEdge]);
+	                                e.vertex.result = intersectPtOrChamfer;
+	                            } else {
+	                                resultMap.get(e.vertex).push(e, neighborEdge);
+	                                if (!e.vertex.resultArr) e.vertex.resultArr = [];
+	                                e.vertex.resultArr.push(intersectPtOrChamfer);
+	                            }
+	                        } else {
+	                            let detectedMirroredEdge = false;
+	                            if (LINE_RESULT.coincident && !(detectedMirroredEdge=isMirroredEdge(e, neighborEdge))) {
+	                                intersectPtOrChamfer = new Vector3(e.value.to.x, e.value.to.y, e.value.to.z);
+	                                intersectPtOrChamfer.t = 0;
+	                                if (!resultMap.has(e.vertex)) {
+	                                    resultMap.set(e.vertex, coincideArr=[e, neighborEdge]);
+	                                    e.vertex.result = intersectPtOrChamfer;
+	                                   coincideArr.coincident = 1;
+	                                } else {
+	                                    (coincideArr = resultMap.get(e.vertex)).push(e, neighborEdge);
+	                                    if (!e.vertex.resultArr) e.vertex.resultArr = [];
+	                                    e.vertex.resultArr.push(intersectPtOrChamfer);
+	                                    coincideArr.coincident |= (1 << (e.vertex.resultArr.length));
+	                                }
+	                            }
+	                            else {
+	                                snapT = (LINE_RESULT.r - 1) * (deltaLength = length2DSegment(LINE));
+	                                if (snapT < 0) snapT = 0;
+	                                //if (snapT > inset*2) snapT = inset*2;
+	                                plane = calcPlaneBoundaryBetweenEdges(e, neighborEdge, e.vertex, inset, plane);
+	                                tPlane = getIntersectionTimeToPlaneBound(LINE.to, e.dir.x, e.dir.z, plane);
+	                                //if (detectedMirroredEdge) console.log("times:" + tPlane + ' vs ' + snapT + " | " +plane.x + ", "+plane.z + "," +plane.w);
+	                                splitVertex = new Vector3(LINE.to.x, 0, LINE.to.z);
+	                                splitVertex2 = new Vector3(LINE2.from.x, 0, LINE2.from.z);
+	                                splitVertex.t = 0;
+	                                splitVertex2.t = 0;
+	                                if (tPlane > 0 && ( (LINE_RESULT.r > 1 && tPlane < snapT) || detectedMirroredEdge)) { // && Math.abs(neighborEdge.dir.dot(e.dir)) < 1-1e-7
+	                                    //console.log(tPlane + ' vs ' + snapT + ' >>>' + deltaLength + ', ' + LINE_RESULT.r);
+	                                    splitVertex.x = LINE.to.x + tPlane * e.dir.x;
+	                                    splitVertex.z = LINE.to.z + tPlane * e.dir.z;
+	                                    splitVertex2.x = LINE2.from.x + tPlane * -neighborEdge.dir.x;
+	                                    splitVertex2.z = LINE2.from.z + tPlane * -neighborEdge.dir.z;
+	                                    splitVertex.t = tPlane;
+	                                    splitVertex2.t = tPlane;
+	                                }
+	                                intersectPtOrChamfer = new LineSegment(splitVertex, splitVertex2);
+	                                if (snapT > inset*2) snapT = inset*2;
+	                                intersectPtOrChamfer.snap =  new Vector3(LINE.to.x + snapT * e.dir.x, 0, LINE.to.z + snapT * e.dir.z);
+	                                if (!resultMap.has(e.vertex)) {
+	                                    e.vertex.chamfer = intersectPtOrChamfer;
+	                                    resultMap.set(e.vertex, [e, neighborEdge]);
+	                                } else {
+	                                    resultMap.get(e.vertex).push(e, neighborEdge);
+	                                    if (!e.vertex.resultArr) e.vertex.resultArr = [];
+	                                    e.vertex.resultArr.push(intersectPtOrChamfer);
+	                                }
+	                            }
+	                        }
+	                    //}
+	                });
+	           } else {
+	                throw new Error("Failed to find complementary neighbnor edge!");
+	           }
+
+
+
+	        }
+	        resultMap.forEach((edges, vertex) => {
+	            if (vertex.chamfer) {
+	                // todo: check if close enough chamfer to consider proper welding as vertex.result instead
+	                if (lengthSq2DSegment(vertex.chamfer) <= minChamferDistSq) { // welded chamfer vertex result
+	                    vertex.result = vertex.chamfer.snap;
+	                    vertex.result.welded = true;
+	                    vertex.chamfer = null;
+	                    edges[0].value.to = vertex.result;
+	                    edges[1].value.from = vertex.result;
+
+	                } else {
+	                     // chamfer vertex
+	                    edges[0].value.to = vertex.chamfer.from;
+	                    edges[1].value.from = vertex.chamfer.to;
+	                }
+	            } else { // intersected vertex
+	                edges[0].value.to = vertex.result;
+	                edges[1].value.from = vertex.result;
+	            }
+
+	            if (vertex.resultArr !== undefined) {
+	                  vertex.resultArr.forEach((result, index)=> {
+	                    if (result instanceof LineSegment) { // assumed chamfer joint segment
+	                        if (lengthSq2DSegment(result) <= minChamferDistSq) { // welded chamfer vertex result
+	                            result = result.snap;
+	                            result.welded = true;
+	                            if (edges[0].value.to.t < result.t ) {
+	                                edges[0].value.to = result;
+	                            }
+	                            if (edges[1].value.from.t < result.t) {
+	                                edges[1].value.from = result;
+	                            }
+	                            vertex.resultArr[index] = result;
+	                        } else {
+	                             if (edges[0].value.to.t < result.from.t ) {
+	                                edges[0].value.to = result.from;
+	                                edges[1].value.from = result.to;
+	                            }
+
+	                        }
+	                    } else { // assumed Vector3 intersection point
+	                        if (edges[0].value.to.t < result.t ) {
+	                            edges[0].value.to = result;
+	                        }
+	                        if (edges[1].value.from.t < result.t) {
+	                            edges[1].value.from = result;
+	                        }
+	                    }
+	                  });
+	            }
+	        });
+
+
+	        return resultMap;
+	    }
+
+
+	     /* // yagni
 	    static patchHoles(navmesh, holesAdded) {
 	        if (!holesAdded) holesAdded = [];
 
@@ -28126,6 +29359,8 @@ return d[d.length-1];};return ", funcName].join("");
 
 	        let builtContour = [];
 	        let bi;
+	        let dfs = [];
+	        let di;
 	        for (let i=0; i<len; i++) {
 	            r = regions[i];
 	            edge = r.edge;
@@ -28140,6 +29375,12 @@ return d[d.length-1];};return ", funcName].join("");
 	                        let p;
 	                        holesAdded.push( p = new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) );
 	                        p.holed = true;
+
+	                        // kiv todo: link twins  newly added polygon's edges
+
+	                        if (isUsingFullNavmesh) {
+	                            // link respective polygon holes to full navmesh to connect it. add arc to graph.
+	                        }
 	                    }
 	                }
 
@@ -28148,6 +29389,342 @@ return d[d.length-1];};return ", funcName].join("");
 	        }
 	        return holesAdded;
 	    }
+	    */
+
+
+
+	}
+
+	const boundingSphere$1 = new BoundingSphere();
+	const triangle$1 = { a: new Vector3(), b: new Vector3(), c: new Vector3() };
+	const rayLocal = new Ray();
+	const plane$1 = new Plane();
+	const inverseMatrix = new Matrix4();
+	const closestIntersectionPoint = new Vector3();
+	const closestTriangle = { a: new Vector3(), b: new Vector3(), c: new Vector3() };
+
+	/**
+	* Class for representing a polygon mesh. The faces consist of triangles.
+	*
+	* @author {@link https://github.com/Mugen87|Mugen87}
+	*/
+	class MeshGeometry {
+
+		/**
+		* Constructs a new mesh geometry.
+		*
+		* @param {TypedArray} vertices - The vertex buffer (Float32Array).
+		* @param {TypedArray} indices - The index buffer (Uint16Array/Uint32Array).
+		*/
+		constructor( vertices = new Float32Array(), indices = null ) {
+
+			this.vertices = vertices;
+			this.indices = indices;
+
+			this.backfaceCulling = true;
+
+			this.aabb = new AABB();
+			this.boundingSphere = new BoundingSphere();
+
+			this.computeBoundingVolume();
+
+		}
+
+		/**
+		* Computes the internal bounding volumes of this mesh geometry.
+		*
+		* @return {MeshGeometry} A reference to this mesh geometry.
+		*/
+		computeBoundingVolume() {
+
+			const vertices = this.vertices;
+			const vertex = new Vector3();
+
+			const aabb = this.aabb;
+			const boundingSphere = this.boundingSphere;
+
+			// compute AABB
+
+			aabb.min.set( Infinity, Infinity, Infinity );
+			aabb.max.set( - Infinity, - Infinity, - Infinity );
+
+			for ( let i = 0, l = vertices.length; i < l; i += 3 ) {
+
+				vertex.x = vertices[ i ];
+				vertex.y = vertices[ i + 1 ];
+				vertex.z = vertices[ i + 2 ];
+
+				aabb.expand( vertex );
+
+			}
+
+			// compute bounding sphere
+
+			aabb.getCenter( boundingSphere.center );
+			boundingSphere.radius = boundingSphere.center.distanceTo( aabb.max );
+
+			return this;
+
+		}
+
+		/**
+		 * Performs a ray intersection test with the geometry of the obstacle and stores
+		 * the intersection point in the given result vector. If no intersection is detected,
+		 * *null* is returned.
+		 *
+		 * @param {Ray} ray - The ray to test.
+		 * @param {Matrix4} worldMatrix - The matrix that transforms the geometry to world space.
+		 * @param {Boolean} closest - Whether the closest intersection point should be computed or not.
+		 * @param {Vector3} intersectionPoint - The intersection point.
+		 * @param {Vector3} normal - The normal vector of the respective triangle.
+		 * @return {Vector3} The result vector.
+		 */
+		intersectRay( ray, worldMatrix, closest, intersectionPoint, normal = null ) {
+
+			// check bounding sphere first in world space
+
+			boundingSphere$1.copy( this.boundingSphere ).applyMatrix4( worldMatrix );
+
+			if ( ray.intersectsBoundingSphere( boundingSphere$1 ) ) {
+
+				// transform the ray into the local space of the obstacle
+
+				worldMatrix.getInverse( inverseMatrix );
+				rayLocal.copy( ray ).applyMatrix4( inverseMatrix );
+
+				// check AABB in local space since its more expensive to convert an AABB to world space than a bounding sphere
+
+				if ( rayLocal.intersectsAABB( this.aabb ) ) {
+
+					// now perform more expensive test with all triangles of the geometry
+
+					const vertices = this.vertices;
+					const indices = this.indices;
+
+					let minDistance = Infinity;
+					let found = false;
+
+					if ( indices === null ) {
+
+						// non-indexed geometry
+
+						for ( let i = 0, l = vertices.length; i < l; i += 9 ) {
+
+							triangle$1.a.set( vertices[ i ], vertices[ i + 1 ], vertices[ i + 2 ] );
+							triangle$1.b.set( vertices[ i + 3 ], vertices[ i + 4 ], vertices[ i + 5 ] );
+							triangle$1.c.set( vertices[ i + 6 ], vertices[ i + 7 ], vertices[ i + 8 ] );
+
+							if ( rayLocal.intersectTriangle( triangle$1, this.backfaceCulling, intersectionPoint ) !== null ) {
+
+								if ( closest ) {
+
+									const distance = intersectionPoint.squaredDistanceTo( rayLocal.origin );
+
+									if ( distance < minDistance ) {
+
+										minDistance = distance;
+
+										closestIntersectionPoint.copy( intersectionPoint );
+										closestTriangle.a.copy( triangle$1.a );
+										closestTriangle.b.copy( triangle$1.b );
+										closestTriangle.c.copy( triangle$1.c );
+										found = true;
+
+									}
+
+								} else {
+
+									found = true;
+									break;
+
+								}
+
+							}
+
+						}
+
+					} else {
+
+						// indexed geometry
+
+						for ( let i = 0, l = indices.length; i < l; i += 3 ) {
+
+							const a = indices[ i ];
+							const b = indices[ i + 1 ];
+							const c = indices[ i + 2 ];
+
+							const stride = 3;
+
+							triangle$1.a.set( vertices[ ( a * stride ) ], vertices[ ( a * stride ) + 1 ], vertices[ ( a * stride ) + 2 ] );
+							triangle$1.b.set( vertices[ ( b * stride ) ], vertices[ ( b * stride ) + 1 ], vertices[ ( b * stride ) + 2 ] );
+							triangle$1.c.set( vertices[ ( c * stride ) ], vertices[ ( c * stride ) + 1 ], vertices[ ( c * stride ) + 2 ] );
+
+							if ( rayLocal.intersectTriangle( triangle$1, this.backfaceCulling, intersectionPoint ) !== null ) {
+
+								if ( closest ) {
+
+									const distance = intersectionPoint.squaredDistanceTo( rayLocal.origin );
+
+									if ( distance < minDistance ) {
+
+										minDistance = distance;
+
+										closestIntersectionPoint.copy( intersectionPoint );
+										closestTriangle.a.copy( triangle$1.a );
+										closestTriangle.b.copy( triangle$1.b );
+										closestTriangle.c.copy( triangle$1.c );
+										found = true;
+
+									}
+
+								} else {
+
+									found = true;
+									break;
+
+								}
+
+							}
+
+						}
+
+					}
+
+					// intersection was found
+
+					if ( found ) {
+
+						if ( closest ) {
+
+							// restore closest intersection point and triangle
+
+							intersectionPoint.copy( closestIntersectionPoint );
+							triangle$1.a.copy( closestTriangle.a );
+							triangle$1.b.copy( closestTriangle.b );
+							triangle$1.c.copy( closestTriangle.c );
+
+						}
+
+						// transform intersection point back to world space
+
+						intersectionPoint.applyMatrix4( worldMatrix );
+
+						// compute normal of triangle in world space if necessary
+
+						if ( normal !== null ) {
+
+							plane$1.fromCoplanarPoints( triangle$1.a, triangle$1.b, triangle$1.c );
+							normal.copy( plane$1.normal );
+							normal.transformDirection( worldMatrix );
+
+						}
+
+						return intersectionPoint;
+
+					}
+
+				}
+
+			}
+
+			return null;
+
+		}
+
+		/**
+		 * Returns a new geometry without containing indices.
+		 *
+		 * @return {MeshGeometry} The new geometry.
+		 */
+		toTriangleSoup() {
+
+			const indices = this.indices;
+			const vertices = this.vertices;
+			let newVertices;
+
+			if ( indices ) {
+
+				newVertices = new Float32Array( indices.length * 3 );
+
+				for ( let i = 0, l = indices.length; i < l; i ++ ) {
+
+					const a = indices[ i ];
+					const stride = 3;
+
+					newVertices[ i * stride ] = vertices[ a * stride ];
+					newVertices[ ( i * stride ) + 1 ] = vertices[ ( a * stride ) + 1 ];
+					newVertices[ ( i * stride ) + 2 ] = vertices[ ( a * stride ) + 2 ];
+
+				}
+
+			} else {
+
+				newVertices = new Float32Array( vertices );
+
+			}
+
+			return new MeshGeometry( newVertices );
+
+		}
+
+		/**
+		* Transforms this instance into a JSON object.
+		*
+		* @return {Object} The JSON object.
+		*/
+		toJSON() {
+
+			const json = {
+				type: this.constructor.name
+			};
+
+			json.indices = {
+				type: this.indices ? this.indices.constructor.name : 'null',
+				data: this.indices ? Array.from( this.indices ) : null
+			};
+
+			json.vertices = Array.from( this.vertices );
+			json.backfaceCulling = this.backfaceCulling;
+			json.aabb = this.aabb.toJSON();
+			json.boundingSphere = this.boundingSphere.toJSON();
+
+			return json;
+
+		}
+
+		/**
+		* Restores this instance from the given JSON object.
+		*
+		* @param {Object} json - The JSON object.
+		* @return {MeshGeometry} A reference to this mesh geometry.
+		*/
+		fromJSON( json ) {
+
+			this.aabb = new AABB().fromJSON( json.aabb );
+			this.boundingSphere = new BoundingSphere().fromJSON( json.boundingSphere );
+			this.backfaceCulling = json.backfaceCulling;
+
+			this.vertices = new Float32Array( json.vertices );
+
+			switch ( json.indices.type ) {
+
+				case 'Uint16Array':
+					this.indices = new Uint16Array( json.indices.data );
+					break;
+
+				case 'Uint32Array':
+					this.indices = new Uint32Array( json.indices.data );
+					break;
+
+				case 'null':
+					this.indices = null;
+					break;
+
+			}
+
+			return this;
+
+		}
 
 	}
 
@@ -28194,6 +29771,107 @@ return d[d.length-1];};return ", funcName].join("");
 			normals: []
 		}
 	}
+
+	function pt2DInBVH(x, z, bvh) {
+		let len = query2DInBVH(x, z, bvh);
+		// console.log(primitives[0]);
+		let primitives = PRIMITIVES;
+		for (let i =0; i< len; i+=3) {
+			if (is_in_triangle(x, z, primitives[i+2], primitives[i+1], primitives[i])) {
+				return true;
+			}
+
+		}
+		return false;
+	}
+
+	const STACK = [];
+	const PRIMITIVES = [];
+	function clearStacks() {
+		STACK.length = 0;
+		PRIMITIVES.length = 0;
+	}
+
+	function query2DInBVH(x, z, bvh) {
+		let stack = STACK;
+
+		stack[0] = bvh.root;
+		let si = 1;
+		let n;
+		let primitives = PRIMITIVES;
+		let l;
+		let count = 0;
+		while(--si >= 0) {
+			n = stack[si];
+			if ( (l = n.primitives.length) !== 0) {
+				for ( let i = 0; i < l; i += 9 ) {
+					primitives[count++] = [n.primitives[i], n.primitives[i+2]];
+					primitives[count++] = [n.primitives[i+3], n.primitives[i+5]];
+					primitives[count++] = [n.primitives[i+6], n.primitives[i+8]];
+				}
+			} else if (x>=n.boundingVolume.min.x && x <=n.boundingVolume.max.x && z >=n.boundingVolume.min.z && z <= n.boundingVolume.max.z) {
+				for (let c of n.children) {
+					stack[si++] = c;
+				}
+			}
+		}
+		return count;
+	}
+
+	/*
+	function getMeshGeometryFromCDT(points, groundRef, cdt) {
+		let len = points.length;
+		let vertices = new Float32Array(len * 3);
+		let c = 0;
+		let p;
+		for (let i=0; i< len; i++) {
+			p = points[i];
+			vertices[c++] = p[0];
+			vertices[c++] = groundRef;
+			vertices[c++] = p[1];
+		}
+
+		len = cdt.length;
+		let indices = new Uint32Array(len * 3);
+		c = 0;
+		for (let i = 0; i<len ;i++) {
+			p = cdt[i];
+			indices[c++] = p[0];
+			indices[c++] = p[1];
+			indices[c++] = p[2];
+		}
+		return new MeshGeometry(vertices, indices);
+	}
+	*/
+
+	function getMeshGeometryFromPolygons(polygons) {
+		let arr = [];
+		let c = 0;
+		let len = polygons.length;
+		for (let i =0; i<len; i++) {
+			let p = polygons[i];
+			let edge = p.edge;
+			let mainP = edge.prev.vertex;
+			edge = edge.next;
+			while (edge !== p.edge.prev) {
+				arr[c++] = edge.prev.vertex.x;
+				arr[c++] = edge.prev.vertex.y;
+				arr[c++] = edge.prev.vertex.z;
+				arr[c++] = edge.vertex.x;
+				arr[c++] = edge.vertex.y;
+				arr[c++] = edge.vertex.z;
+				arr[c++] = mainP.x;
+				arr[c++] = mainP.y;
+				arr[c++] = mainP.z;
+				edge = edge.next;
+			}
+		}
+		console.log((arr.length/9) + ' tris , ' + (arr.length/3) + ' soup vertices');
+		return new MeshGeometry(new Float32Array(arr));
+	}
+
+
+
 
 	/**
 	 *
@@ -28249,9 +29927,36 @@ return d[d.length-1];};return ", funcName].join("");
 		*/
 	}
 
+	function is_in_triangle (px,py,a,b,c){ // triangle winding order doesn't matter for this method
+		let ax = a[0];
+		let ay = a[1];
+		let bx = b[0];
+		let by = b[1];
+		let cx = c[0];
+		let cy = c[1];
+		//credit: http://www.blackpawn.com/texts/pointinpoly/default.html
+		var v0 = [cx-ax,cy-ay];
+		var v1 = [bx-ax,by-ay];
+		var v2 = [px-ax,py-ay];
+
+		var dot00 = (v0[0]*v0[0]) + (v0[1]*v0[1]);
+		var dot01 = (v0[0]*v1[0]) + (v0[1]*v1[1]);
+		var dot02 = (v0[0]*v2[0]) + (v0[1]*v2[1]);
+		var dot11 = (v1[0]*v1[0]) + (v1[1]*v1[1]);
+		var dot12 = (v1[0]*v2[0]) + (v1[1]*v2[1]);
+
+		var invDenom = 1/ (dot00 * dot11 - dot01 * dot01);
+
+		var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+		var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+		return ((u >= 0) && (v >= 0) && (u + v < 1));
+	}
+
 	function pointToShapePt(pt) {
 		return {X:pt[0], Y:pt[1]};
 	}
+
 
 	function withinVincityOfPointSet(pt, points, dist) {
 		dist *= dist;
@@ -28555,6 +30260,7 @@ return d[d.length-1];};return ", funcName].join("");
 	}
 
 
+
 	function cellToPolygon(cell) {
 		let poly = new Polygon();
 		poly.fromContour(cell.map((p)=>{return new Vector3(p[0], 0, p[1])}));
@@ -28576,6 +30282,10 @@ return d[d.length-1];};return ", funcName].join("");
 	}
 
 	function lineSegmentSVGStr(v1, v2) {
+		if (!v2) {
+			v2 = v1.to;
+			v1 = v1.from;
+		}
 		let str = "M"+v1.x+","+v1.z + " ";
 		str += "L"+v2.x+","+v2.z + " ";
 		return str;
@@ -28766,6 +30476,7 @@ return d[d.length-1];};return ", funcName].join("");
 			// this.innerWardRoadAltitude = 0;
 			this.innerWardAltitude = 0;
 
+
 			this.cityWallCeilThickness = 1;
 			// extude thickness, if negative value, will sink into ground exclude bottom base faces
 			this.cityWallEntranceExtrudeThickness = 1.4;
@@ -28773,6 +30484,8 @@ return d[d.length-1];};return ", funcName].join("");
 			this.wardRoadExtrudeThickness = 0.7;
 			this.outerRoadExtrudeThickness = 0;
 			this.rampedBuildingExtrudeThickness = -1;
+
+			this.agentHeight = 2.5;
 
 			this.buildingMinHeight = 3;
 			this.buildingMaxHeight = 7;
@@ -29036,7 +30749,7 @@ return d[d.length-1];};return ", funcName].join("");
 				// City Wall
 				deployGeom.cityWall = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(),NavMeshUtils.seperateMarkedPolygonsVertices(this.navmeshCityWall.regions), gLevel, this.exportScaleXZ, true, gLevel, this.navmeshCityWallWalk ? {bordersOnly:true} : undefined);
 				if (this.navmeshCityWallWalk) deployGeom.cityWallWalk = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), this.navmeshCityWallWalk.regions, 0, this.exportScaleXZ, false);
-				
+
 				// City wall towers
 				if (this.cityWallTowerCeilingPolies) {
 					deployGeom.cityWallTowerCeiling = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerCeilingPolies), this.cityWallCeilThickness, this.exportScaleXZ);
@@ -29073,6 +30786,7 @@ return d[d.length-1];};return ", funcName].join("");
 				this.outerRoadExtrudeThickness >= 0 ? this.outerRoadExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.outerRoadExtrudeThickness < 0, this.innerWardRoadAltitude);
 			}
 
+			/*
 			if (this.rampedBuildings) {
 				let rampedBuildingNavmeshes = this.rampedBuildings.values();
 				deployGeom.rampedBuildings = [];
@@ -29085,6 +30799,7 @@ return d[d.length-1];};return ", funcName].join("");
 					);
 				}
 			}
+			*/
 			return deployGeom;
 		}
 
@@ -29116,6 +30831,14 @@ return d[d.length-1];};return ", funcName].join("");
 			return collector;
 		}
 
+		buildCityWallNavmesh(inset=0) {
+
+		}
+
+		buildHighwayNavmesh(inset=0) {
+
+		}
+
 		buildGroundNavmesh(inset=0) {
 			// assumed only City wall and Buildings Blocks ground surface
 			if (!this.profileWardBuildings) {
@@ -29132,11 +30855,15 @@ return d[d.length-1];};return ", funcName].join("");
 				[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]
 			];
 			var canvasSubject = new Shape([points.map(pointToShapePt)]);
+
+			var edges = [
+				[0,1], [1,2], [2,3], [3,0]
+			];
 			const pointsList = [];
-		
+			let groundLevel = this.innerWardAltitude;
 
 			// assumed buildings are non-intersecting
-			
+
 			this.profileWardBuildings.forEach((ward)=> {
 				ward.forEach((b)=> {
 					let buildingPoints = [];
@@ -29155,32 +30882,41 @@ return d[d.length-1];};return ", funcName].join("");
 				});
 			});
 
-		
-			/* // Shape library not working
-			let buildingsShape = new Shape(pointsList);
-			let wallsShape = new Shape(pointsListWall);
-			let obstacles = buildingsShape.union(wallsShape);
-			*/
-
 			let wallRadius = this.wallRadius;
 			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
-			
-			
-			let cityWallUnion = this.getPointsListShape(lineSegments,
-				(points, index)=>{
-					 points = points.slice(0);
-					//points = points.slice(0).reverse();
-					return this.extrudePathOfPoints(points, wallRadius, true, true);
-			});
 
-		
-			var buildingsShape = new Shape(pointsList.map((grp)=>{return grp.map(pointToShapePt)})); // CSG.fromPolygons(pointsList);
+			//NavMeshUtils.seperateMarkedPolygonsVertices(this.navmeshCityWall.regions)
+			/*
+			this.navmeshCityWall.regions.filter((r)=> {
+				return true;
+			});
+			*/
+
+
+
+			// console.log('border points', cityWallIsles.map(isle => isle.borders).map(borders => borders.map(b => [b.vertex.x, b.vertex.z])));
+
+
+			let cityWallUnion = this.cityWallCSGObj.csg;
+
+			/*
+			let buildingsUnion = this.getPointsListShape(pointsList, null, inset !== 0 ?
+				(shape) => {
+				return shape.offset(inset);
+			} : null);
+			CSG.fromPolygons(buildingsUnion.paths.map((grp)=>{return grp.map(shapePtToPoint)}))
+			*/
+
+
+
+			var buildingsShape =csg2d.fromPolygons(pointsList); //new Shape(pointsList.map((grp)=>{return grp.map(pointToShapePt)})); // CSG.fromPolygons(pointsList);
 			var wallsShape = cityWallUnion;
-			let obstacles = wallsShape.union(buildingsShape);
-		
-			
-			obstacles = canvasSubject.difference(obstacles);
-			
+			let obstacles = buildingsShape.subtract(wallsShape); // the buildings minus the shape of the wall for building obstacles
+
+			//if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
+
+			//obstacles = canvasSubject.difference(obstacles);
+
 			// if (inset !== 0) obstacles = obstacles.offset(-inset, {miterLimit:Math.abs(inset)});
 			/*
 			var svg = $(this.makeSVG("g", {}));
@@ -29190,36 +30926,237 @@ return d[d.length-1];};return ", funcName].join("");
 			return;
 			*/
 
-			let obstacleVerts = []; //points;
-			let obstacleEdges = []; //edges;
-			this.collectVerticesEdgesFromShape(obstacleVerts, obstacleEdges, obstacles);
-			
+			// Rebuild wall without entrance blockages...
 			/*
-			for (let i=0; i<obstacleEdges.length; i++) {
-				obstacleEdges[i][0] += 4;
-				obstacleEdges[i][1] += 4;
-			}
+			let cityWallBlocksNavmesh = new NavMesh();
+			cityWallBlocksNavmesh.attemptBuildGraph = false;
+			//cityWallBlocksNavmesh.attemptMergePolies = false;
+			cityWallBlocksNavmesh.fromPolygons(NavMeshUtils.filterOutPolygonsByMask(this.navmeshCityWall.regions, ~BIT_ENTRANCE, true, false, true));
+			let cityWallIsles = NavMeshUtils.getNavmeshIslands(cityWallBlocksNavmesh, 2);
+			//wallsShape = CSG.fromPolygons( cityWallIsles.map(isle => isle.borders).map(borders => borders.map(b => [b.x, b.z])) );
 			*/
-			
+
+			/*
+			let polyEntrances = NavMeshUtils.filterOutPolygonsByMask(this.navmeshCityWall.regions, BIT_ENTRANCE, true).map(polygonToReverseCell);
+			// entrancePolygons = CSG.fromPolygons(polyEntrances);
+			//wallsShape = cityWallUnion.subtract(entrancePolygons);
+			*/
+
+			//this.cityWallCDTObj.edges.length = 0;
+			//this.cityWallCDTObj.vertices.length = 0;
+			//this.collectVerticesEdgesFromCSG(this.cityWallCDTObj.vertices, this.cityWallCDTObj.edges, wallsShape);
+			//console.log(this.cityWallCDTObj);
+
+			///*
+			let pointsLen = points.length;
+			for (let i = 0; i< this.cityWallCDTObj.edges.length; i++) {
+				this.cityWallCDTObj.edges[i][0] += pointsLen;
+				this.cityWallCDTObj.edges[i][1] += pointsLen;
+			}
+			//*/
+
+			let obstacleVerts = points.concat(this.cityWallCDTObj.vertices);
+			let obstacleEdges = edges.concat(this.cityWallCDTObj.edges);
+
+			this.collectVerticesEdgesFromCSG(obstacleVerts, obstacleEdges, obstacles); // obstacles only fpr buildings
+
+			//this.collectVerticesEdgesFromCSG(obstacleVerts, obstacleEdges, entrancePolygons);
+			//this.collectVerticesEdgesFromShape(obstacleVerts, obstacleEdges, obstacles);
 
 			//points = obstacleVerts;
 			//edges = obstacleEdges;
-			
-			
+
+			var svg;
+
+
 			cleanPSLG(obstacleVerts, obstacleEdges);
 			let cdt = cdt2d_1(obstacleVerts, obstacleEdges, {interior:true, exterior:false});
 
 			let navmesh = new NavMesh();
+			// navmesh.attemptMergePolies = false;
 			navmesh.attemptBuildGraph = false;
-			
-			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)}));
+
+			// navmesh.bvh = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromCDT(obstacleVerts, groundLevel, cdt));
+			let navmeshTriPolies = cdt.map((tri)=>{return getTriPolygon(obstacleVerts, tri)});
+			/*
+			console.log('checking navmesh tris:'+navmeshTriPolies.length);
+			navmeshTriPolies = navmeshTriPolies.map((t)=> {
+				let a = t.edge.prev.vertex;
+				let b = t.edge.vertex;
+				let c = t.edge.next.vertex;
+				let det = ( ( c.x - a.x ) * ( b.z - a.z ) ) - ( ( b.x - a.x ) * ( c.z - a.z ) );
+				if (det < 0) console.warn("detected anticlockwise tri");
+				return det >= 0 ? t : new Polygon().fromContour(c,b,a);
+			});
+			*/
+
+			let navmeshTriVertices = NavMeshUtils.getVertexListFromPolygons(navmeshTriPolies);
+			navmesh.fromPolygons(navmeshTriPolies.concat( NavMeshUtils.filterOutPolygonsByMask(this.navmeshCityWall.regions, BIT_ENTRANCE, false).map((p) => NavMeshUtils.weldNewPolygonToVertexList(p, navmeshTriVertices, true) )));
+			NavMeshUtils.weldVertices(navmesh);
 
 			if (this._PREVIEW_MODE) {
-				var svg = $(this.makeSVG("g", {}));
+				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
-				svg.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+				svg.append(this.makeSVG("path", {fill:"rgba(55,255,0,"+(0.3)+")", stroke:"blue", "stroke-width": (0), d: navmesh.regions.map(polygonSVGString).join(" ") }));
 				//svg.append(this.makeSVG("path", {stroke:"blue", fill:"none", "stroke-width":0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 				//return {vertices:points, edges:edges, cdt:cdt};
+				//svg.append(this.makeSVG("path", {fill:"rgba(55,255,255,"+(INITIAL_PREVIEW ? 0.9 : 0.3)+")", stroke:"blue", "stroke-width": (INITIAL_PREVIEW ? 0.15 : 0), d: NavMeshUtils.filterOutPolygonsByMask(this.navmeshCityWall.regions, BIT_ENTRANCE, false).map(polygonToCell).map(cellSVGString).join(" ") }));
+				//svg.append(this.makeSVG("path", {fill:"rgba(55,255,255,"+(INITIAL_PREVIEW ? 0.9 : 0.3)+")", stroke:"blue", "stroke-width": (INITIAL_PREVIEW ? 0.15 : 0), d: NavMeshUtils.filterOutPolygonsByMask(this.navmeshCityWall.regions, ~(BIT_ENTRANCE|BIT_CITADEL_WALL), true, false, true).map(polygonSVGString).join(" ") }));
+			}
+
+			let rampShadowPolygons = [];
+			// for this context only, arbitarily add ramp borderEdges of projected low enough polygons over over assumed flat ground
+			if (this.navmeshRoad) {
+				rampShadowPolygons = NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY_RAMP, true);
+
+				// get the height clearance blockage polygons for sloping ramp overheads
+				rampShadowPolygons = rampShadowPolygons.map((poly)=> {
+					return NavMeshUtils.getObstructingPolyOverFlatLevel(poly, groundLevel, this.agentHeight - this.rampedBuildingExtrudeThickness);
+				}).filter((poly)=>{return poly!==null});
+
+				if (this._PREVIEW_MODE) {
+					svg = $(this.makeSVG("g", {}));
+					this.map.append(svg, {});
+					svg.append(this.makeSVG("path", {fill:"white", stroke:"blue", "stroke-width": 0.2, d: rampShadowPolygons.map(polygonSVGString).join(" ") }));
+				}
+			}
+
+
+			if (inset !== 0) {
+
+				if (rampShadowPolygons !== null) {
+					let rampShadowNavmesh = new NavMesh();
+					rampShadowNavmesh.attemptBuildGraph = false;
+					rampShadowNavmesh.attemptMergePolies = false; // already merged beforehand from existing road navmesh
+					rampShadowNavmesh.fromPolygons(rampShadowPolygons);
+					let notGroundLevel = (b)=> {
+						return (b.vertex.y !== groundLevel || b.prev.vertex.y !== groundLevel);
+					};
+					let rampShadowNavmeshEdges =  rampShadowNavmesh._borderEdges.filter(notGroundLevel);
+					//*
+					rampShadowNavmeshEdges.forEach((e)=>{
+						let he;
+						rampShadowNavmeshEdges.push(he = new HalfEdge(e.prev.vertex));
+						he.prev = e;
+					});
+					//*/
+
+					this.connectingRampEdges = rampShadowNavmesh._borderEdges.filter((b)=> {return !notGroundLevel(b)});
+					console.log(this.connectingRampEdges.length + " connecting ramp edges found.");
+
+					console.log("Existing ramp shadow edges length:"+  navmesh._borderEdges.length);
+					navmesh._borderEdges = navmesh._borderEdges.concat(rampShadowNavmeshEdges);
+					console.log("Added to ramp shadow edges length:"+  navmesh._borderEdges.length);
+				}
+
+				let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
+				{ // Default generation
+					// debugging svg
+					let wireSVG;
+					if (this._PREVIEW_MODE) {
+						svg = $(this.makeSVG("g", {}));
+						wireSVG = $(this.makeSVG("g", {}));
+
+						this.map.append(wireSVG, {});
+						this.map.append(svg, {});
+					}
+
+					let vertexArr = [	[-this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+						[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+						[this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ],
+						[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]];
+					let vertexCount = vertexArr.length;
+					let edgeConstraints = [[0,1], [1,2], [2,3], [3,0]];
+					let slicePolygonList = [];
+					navmesh._borderEdges.forEach((edge) => {
+						if (edge.vertex.index === undefined) {
+							vertexArr[vertexCount] = [edge.vertex.x, edge.vertex.z];
+							edge.vertex.index = vertexCount++;
+						}
+						if (edge.prev.vertex.index === undefined) {
+							vertexArr[vertexCount] = [edge.prev.vertex.x, edge.prev.vertex.z];
+							edge.prev.vertex.index = vertexCount++;
+						}
+						if (edge.value.from.index === undefined) {
+							vertexArr[vertexCount] = [edge.value.from.x, edge.value.from.z];
+							edge.value.from.index = vertexCount++;
+						}
+						if (edge.value.to.index === undefined) {
+							vertexArr[vertexCount] = [edge.value.to.x, edge.value.to.z];
+							edge.value.to.index = vertexCount++;
+						}
+
+						// add border slice solid...
+						edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
+						slicePolygonList.push(new Polygon().fromContour([edge.value.from, edge.prev.vertex, edge.vertex, edge.value.to]));
+
+						if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));
+					});
+					resultMap.forEach( (edges, vertex) => {
+						let fromChamferIndex = -1;
+						let toChamferIndex = -1;
+						let theChamfer = null;
+						if (vertex.chamfer) {
+							// add chamfer solid
+							if (fromChamferIndex < 0 && vertex.chamfer.from.index !== undefined) {
+								fromChamferIndex = vertex.chamfer.from.index;
+							}
+							if(toChamferIndex < 0 && vertex.chamfer.to.index !== undefined) {
+								toChamferIndex = vertex.chamfer.to.index;
+							}
+							if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+								theChamfer = vertex.chamfer;
+							}
+
+						}
+						if (vertex.resultArr && !theChamfer) {
+							vertex.resultArr.forEach((result, index) => {
+								if (result instanceof LineSegment) {
+									if (fromChamferIndex < 0 && result.from.index !== undefined) {
+										fromChamferIndex = result.from.index;
+									}
+									if(toChamferIndex < 0 && result.to.index !== undefined) {
+										toChamferIndex = result.to.index;
+									}
+									if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+										theChamfer = vertex.chamfer;
+									}
+								}
+							});
+						}
+						if (theChamfer) {
+							slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
+							// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
+							if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"none", stroke:"red", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}));
+						}
+					});
+
+					// return navmesh;
+
+					// to filter out upcoming generated cdt
+					let navmeshBVH = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(navmesh.regions));
+					let obstaclesBVH  = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(slicePolygonList.concat(rampShadowPolygons)));
+
+					let ptArr = vertexArr.slice(0); //vertexArr.map(vecToPoint);
+					//console.log(ptArr, edgeConstraints);
+					cleanPSLG(ptArr, edgeConstraints);
+
+					//console.log(pointArrEquals(ptArr.slice(0,vertexArr.length), vertexArr));
+
+					let cdt = cdt2d_1(ptArr, edgeConstraints, {interior:true, exterior:true});
+
+					cdt = cdt.filter((c)=> {
+						let cx;
+						let cz;
+						cx = (ptArr[c[0]][0] + ptArr[c[1]][0] + ptArr[c[2]][0]) / 3;
+						cz = (ptArr[c[0]][1] + ptArr[c[1]][1] + ptArr[c[2]][1]) / 3;
+						return pt2DInBVH(cx, cz, navmeshBVH) && !pt2DInBVH(cx, cz, obstaclesBVH); // 2nd should be !..todo
+					});
+					clearStacks();
+
+					if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
+				}
+				//*/
 			}
 
 			return navmesh;
@@ -30277,7 +32214,7 @@ return d[d.length-1];};return ", funcName].join("");
 				el.setAttribute(k, attrs[k]);
 			return el;
 		}
-		
+
 	collectVerticesEdgesFromShape(vertices, edges, shape) {
 			let paths = shape.paths;
 			// let mapVerts = new Map();
@@ -30286,7 +32223,7 @@ return d[d.length-1];};return ", funcName].join("");
 
 				let count = baseCount;
 				points.forEach((p, index)=> {
-					
+
 					if (index >= 1) edges.push([count-1, count]);
 					if (index === points.length - 1) edges.push([count, baseCount]);
 					count++;
@@ -30312,12 +32249,12 @@ return d[d.length-1];};return ", funcName].join("");
 				});
 			});
 
-			
+
 			paths.forEach((points)=>{
-				
-			
+
+
 				points.forEach((p, index, array)=> {
-					
+
 					let key = p.X + "," + p.Y;
 					let key2;
 					if (index >= 1) {
@@ -30327,9 +32264,9 @@ return d[d.length-1];};return ", funcName].join("");
 					else if (index === points.length - 1) {
 						key2 = array[0].X + "," + array[0].Y;
 						edges.push([mapVerts.get(key), mapVerts.get(key2)]);
-					} 
+					}
 
-		
+
 				});
 			});
 		}
@@ -30355,11 +32292,28 @@ return d[d.length-1];};return ", funcName].join("");
 			});
 		}
 
-		getPointsListShape(pointsList, processPointsMethod) {
+		getPointsListCSG(pointsList, processPointsMethod, csgUnitFactoryMethod) {
 			let polygonsListCSG = [];
 			pointsList.forEach((points, index)=> {
 				if (processPointsMethod) points = processPointsMethod(points, index);
-				polygonsListCSG.push(new Shape([points.map(pointToShapePt)]));
+				let csgUnit = !csgUnitFactoryMethod ? csg2d.fromPolygons([points]) : csgUnitFactoryMethod(points);
+				polygonsListCSG.push(csgUnit);
+			});
+
+			let csg = polygonsListCSG[0];
+			for (let i=1; i<polygonsListCSG.length; i++) {
+				csg = csg.union(polygonsListCSG[i]);
+			}
+			return csg;
+		}
+
+		getPointsListShape(pointsList, processPointsMethod, processCSGShapeMethod) {
+			let polygonsListCSG = [];
+			pointsList.forEach((points, index)=> {
+				if (processPointsMethod) points = processPointsMethod(points, index);
+				let shape = new Shape([points.map(pointToShapePt)]);
+				if (processCSGShapeMethod) processCSGShapeMethod(shape);
+				polygonsListCSG.push(shape);
 			});
 			let csg = polygonsListCSG[0];
 			for (let i=1; i<polygonsListCSG.length; i++) {
@@ -30368,7 +32322,7 @@ return d[d.length-1];};return ", funcName].join("");
 			return csg;
 		}
 
-		
+
 		getCDTObjFromPointsListUnion2(pointsList, cleanup, params, processPointsMethod) {
 			let polygonsListCSG = [];
 			pointsList.forEach((points, index)=> {
@@ -30392,9 +32346,9 @@ return d[d.length-1];};return ", funcName].join("");
 			let cdt = cdt2d_1(vertices, edges, (params ? params : {exterior:true}));
 			return {vertices:vertices, edges:edges, cdt:cdt};
 		}
-		
 
-		getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod) {
+
+		getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod, csgPtr) {
 			let polygonsListCSG = [];
 			pointsList.forEach((points, index)=> {
 				if (processPointsMethod) points = processPointsMethod(points, index);
@@ -30405,6 +32359,7 @@ return d[d.length-1];};return ", funcName].join("");
 			for (let i=1; i<polygonsListCSG.length; i++) {
 				csg = csg.union(polygonsListCSG[i]);
 			}
+			if (csgPtr) csgPtr.csg = csg;
 
 			let vertices = params.vertices ? params.vertices.slice(0) : [];
 			let edges = params.edges ? params.edges.slice(0) : [];
@@ -30479,6 +32434,7 @@ return d[d.length-1];};return ", funcName].join("");
 			this.cityWallEntrancePoints = [];
 			let filteredAtCitadel = [];
 			this.cityWallSegments = getSegmentPointsFromSVGLinePath(pathString, filteredAtCitadel, this.weldWallPathThreshold);
+			//this.cityWallSegmentsOriginal =  getSegmentPointsFromSVGLinePath(pathString, filteredAtCitadel, this.weldWallPathThreshold);
 
 			// check for duplicate start/end points
 			let testSegments = this.cityWallSegments[0];
@@ -30489,7 +32445,9 @@ return d[d.length-1];};return ", funcName].join("");
 			//g.append($(this.makeSVG("circle", {cx:testSegments2[testSegments2.length-1][0], cy:testSegments2[testSegments2.length-1][1], r:20, fill:"red"  })));
 			if (segPointEquals(testSegments[0], testSegments2[testSegments2.length-1])) {
 				testSegments2.pop();
+
 				if (testSegments2.length === 0) {
+					console.warn("popping first city wall segment case!");
 					this.cityWallSegments.pop();
 				}
 				else if (testSegments2.length ===1) {
@@ -30545,7 +32503,7 @@ return d[d.length-1];};return ", funcName].join("");
 		//	let ref = this.cityWallSegmentsUpper[0].slice(0);
 		//	this.cityWallSegmentsUpper[0] = ref.slice(8).concat(ref.slice(1, 8));
 
-		
+
 
 
 			//this.cityWallSegmentsUpper[0] = this.cityWallSegmentsUpper[0].concat(ref.slice(0,8)); //.concat(ref.slice(0, 8))
@@ -30606,7 +32564,7 @@ return d[d.length-1];};return ", funcName].join("");
 				});
 
 				this.citadelWallSegments = getSegmentPointsFromSVGLinePath(jSelCitadelWall.children("path").attr("d"));
-				
+
 				let citadelEntranceLines = jSelCitadelWall.find(this.subSelectorEntranceLines);
 				if (citadelEntranceLines.length >=3) {
 					this.citadelWallEntrancePoint = getBBoxCenter(citadelEntranceLines[0].getBBox());
@@ -30631,7 +32589,7 @@ return d[d.length-1];};return ", funcName].join("");
 
 
 				this.citadelWallSegmentsUpper = [explode2DArray(this.citadelWallSegments)]; // todo: break and rearrange from start/end citadel
-				
+
 				/*
 				g.append(
 						this.makeSVG("path", {"fill":"none", "stroke-width":0.5, "stroke":"orange",
@@ -30674,7 +32632,7 @@ return d[d.length-1];};return ", funcName].join("");
 					d: cdt.map((tri)=>{return triSVGString(this.cityWallCDTBoundary.vertices, tri)}).join(" ")})
 			);
 			*/
-		
+
 			this.citadelWallCDTBoundary = this.getCDTObjFromPointsListUnion(this.citadelWallSegments, true, {exterior:false});
 			/*
 			g.append(
@@ -30692,9 +32650,9 @@ return d[d.length-1];};return ", funcName].join("");
 
 
 			let lineSegments = this.citadelWallSegmentsUpper.concat(this.cityWallSegmentsUpper);
-			
+
 			//.concat(this.citadelWallPillars).concat(this.cityWallPillars);
-			
+
 			let cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
 				true, {exterior:false},
 				(points, index)=>{
@@ -30714,43 +32672,44 @@ return d[d.length-1];};return ", funcName].join("");
 			let navmesh = new NavMesh();
 			navmesh.attemptBuildGraph = false;
 
-			
-			
+
+
 			navmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)}));
 			NavMeshUtils.weldVertices(navmesh);
-			
+
 			///*
 			// warning hack to circumvent holes issue for city wall
+			// console.log(this.cityWallSegments.length + ' initial city wall segments length');
 			lineSegments = [this.citadelWallSegments[1]].concat(this.citadelWallSegmentsUpper).concat(this.cityWallSegmentsUpper);
-		
+
 			 cdtObj = this.getCDTObjFromPointsListUnion(lineSegments,
 				true, {exterior:false},
 				(points, index)=>{
 					points = points.slice(0);
 					//points = points.slice(0).reverse();
 					return this.extrudePathOfPoints(points, wallRadius, true, true);
-				});
+				}, this.cityWallCSGObj = {});
 
 			cdt = cdtObj.cdt;
 
 			let cityWallWalkNavmesh = new NavMesh();
 			cityWallWalkNavmesh.attemptBuildGraph = false;
-			
+
 			cityWallWalkNavmesh.fromPolygons(cdt.map((tri)=>{return getTriPolygon(cdtObj.vertices, tri)}));
 			NavMeshUtils.weldVertices(navmesh);
 			this.cityWallCDTObj = {
 				vertices: cdtObj.vertices,
-				edges: cdtObj.edges	
+				edges: cdtObj.edges
 			};
 			this.navmeshCityWallWalk = cityWallWalkNavmesh;
 			//*/
-			
-			///*
+
+			/*
 			g.append(
 				this.makeSVG("path", {"fill":"rgba(0,255,0,1)", "stroke-width":0.1, "stroke":"red",
 					d: cdt.map((tri)=>{return triSVGString(cdtObj.vertices, tri)}).join(" ")})
 			);
-			//*/
+			*/
 			let errors = [];
 
 			// slightly problematic..need lenient for now

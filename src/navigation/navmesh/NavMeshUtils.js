@@ -605,7 +605,7 @@ class NavMeshUtils {
      * @param {Number} mask Bitmask
      * @param {Boolean|Null} clonePolygons Whether to clone entirely new seperate polygons. If set to Null, will not duplciate vertices as well.
      */
-    static filterOutPolygonsByMask(polygons, mask, clonePolygons=false, exactEquals=false) {
+    static filterOutPolygonsByMask(polygons, mask, clonePolygons=false, exactEquals=false, includeUndefined=false) {
         let filteredPolygons = [];
         let len = polygons.length;
         let vertexMap = new Map();
@@ -613,7 +613,7 @@ class NavMeshUtils {
         let c = 0;
         for (let i=0; i<len; i++) {
             let polygon = polygons[i];
-            if (polygon.mask === undefined || (exactEquals ? polygon.mask !== mask : !(polygon.mask & mask)) ) {
+            if ( (polygon.mask === undefined && !includeUndefined)  || (polygon.mask !== undefined && (exactEquals ? polygon.mask !== mask : !(polygon.mask & mask))) ) {
                 continue;
             }
             c = 0;
@@ -765,7 +765,6 @@ class NavMeshUtils {
         return polygons;
     }
 
-
    /**
     * Note: This function is 2D and assumed to work only on x and z coordinates of polygons
     * @param {Vertex} vertex Vertex is assumed to already lie directly on given edge split
@@ -804,7 +803,6 @@ class NavMeshUtils {
         return result;
     }
 
-
     static dividePolygonByVertices(splitVertex, fromEdge) {
         let fromVertex = fromEdge.vertex;
         PLANE.normal.crossVectors(fromEdge.polygon.plane.normal, new Vector3().subVectors(splitVertex, fromVertex));
@@ -830,6 +828,164 @@ class NavMeshUtils {
 
         return [new Polygon().fromContour(polyContours), new Polygon().fromContour(polyContours2)];
     }
+
+
+    // KEY navmesh methods
+
+    static getVertexListFromPolygons(polygons) {
+        let fullSet = new Set();
+        let len = polygons.length;
+        for (let i = 0; i<len ;i++) {
+           let p = polygons[i];
+           let edge = p.edge;
+            do {
+                fullSet.add(edge.vertex);
+                edge = edge.next;
+            } while (edge !== p.edge);
+        }
+        return Array.from(fullSet);
+    }
+
+    static weldNewPolygonToVertexList(polygon, vertexList, is2D=false, threshold=Infinity) {
+        let contours = [];
+        let edge = polygon.edge;
+        let v;
+        let dx;
+        let dy;
+        let dz;
+        let d;
+        let closest;
+        let closestV;
+        let len = vertexList.length;
+        do {
+            v = edge.vertex;
+            closest = Infinity;
+            closestV = null;
+            for (let i = 0; i < len; i++) {
+                let v2 = vertexList[i];
+                dx = v2.x - v.x;
+                dy = !is2D ? v2.y - v.y : 0;
+                dz = v2.z - v.z;
+                d = dx*dx + dy*dy + dz*dz;
+                if (d < closest && d < threshold) {
+                    closest = d;
+                    closestV = v2;
+                }
+            }
+            contours.push(closestV !== null ? closestV : v);
+            edge = edge.next;
+        } while(edge !== polygon.edge)
+
+        return new Polygon().fromContour(contours);
+    }
+
+
+
+
+    /**
+     * Retrieve contigious sets of polygons from a list of polygons or from navmesh itself
+     * @param {NavMesh|[Polygon]} navmesh
+     * @param {Number} getBorders  Whether to include borders. Zero to exclude entirely. '1' to include borders amd ordered. '2' to include borders but unordered.
+     * @return An array of navmesh island definitions: vertices and polygons...and borders (if specified to be included)
+     */
+    static getNavmeshIslands(navmesh, getBorders=0) {
+        let polygons = navmesh.regions ? navmesh.regions : navmesh;
+
+        var stack = [];
+        var si;
+        var i = 0;
+        var len = polygons.length;
+        var edge;
+        var p;
+
+        var islands = [];
+
+        var poliesInIsland;
+        var vertsInIsland;
+        var bordersInIsland;
+        var time = 0;
+
+        while (i < len) {
+            vertsInIsland = [];
+            poliesInIsland= [];
+            if (getBorders) bordersInIsland = [];
+
+            // DFS
+            si = 0;
+            stack[si++] = polygons[i];
+            polygons[i].done = true;
+            while(--si > -1) {
+                p = stack[si];
+                poliesInIsland.push(p);
+                edge = p.edge;
+                do {
+                    if (edge.twin && !edge.twin.polygon.done ) {
+
+                            stack[si++] = edge.twin.polygon;
+                            edge.twin.polygon.done = true;
+
+                    }
+                    if (getBorders && !edge.twin && edge.time !== time) {
+                        bordersInIsland.push(edge);
+                        edge.time = time;
+                    }
+                    if (edge.vertex.time !== time) {
+                        vertsInIsland.push(edge.vertex);
+                        edge.vertex.time = time;
+                    }
+                    edge = edge.next;
+                }   while (edge !== p.edge);
+            }
+
+            let isle = {polygons:poliesInIsland, vertices:vertsInIsland};
+            if (getBorders) {
+                isle.borders = bordersInIsland;
+            }
+            islands.push(isle);
+
+            time++;
+
+            while (i < len && polygons[i].done) {
+                i++;
+            }
+        }
+
+
+        if (getBorders === 1) {
+            islands.forEach((isle)=> {
+                isle.borders = this.getOrderedIslandBorders(isle.borders);
+            });
+        }
+        return islands;
+    }
+
+    /**
+     * Attempts to create a single loop ordered set of borders from all collected borders from a polygon island.
+     * Note that it is naively assumed all borders of the island already form a clean (single-direction) loop without branching.
+     * @param {[HalfEdge]} borders
+     * @return [HalfEdge] A new array consisting of the ordered set of borders
+     */
+    static getOrderedIslandBorders(borders) {
+        let map = new Map();
+        let len;
+
+        let b;
+        len = borders.length;
+        for (let i =0; i< len; i++) {
+            b = borders[i];
+            map.set(b.prev.vertex, b);
+        }
+        b = borders[0];
+        let startBorder = b;
+        let arr = [b];
+        b = map.get(b.vertex);
+        do {
+            arr.push(b);
+            b = map.get(b.vertex);
+        } while (b !== startBorder)
+        return arr;
+    }
+
 
     /**
      * Get obstructing obstacle polygon over a given flat yPosition surface given a sloping polgon.
@@ -892,74 +1048,12 @@ class NavMeshUtils {
         return contours.length >= 3 ? new Polygon().fromContour(contours) : null;
     }
 
-    /* // yagni
-    static patchHoles(navmesh, holesAdded) {
-        if (!holesAdded) holesAdded = [];
-
-        // if full navmesh reference is passed, then will also push added holes into navmesh regions as walkable areas and update navmesh's graph accordingly
-        let isUsingFullNavmesh = !!navmesh.regions;
-
-        let regions = isUsingFullNavmesh ? navmesh.regions : navmesh;
-        let len = regions.length;
-        let r;
-        let edge;
-        let map = new Map();
-        for (let i=0; i<len; i++) {
-            r = regions[i];
-            edge = r.edge;
-            do {
-                if (edge.twin === null) {
-                    if (map.has(edge.prev.vertex)) {
-                        map.get(edge.prev.vertex).push(edge);
-                    }
-                    else map.set(edge.prev.vertex, [edge]);
-                }
-                edge = edge.next;
-            } while (edge !== r.edge)
-        }
-
-        let builtContour = [];
-        let bi;
-        let dfs = [];
-        let di;
-        for (let i=0; i<len; i++) {
-            r = regions[i];
-            edge = r.edge;
-            do {
-                if (edge.twin === null) {
-                    bi =  searchEdgeList(map, builtContour, edge);
-
-                    //e === edge &&
-                    if ( bi>=3) {
-                        builtContour.length = bi;
-                        //console.log("Adding hole");
-                        let p;
-                        holesAdded.push( p = new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) );
-                        p.holed = true;
-
-                        // kiv todo: link twins  newly added polygon's edges
-
-                        if (isUsingFullNavmesh) {
-                            // link respective polygon holes to full navmesh to connect it. add arc to graph.
-                        }
-                    }
-                }
-
-                edge = edge.next;
-            } while (edge !== r.edge)
-        }
-        return holesAdded;
-    }
-    */
-
-
-
     /**
-     *
+     * Calculate offset/corner projections necessary for navmesh minowski-like operations
      * @param {NavMesh}  navMesh
      * @param {Number}  inset   The amount to inset navmesh by
      * @param {Number}  minChamferLength   The minimum chamfer distance
-     * @return A Map to map vertices/borders of current navmesh with insetted/offseted lines
+     * @return A Map to map vertices of current navmesh to their respective edge pairs
      */
     static getBorderEdgeOffsetProjections(navMesh, inset, minChamferDist = 1e-5) {
 
@@ -1176,6 +1270,69 @@ class NavMeshUtils {
 
         return resultMap;
     }
+
+
+     /* // yagni
+    static patchHoles(navmesh, holesAdded) {
+        if (!holesAdded) holesAdded = [];
+
+        // if full navmesh reference is passed, then will also push added holes into navmesh regions as walkable areas and update navmesh's graph accordingly
+        let isUsingFullNavmesh = !!navmesh.regions;
+
+        let regions = isUsingFullNavmesh ? navmesh.regions : navmesh;
+        let len = regions.length;
+        let r;
+        let edge;
+        let map = new Map();
+        for (let i=0; i<len; i++) {
+            r = regions[i];
+            edge = r.edge;
+            do {
+                if (edge.twin === null) {
+                    if (map.has(edge.prev.vertex)) {
+                        map.get(edge.prev.vertex).push(edge);
+                    }
+                    else map.set(edge.prev.vertex, [edge]);
+                }
+                edge = edge.next;
+            } while (edge !== r.edge)
+        }
+
+        let builtContour = [];
+        let bi;
+        let dfs = [];
+        let di;
+        for (let i=0; i<len; i++) {
+            r = regions[i];
+            edge = r.edge;
+            do {
+                if (edge.twin === null) {
+                    bi =  searchEdgeList(map, builtContour, edge);
+
+                    //e === edge &&
+                    if ( bi>=3) {
+                        builtContour.length = bi;
+                        //console.log("Adding hole");
+                        let p;
+                        holesAdded.push( p = new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) );
+                        p.holed = true;
+
+                        // kiv todo: link twins  newly added polygon's edges
+
+                        if (isUsingFullNavmesh) {
+                            // link respective polygon holes to full navmesh to connect it. add arc to graph.
+                        }
+                    }
+                }
+
+                edge = edge.next;
+            } while (edge !== r.edge)
+        }
+        return holesAdded;
+    }
+    */
+
+
 
 }
 
