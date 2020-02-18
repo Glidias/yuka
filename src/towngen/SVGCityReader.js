@@ -59,6 +59,14 @@ function svgLineFromTo(from, to) {
 	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
 }
 
+function cdtTriFilterFunction(c, ptArr, navmeshBVH=null, obstaclesBVH=null) {
+	let cx;
+	let cz;
+	cx = (ptArr[c[0]][0] + ptArr[c[1]][0] + ptArr[c[2]][0]) / 3;
+	cz = (ptArr[c[0]][1] + ptArr[c[1]][1] + ptArr[c[2]][1]) / 3;
+	return (navmeshBVH === null || pt2DInBVH(cx, cz, navmeshBVH)) && (obstaclesBVH === null || !pt2DInBVH(cx, cz, obstaclesBVH));
+}
+
 function enclosedSegments(segments) {
 	let omega = segments[segments.length -1];
 	omega = omega[omega.length - 1];
@@ -1207,6 +1215,14 @@ class SVGCityReader {
 		}
 	}
 
+	getNavmeshHighways() {
+		let navmesh = new NavMesh();
+		navmesh.attemptBuildGraph = false;
+		navmesh.attemptMergePolies = false;
+		navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY, true)));
+		return navmesh;
+	}
+
 	// Key public methods
 
 	getNavmeshExtrudedGeometry() {
@@ -1238,10 +1254,7 @@ class SVGCityReader {
 
 		if (this.navmeshRoad) {
 			// Highways
-			navmesh = new NavMesh();
-			navmesh.attemptBuildGraph = false;
-			navmesh.attemptMergePolies = false;
-			navmesh.fromPolygons(NavMeshUtils.seperateMarkedPolygonsVertices(NavMeshUtils.filterOutPolygonsByMask(this.navmeshRoad.regions, BIT_HIGHWAY, true)));
+			let navmesh = this.navmeshHighways = this.getNavmeshHighways();
 			deployGeom.highways = NavMeshUtils.collectExtrudeGeometry(getNewGeometryCollector(), navmesh.regions,
 				this.highwayExtrudeThickness >= 0 ? this.highwayExtrudeThickness : this.innerWardAltitude, this.exportScaleXZ, this.highwayExtrudeThickness < 0, this.innerWardRoadAltitude);
 			// Upper Roads within walls
@@ -1306,15 +1319,136 @@ class SVGCityReader {
 		return collector;
 	}
 
+	getCanvasVertexArr() {
+		const scaleXZ = this._PREVIEW_MODE ? 1 : this.exportScaleXZ;
+		return  [
+			[-this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+			[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
+			[this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ],
+			[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]
+		];
+	}
+
+	getCanvasEdges() {
+		return  [
+			[0,1], [1,2], [2,3], [3,0]
+		];
+	}
+
+	getNavmeshVerticesAndEdges(navmesh, vertexArr=null, edgeConstraints=null) {
+		if (vertexArr === null) {
+			vertexArr = [];
+		}
+		if (edgeConstraints === null) {
+			edgeConstraints = [];
+		}
+		let vertexCount = vertexArr.length;
+
+		navmesh._borderEdges.forEach((edge) => {
+			if (edge.vertex.index === undefined) {
+				vertexArr[vertexCount] = [edge.vertex.x, edge.vertex.z];
+				edge.vertex.index = vertexCount++;
+			}
+			if (edge.prev.vertex.index === undefined) {
+				vertexArr[vertexCount] = [edge.prev.vertex.x, edge.prev.vertex.z];
+				edge.prev.vertex.index = vertexCount++;
+			}
+			// add border slice solid...
+			edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index]);
+		});
+
+		return {
+			vertices: vertexArr,
+			edges: edgeConstraints	
+		};
+	}
+
+	processNavmeshMinowski(navmesh, resultMap, slicePolygonList=null, vertexArr=null, edgeConstraints=null, edgeCallback=null, chamferCallback=null) {
+		if (slicePolygonList === null) slicePolygonList = [];
+		if (vertexArr === null) {
+			vertexArr = [];
+		}
+		if (edgeConstraints === null) {
+			edgeConstraints = [];
+		}
+		let vertexCount = vertexArr.length;
+
+		navmesh._borderEdges.forEach((edge) => {
+			if (edge.vertex.index === undefined) {
+				vertexArr[vertexCount] = [edge.vertex.x, edge.vertex.z];
+				edge.vertex.index = vertexCount++;
+			}
+			if (edge.prev.vertex.index === undefined) {
+				vertexArr[vertexCount] = [edge.prev.vertex.x, edge.prev.vertex.z];
+				edge.prev.vertex.index = vertexCount++;
+			}
+			if (edge.value.from.index === undefined) {
+				vertexArr[vertexCount] = [edge.value.from.x, edge.value.from.z];
+				edge.value.from.index = vertexCount++;
+			}
+			if (edge.value.to.index === undefined) {
+				vertexArr[vertexCount] = [edge.value.to.x, edge.value.to.z];
+				edge.value.to.index = vertexCount++;
+			}
+
+			// add border slice solid...
+			edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
+			slicePolygonList.push(new Polygon().fromContour([edge.value.from, edge.prev.vertex, edge.vertex, edge.value.to]));
+
+			if (edgeCallback!==null) edgeCallback(edge);
+		});
+
+		resultMap.forEach( (edges, vertex) => {
+			let fromChamferIndex = -1;
+			let toChamferIndex = -1;
+			let theChamfer = null;
+			if (vertex.chamfer) {
+				// add chamfer solid
+				if (fromChamferIndex < 0 && vertex.chamfer.from.index !== undefined) {
+					fromChamferIndex = vertex.chamfer.from.index;
+				}
+				if(toChamferIndex < 0 && vertex.chamfer.to.index !== undefined) {
+					toChamferIndex = vertex.chamfer.to.index;
+				}
+				if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+					theChamfer = vertex.chamfer;
+				}
+
+			}
+			if (vertex.resultArr && !theChamfer) {
+				vertex.resultArr.forEach((result, index) => {
+					let baseI = (index+1) * 2;
+					if (result instanceof LineSegment) {
+						if (fromChamferIndex < 0 && result.from.index !== undefined) {
+							fromChamferIndex = result.from.index;
+						}
+						if(toChamferIndex < 0 && result.to.index !== undefined) {
+							toChamferIndex = result.to.index;
+						}
+						if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+							theChamfer = vertex.chamfer;
+						}
+					}
+				});
+			}
+			if (theChamfer) {
+				slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
+				// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
+				if (chamferCallback!==null) chamferCallback(theChamfer);
+			}
+		});
+		return {
+			slicePolygonList: slicePolygonList,
+			vertices: vertexArr,
+			edges: edgeConstraints	
+		};
+	}
+
 	buildCityWallNavmesh(inset=0) {
 
 	}
 
-	buildHighwayNavmesh(inset=0) {
-
-	}
-
-	buildGroundNavmesh(inset=0) {
+	buildGroundNavmesh(inset=0, minChamferDist=1e-5) {
 		// assumed only City wall and Buildings Blocks ground surface
 		if (!this.profileWardBuildings) {
 			alert('buildGroundNavmesh failed, please call getWardBuildingsGeometry() first!');
@@ -1529,7 +1663,7 @@ class SVGCityReader {
 				console.log("Added to ramp shadow edges length:"+  navmesh._borderEdges.length);
 			}
 
-			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset);
+			let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh, inset, minChamferDist);
 			if (INITIAL_PREVIEW && this._PREVIEW_MODE) { // switchero initial testing versus default implementation
 				svg = $(this.makeSVG("g", {}));
 				this.map.append(svg, {});
@@ -1574,97 +1708,83 @@ class SVGCityReader {
 					[this.svgWidth*.5*scaleXZ, -this.svgHeight*.5*scaleXZ],
 					[this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ],
 					[-this.svgWidth*.5*scaleXZ, this.svgHeight*.5*scaleXZ]];
-				let vertexCount = vertexArr.length;
 				let edgeConstraints = [[0,1], [1,2], [2,3], [3,0]];
 				let slicePolygonList = [];
-				navmesh._borderEdges.forEach((edge) => {
-					if (edge.vertex.index === undefined) {
-						vertexArr[vertexCount] = [edge.vertex.x, edge.vertex.z];
-						edge.vertex.index = vertexCount++;
-					}
-					if (edge.prev.vertex.index === undefined) {
-						vertexArr[vertexCount] = [edge.prev.vertex.x, edge.prev.vertex.z];
-						edge.prev.vertex.index = vertexCount++;
-					}
-					if (edge.value.from.index === undefined) {
-						vertexArr[vertexCount] = [edge.value.from.x, edge.value.from.z];
-						edge.value.from.index = vertexCount++;
-					}
-					if (edge.value.to.index === undefined) {
-						vertexArr[vertexCount] = [edge.value.to.x, edge.value.to.z];
-						edge.value.to.index = vertexCount++;
-					}
 
-					// add border slice solid...
-					edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
-					slicePolygonList.push(new Polygon().fromContour([edge.value.from, edge.prev.vertex, edge.vertex, edge.value.to]));
-
-					if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));
-				});
-				resultMap.forEach( (edges, vertex) => {
-					let fromChamferIndex = -1;
-					let toChamferIndex = -1;
-					let theChamfer = null;
-					if (vertex.chamfer) {
-						// add chamfer solid
-						if (fromChamferIndex < 0 && vertex.chamfer.from.index !== undefined) {
-							fromChamferIndex = vertex.chamfer.from.index;
-						}
-						if(toChamferIndex < 0 && vertex.chamfer.to.index !== undefined) {
-							toChamferIndex = vertex.chamfer.to.index;
-						}
-						if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
-							theChamfer = vertex.chamfer;
-						}
-
-					}
-					if (vertex.resultArr && !theChamfer) {
-						vertex.resultArr.forEach((result, index) => {
-							let baseI = (index+1) * 2;
-							if (result instanceof LineSegment) {
-								if (fromChamferIndex < 0 && result.from.index !== undefined) {
-									fromChamferIndex = result.from.index;
-								}
-								if(toChamferIndex < 0 && result.to.index !== undefined) {
-									toChamferIndex = result.to.index;
-								}
-								if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
-									theChamfer = vertex.chamfer;
-								}
-							}
-						});
-					}
-					if (theChamfer) {
-						slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
-						// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
-						if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"none", stroke:"red", "stroke-width": 0.15, d:edges.map((e)=>lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}));
-					}
-				});
-
+				this.processNavmeshMinowski(navmesh, resultMap, slicePolygonList, vertexArr, edgeConstraints
+				/*
+					,this._PREVIEW_MODE ? (edge) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));} 
+						: null,
+					this._PREVIEW_MODE ? (theChamfer) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"red", "stroke-width": 0.15, d:edges.map((e) => lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}))}
+						: null
+				*/
+				);
 				// return navmesh;
 
 				// to filter out upcoming generated cdt
-				let navmeshBVH = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(navmesh.regions));
-				let obstaclesBVH  = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(slicePolygonList.concat(rampShadowPolygons)));
+				let navmeshBVH;
+				let obstaclesBVH; 
 
-				let ptArr = vertexArr.slice(0); //vertexArr.map(vecToPoint);
+				navmeshBVH =  new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(navmesh.regions));
+				obstaclesBVH = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(slicePolygonList.concat(rampShadowPolygons)));
+				let ptArr;
+				
+				ptArr = vertexArr.slice(0); //vertexArr.map(vecToPoint);
 				//console.log(ptArr, edgeConstraints);
 				cleanPSLG(ptArr, edgeConstraints);
 
 				//console.log(pointArrEquals(ptArr.slice(0,vertexArr.length), vertexArr));
 
-				let cdt = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
+				let cdtFloor = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
+				cdtFloor = cdtFloor.filter((c)=> {
+					return cdtTriFilterFunction(c, ptArr, navmeshBVH, obstaclesBVH);
+				})
 
-				cdt = cdt.filter((c)=> {
-					let cx;
-					let cz;
-					cx = (ptArr[c[0]][0] + ptArr[c[1]][0] + ptArr[c[2]][0]) / 3;
-					cz = (ptArr[c[0]][1] + ptArr[c[1]][1] + ptArr[c[2]][1]) / 3;
-					return pt2DInBVH(cx, cz, navmeshBVH) && !pt2DInBVH(cx, cz, obstaclesBVH); // 2nd should be !..todo
-				});
+				//clearStacks();
+
+				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: cdtFloor.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
+				
+
+				let resultObj;
+				// trianglulated polygons of floor to later weld edges with navmesHighways
+				cdtFloor = cdtFloor.map((tri)=> {return getTriPolygon(ptArr, tri)} );
+				
+				if (!this.navmeshHighways) this.navmeshHighways = this.getNavmeshHighways();
+				
+				//wireSVG.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.15, d: this.navmeshHighways.regions.map(polygonSVGString).join(" ")}));
+				//return;
+
+				slicePolygonList = [];
+				resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(this.navmeshHighways, inset, minChamferDist);
+
+				// this.getCanvasVertexArr(), this.getCanvasEdges()
+				///*
+				resultObj = this.processNavmeshMinowski(this.navmeshHighways, resultMap, slicePolygonList, null, null
+					, this._PREVIEW_MODE ? (edge) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));} 
+						: null,
+					this._PREVIEW_MODE ? (theChamfer) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"red", "stroke-width": 0.15, d:edges.map((e) => lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}))}
+						: null
+					);
+				//*/
+				// resultObj = this.getNavmeshVerticesAndEdges(this.navmeshHighways, this.getCanvasVertexArr(), this.getCanvasEdges());
+
+				//return;
+
+
+				cleanPSLG(resultObj.vertices, resultObj.edges);
+				let cdtHighways = cdt2d(resultObj.vertices, resultObj.edges, {interior:true, exterior:true});
+				///*
+				navmeshBVH =  new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(this.navmeshHighways.regions));
+				obstaclesBVH = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(slicePolygonList));
+				cdtHighways = cdtHighways.filter((c)=> {
+					return cdtTriFilterFunction(c, resultObj.vertices, navmeshBVH, obstaclesBVH); 
+				})
+				//*/
+
+				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.15, d: cdtHighways.map((tri)=> {return triSVGString(resultObj.vertices, tri)}).join(" ") }));
+				
+				
 				clearStacks();
-
-				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: cdt.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 			}
 			//*/
 		}

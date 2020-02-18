@@ -1203,7 +1203,8 @@ class NavMeshUtils {
                     //}
                 });
            } else {
-                throw new Error("Failed to find complementary neighbnor edge!");
+                console.warn("Failed to find complementary neighbnor edge!", e);
+                // throw new Error("Failed to find complementary neighbnor edge!");
            }
 
 
