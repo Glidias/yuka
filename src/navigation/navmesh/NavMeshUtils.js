@@ -455,14 +455,15 @@ class NavMeshUtils {
     }
 
     /**
-     * LInk polygons by connecting quad polygons or edges
+     * Link polygons by connecting quad polygons or edges
      * @param {HalfEdge} connector A HalfEdge of a Polygon #1
      * @param {HalfEdge} connector2 A HalfEdge of a Polygon #2
      * @param {Polygon} connector3 This will be the connecting polygon to link the polgons if any, given 1 or 2 border edges
+    *  @param {Number} snapDistThreshold For vertices on a half edge, whether to consider additional snapping to weld within certain threshold
     *  @param {[HalfEdge|Polygon]} polies An array to contain the resulting connecting polygons
      * @return The array containing the resulting connecting polygons (if any), or true if the edges are welded together.
      */
-    static linkPolygons(connector, connector2=null, connector3=null, polies=null) {
+    static linkPolygons(connector, connector2=null, connector3=null, snapDistThreshold=0, polies=null) {
         let edge;
         let dx;
         let dz;
@@ -470,13 +471,14 @@ class NavMeshUtils {
         let ez;
 
         let contours;
+        let c;
 
         if (connector3 !== null) {
             // naive connection by edge midpoint distance checks
             let connector3Arr = [connector3];
             if (polies === null) polies = [];
             contours = [];
-            let c;
+            
             POINT.x = (connector.prev.vertex.x + connector.vertex.x) * 0.5;
             POINT.z = (connector.prev.vertex.z + connector.vertex.z) * 0.5;
             edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
@@ -484,10 +486,9 @@ class NavMeshUtils {
 
             c = 0;
             contours[c++] = edge.prev.vertex;
-             contours[c++] = connector.vertex;
-              contours[c++] = connector.prev.vertex;
-               contours[c++] = edge.vertex;
-
+            contours[c++] = connector.vertex;
+            contours[c++] = connector.prev.vertex;
+            contours[c++] = edge.vertex;
 
             let p;
             contours.length = c;
@@ -525,16 +526,31 @@ class NavMeshUtils {
             return polies;
         } else if (connector!=null && connector2 !== null) {
             // if half edges' vertices are already snapped exactly together, they will be welded and no new polies are created
-            if (connector.prev.vertex.x === connector2.vertex.x && connector.prev.vertex.y === connector2.vertex.y && connector.prev.vertex.z === connector2.vertex.z
-            &&  connector.vertex.x === connector2.prev.vertex.x && connector.vertex.y === connector2.prev.vertex.y && connector.vertex.z === connector2.prev.vertex.z
-            ) {
+            if (snapDistThreshold > 0) {
+
+            }
+            let tailMatch = connector.prev.vertex.x === connector2.vertex.x && connector.prev.vertex.y === connector2.vertex.y && connector.prev.vertex.z === connector2.vertex.z;
+            let headMatch = connector.vertex.x === connector2.prev.vertex.x && connector.vertex.y === connector2.prev.vertex.y && connector.vertex.z === connector2.prev.vertex.z;
+            if (tailMatch && headMatch) {
                connector.twin = connector2;
                connector2.twin = connector;
                return true;
             } else {
                 if (polies === null) polies = [];
-                // TODO: check for triangle case since 1 pair of vertices might be matching
-                polies.push(new Polygon().fromContour([connector.vertex, connector2.prev.vertex, connector2.vertex, connector.prev.vertex]));
+
+                contours = [];
+                 c = 0;
+                
+                contours[c++] = connector.vertex;
+                if (!headMatch) contours[c++] = connector2.prev.vertex;
+                if (!tailMatch) contours[c++] = connector2.vertex;
+                contours[c++] = connector.prev.vertex;
+
+                let p;
+                polies.push(p = new Polygon().fromContour(contours));
+
+                //kiv TODO: add connections from connecting polygon
+            
                 return polies;
             }
         } else {
@@ -602,10 +618,11 @@ class NavMeshUtils {
     * @return Total connections added to array
     */
 
-   static createNavmeshBorderConnections(results, navmesh, navmesh2, maxSnapDistThreshold=0,  maxConnectDistThreshold=0, connectDotFacingThreshold=1e-2) {
+   static createNavmeshBorderConnections(results, navmesh, navmesh2, maxSnapDistThreshold=0,  maxConnectDistThreshold=0, connectDotFacingThreshold=1e-2, connectRequiredCount=2) {
        const gotMainNavmesh = !Array.isArray(navmesh);
+       const gotSecondaryNavmesh = !Array.isArray(navmesh2);
        const borders = !gotMainNavmesh ? navmesh : navmesh._borderEdges;
-       const borders2 = Array.isArray(navmesh2) ? navmesh2 : navmesh2._borderEdges;
+       const borders2 = !gotSecondaryNavmesh ? navmesh2 : navmesh2._borderEdges;
        let totalHits = 0;
        let c = results.length;
 
@@ -652,7 +669,10 @@ class NavMeshUtils {
                     break;
                 }
 
-                if (d <= maxConnectDistThresholdSQ && d2 <= maxConnectDistThresholdSQ) {
+                let score = 0;
+                score += d <= maxConnectDistThresholdSQ ? 1 : 0;
+                score += d2 <= maxConnectDistThresholdSQ ? 1 : 0;
+                if ( score >= connectRequiredCount  ) {
                     dx = e.vertex.x - e.prev.vertex.x;
                     dy = e.vertex.y - e.prev.vertex.y;
                     dz = e.vertex.z - e.prev.vertex.z;
@@ -689,8 +709,10 @@ class NavMeshUtils {
                     results[c++] = e;
                     totalHits++;
                 } else {
-                    NavMeshUtils.linkPolygons(e, e2, null, results);
-                    if (gotMainNavmesh) navmesh.regions.push(results[results.length - 1]);
+                    NavMeshUtils.linkPolygons(e, e2, null, maxSnapDistThreshold, results);
+                    if (gotMainNavmesh) {
+                        navmesh.regions.push(results[results.length - 1]);
+                    }
                     c++;
                     totalHits++;
                 }
@@ -1096,6 +1118,12 @@ class NavMeshUtils {
         return arr;
     }
 
+    static createMirroredEdge(edge) {
+        let l = new HalfEdge(edge.prev.vertex);
+        l.prev = edge;
+        return l;
+    }
+
 
     /**
      * Get obstructing obstacle polygon over a given flat yPosition surface given a sloping polgon.
@@ -1236,7 +1264,9 @@ class NavMeshUtils {
             // head vertex on consiered edge
            arr = vertexToEdgesMap.get(e.vertex);
            neighborEdgeArr = findNeighborEdgeCompHeadArr(arr, e, e.vertex, visitedEdgePairs, len)
-
+           if (!neighborEdgeArr && suppressWarnings === 2) {
+               neighborEdgeArr = [NavMeshUtils.createMirroredEdge(e)];
+           }
            if (neighborEdgeArr) { // forwardDir for e.vertex
                 neighborEdgeArr.forEach( (neighborEdge) => {
                 // edgePairKey = getKeyEdgePair(e, neighborEdge, len);

@@ -22,7 +22,12 @@ import { NavEdge } from "../navigation/core/NavEdge.js";
 import { MeshGeometry } from "../core/MeshGeometry.js";
 
 const lineSegment = new LineSegment();
+const lineSegment2 = new LineSegment();
 const pointOnLineSegment = new Vector3();
+const A = new Vector3();
+const B = new Vector3();
+const C = new Vector3();
+const D = new Vector3();
 
 const CITADEL_WARD_INDEX = -1;
 const PLAZA_WARD_INDEX = -2;
@@ -72,6 +77,7 @@ function getNewGeometryCollector() {
 	}
 }
 
+
 function pt2DInBVH(x, z, bvh) {
 	let len = query2DInBVH(x, z, bvh);
 	// console.log(primitives[0]);
@@ -83,6 +89,83 @@ function pt2DInBVH(x, z, bvh) {
 	}
 	return false;
 }
+
+function height2DInTri(x, z, bvh, errors, errorThreshold) {
+	if (errorThreshold === undefined) errorThreshold = Number.MAX_VALUE; // 1e-2;
+	const errorThresholdSq = errorThreshold !== Number.MAX_VALUE ? errorThreshold * errorThreshold : Infinity;
+
+	let len = query2DInBVH(x, z, bvh);
+	// console.log(primitives[0]);
+	let primitives = PRIMITIVES;
+	for (let i =0; i< len; i+=3) {
+		if (is_in_triangle(x, z, primitives[i+2], primitives[i+1], primitives[i])) {
+			A.set(primitives[i][0], primitives[i][2], primitives[i][1]);
+			B.set(primitives[i+1][0], primitives[i+1][2], primitives[i+1][1]);
+			C.set(primitives[i+2][0], primitives[i+2][2], primitives[i+2][1]);
+			return getYHeightOnTri(A, B, C, x, z);
+		}
+	}
+	let closestDist = Infinity;
+	let dist;
+	let closestT = null;
+	let t;
+	D.set(x, 0, z);
+	for (let i =0; i< len; i+=3) {	
+		A.set(primitives[i][0], 0, primitives[i][1]);
+		B.set(primitives[i+1][0], 0, primitives[i+1][1]);
+		C.set(primitives[i+2][0], 0, primitives[i+2][1]);
+		
+		lineSegment.from.copy(A);
+		
+		lineSegment.to.copy(B);
+		t = lineSegment.closestPointToPointParameter(D, true);
+		lineSegment.at( t, pointOnLineSegment );
+		dist = pointOnLineSegment.squaredDistanceTo( D );
+		if (dist < errorThresholdSq && dist < closestDist) {
+			closestDist = dist;
+			closestT = t;
+			lineSegment2.from.copy(A);
+			lineSegment2.from.y = primitives[i][2];
+			lineSegment2.to.copy(B);
+			lineSegment2.to.y = primitives[i+1][2];
+		}
+
+		lineSegment.to.copy(C);
+		t = lineSegment.closestPointToPointParameter(D, true);
+		lineSegment.at( t, pointOnLineSegment );
+		dist = pointOnLineSegment.squaredDistanceTo( D );
+		if (dist < errorThresholdSq && dist < closestDist) {
+			closestDist = dist;
+			closestT = t;
+			lineSegment2.from.copy(A);
+			lineSegment2.from.y = primitives[i][2];
+			lineSegment2.to.copy(C);
+			lineSegment2.to.y = primitives[i+2][2];
+		}
+	}
+
+	if (closestT !== null) {
+		lineSegment2.at(closestT, pointOnLineSegment);
+		//console.log("CAUGHT!" +  pointOnLineSegment.y);
+		return pointOnLineSegment.y;
+	}
+	console.log("Failed!:"+len);
+
+	if (errors) errors.push([x,z]);
+	else console.warn("Failed to find height2DInTri!");
+	return 0;
+}
+
+
+function getYHeightOnTri(p1,  p2,  p3,  x,  z) {
+ var det = (p2.z - p3.z) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.z - p3.z);
+ var l1 = ((p2.z - p3.z) * (x - p3.x) + (p3.x - p2.x) * (z - p3.z)) / det;
+ var l2 = ((p3.z - p1.z) * (x - p3.x) + (p1.x - p3.x) * (z - p3.z)) / det;
+ var l3 = 1.0 - l1 - l2;
+return l1 * p1.y + l2 * p2.y + l3 * p3.y;
+
+}
+
 
 const STACK = [];
 const PRIMITIVES = [];
@@ -100,16 +183,18 @@ function query2DInBVH(x, z, bvh) {
 	let primitives = PRIMITIVES;
 	let pi = 0;
 	let l;
+	const padding = 1e-4;
 	let count = 0;
 	while(--si >= 0) {
 		n = stack[si];
 		if ( (l = n.primitives.length) !== 0) {
 			for ( let i = 0; i < l; i += 9 ) {
-				primitives[count++] = [n.primitives[i], n.primitives[i+2]];
-				primitives[count++] = [n.primitives[i+3], n.primitives[i+5]];
-				primitives[count++] = [n.primitives[i+6], n.primitives[i+8]];
+				// xzy order in this case
+				primitives[count++] = [n.primitives[i], n.primitives[i+2], n.primitives[i+1]];
+				primitives[count++] = [n.primitives[i+3], n.primitives[i+5], n.primitives[i+4]];
+				primitives[count++] = [n.primitives[i+6], n.primitives[i+8], n.primitives[i+7]];
 			}
-		} else if (x>=n.boundingVolume.min.x && x <=n.boundingVolume.max.x && z >=n.boundingVolume.min.z && z <= n.boundingVolume.max.z) {
+		} else if (x>=n.boundingVolume.min.x-padding && x <=n.boundingVolume.max.x+padding && z >=n.boundingVolume.min.z-padding && z <= n.boundingVolume.max.z+padding) {
 			for (let c of n.children) {
 				stack[si++] = c;
 			}
@@ -792,14 +877,25 @@ function getBBoxCenter(rect) {
 function triSVGString(vertSoup, tri) {
 	return `M${vertSoup[tri[2]][0]},${vertSoup[tri[2]][1]} L${vertSoup[tri[1]][0]},${vertSoup[tri[1]][1]} L${vertSoup[tri[0]][0]},${vertSoup[tri[0]][1]} Z`;
 }
-function getTriPolygon(vertSoup, tri) {
+function getTriPolygon(vertSoup, tri, y) {
+	if (y === undefined) y = 0;
 	let poly = new Polygon().fromContour([
-		new Vector3(vertSoup[tri[2]][0], 0, vertSoup[tri[2]][1]),
-		new Vector3(vertSoup[tri[1]][0], 0, vertSoup[tri[1]][1]),
-		new Vector3(vertSoup[tri[0]][0], 0, vertSoup[tri[0]][1])
+		new Vector3(vertSoup[tri[2]][0], y, vertSoup[tri[2]][1]),
+		new Vector3(vertSoup[tri[1]][0], y, vertSoup[tri[1]][1]),
+		new Vector3(vertSoup[tri[0]][0], y, vertSoup[tri[0]][1])
 	]);
 	return poly;
 }
+
+function getTriPolygonBVH(vertSoup, tri, bvh, errors) {
+	let poly = new Polygon().fromContour([
+		new Vector3(vertSoup[tri[2]][0], height2DInTri(vertSoup[tri[2]][0], vertSoup[tri[2]][1], bvh, errors), vertSoup[tri[2]][1]),
+		new Vector3(vertSoup[tri[1]][0], height2DInTri(vertSoup[tri[1]][0], vertSoup[tri[1]][1], bvh, errors), vertSoup[tri[1]][1]),
+		new Vector3(vertSoup[tri[0]][0], height2DInTri(vertSoup[tri[0]][0], vertSoup[tri[0]][1], bvh, errors), vertSoup[tri[0]][1])
+	]);
+	return poly;
+}
+
 
 function collinear(p1, p2, p3, threshold) {
 	let x1 = p1[0];
@@ -1721,15 +1817,18 @@ class SVGCityReader {
 
 				if (!this.navmeshHighways) this.navmeshHighways = this.getNavmeshHighways();
 				slicePolygonList = [];
-				let filteredNavmeshHighwayEdges = this.navmeshHighways._borderEdges.filter(notGroundLevel);
+				//this.navmeshHighways._borderEdges; // 
+				let filteredNavmeshHighwayEdges = this.navmeshHighways._borderEdges; //this.navmeshHighways._borderEdges.filter(notGroundLevel);
 				resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(filteredNavmeshHighwayEdges, inset, minChamferDist, true);
 				// this.getCanvasVertexArr(), this.getCanvasEdges()
 				///*
 				resultObj = this.processNavmeshMinowski(filteredNavmeshHighwayEdges, resultMap, slicePolygonList, null, null
+					/*
 					, this._PREVIEW_MODE ? (edge) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));}
 						: null,
 					this._PREVIEW_MODE ? (theChamfer) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"red", "stroke-width": 0.15, d:edges.map((e) => lineSegmentSVGStr(theChamfer.from, theChamfer.to)).join(" ")}))}
 						: null
+					*/
 					);
 				//*/
 				// resultObj = this.getNavmeshVerticesAndEdges(this.navmeshHighways, this.getCanvasVertexArr(), this.getCanvasEdges());
@@ -1752,25 +1851,38 @@ class SVGCityReader {
 				// floor
 				navmesh = new NavMesh();
 				navmesh.attemptBuildGraph = false;
-				navmesh.fromPolygons(cdtFloor.map((tri)=> {return getTriPolygon(ptArr, tri)} ));
+				navmesh.fromPolygons(cdtFloor.map((tri)=> {return getTriPolygon(ptArr, tri, groundLevel)} ));
 
 				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d:  navmesh.regions.map(polygonSVGString).join(" ") }));
+
+
+				
 
 				// highway
 				this.navmeshHighways = new NavMesh();
 				this.navmeshHighways.attemptBuildGraph = false;
-				this.navmeshHighways.fromPolygons(cdtHighways.map((tri) => getTriPolygon(resultObj.vertices, tri)));
+				let errors = [];
+				
+				this.navmeshHighways.fromPolygons(cdtHighways.map((tri) => getTriPolygonBVH(resultObj.vertices, tri, navmeshBVH, errors)));
+				errors.forEach((e)=>{
+					console.warn("[point in tri] region find error founds")
+					if (this._PREVIEW_MODE) svg.append(this.makeSVG("circle", {r:0.5, "stroke":"red", fill:"white", cx:e[0], cy:e[1]}));
+				});
 
 				let highwayToFloorLinks = [];
-				NavMeshUtils.createNavmeshBorderConnections(highwayToFloorLinks, this.navmeshHighways, navmesh._borderEdges, 0, inset+1e-1);
+				NavMeshUtils.createNavmeshBorderConnections(highwayToFloorLinks, this.navmeshHighways._borderEdges, navmesh._borderEdges, 0, inset+0.9, 0.6, 2);
 				console.log(highwayToFloorLinks);
 
-				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.15, d: this.navmeshHighways.regions.map(polygonSVGString).join(" ") }));
+				if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"red", stroke:"blue", "stroke-width": 0.0, d: highwayToFloorLinks.map(r => r instanceof Polygon ? polygonSVGString(r) : edgeSVGString(r)).join(" ") }));
 
+				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: this.navmeshHighways.regions.map(polygonSVGString).join(" ") }));
+				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: this.navmeshHighways._borderEdges.map(edgeSVGString).join(" ") }));
 
 			}
 			//*/
 		}
+
+		clearStacks();
 
 		return navmesh;
 	}
@@ -3254,7 +3366,7 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 		let pathSpl = pathString.replace(/M /g, "").replace(/L /g, "").split(" ").map((s)=>{
 			s = s.split(",");
 			let p = new Vector3(parseFloat(s[0]), 0, parseFloat(s[1]));
-			g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
+			// g.append(this.makeSVG("circle", {r:0.5, fill:"red", cx:p.x, cy:p.z}));
 			return p;
 		});
 
@@ -3563,7 +3675,7 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 			wardObj.withinCityWall = this.checkWithinCityWall(cx, cy);
 			wardObj.center = [cx,cy];
 			//item.append(this.makeSVG("path", {fill:"gray", "stroke-width":0.5, "stroke":"none", d:wardObj.delaunay.renderHull()}));
-			item.append(this.makeSVG("circle", {r:0.5, fill:(wardObj.withinCityWall ? "red" : "blue"), cx:cx, cy:cy}));
+			//item.append(this.makeSVG("circle", {r:0.5, fill:(wardObj.withinCityWall ? "red" : "blue"), cx:cx, cy:cy}));
 
 
 			this.wards.push(wardObj);
