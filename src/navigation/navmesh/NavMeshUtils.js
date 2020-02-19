@@ -6,6 +6,7 @@ import { Polygon } from '../../math/Polygon.js';
 import { Plane } from '../../math/Plane.js';
 import {HalfEdge} from '../../math/HalfEdge.js';
 import {LineSegment} from '../../math/LineSegment.js';
+import { totalmem } from 'os';
 
 var MAX_HOLE_LEN = 16;
 
@@ -394,7 +395,7 @@ class NavMeshUtils {
 
 
      /**
-     *
+     * Take note: Non-minowski approximate approach to extrude polygons by their vertex corner normals only.
      * @param {HalfEdge} edge A HalfEdge to extrude from (using facing "normal", inwards for HalfEdge)
      * @param {Number} extrudeVal How much to extrude from in negative/positive direction
      * kiv open border parameter
@@ -454,33 +455,34 @@ class NavMeshUtils {
     }
 
     /**
-     * LInk polygons by connecting quad polygons
+     * LInk polygons by connecting quad polygons or edges
      * @param {HalfEdge} connector A HalfEdge of a Polygon #1
      * @param {HalfEdge} connector2 A HalfEdge of a Polygon #2
-     * @param {Polygon} connector3 This will be the connecting polygon to link the polgons if any, given 2 border edges
-     * @return The resulting connecting polygons
+     * @param {Polygon} connector3 This will be the connecting polygon to link the polgons if any, given 1 or 2 border edges
+    *  @param {[HalfEdge|Polygon]} polies An array to contain the resulting connecting polygons
+     * @return The array containing the resulting connecting polygons (if any), or true if the edges are welded together.
      */
-    static linkPolygons(connector, connector2=null, connector3=null) {
-        let polies = [];
-        // kiv todo: connector, connector2 (without connector3) case when needed
+    static linkPolygons(connector, connector2=null, connector3=null, polies=null) {
         let edge;
         let dx;
         let dz;
         let ex;
         let ez;
 
-        let contours = [];
-        let c = 0;
-        // naive connection by edge midpoint distance checks
+        let contours;
+
         if (connector3 !== null) {
+            // naive connection by edge midpoint distance checks
             let connector3Arr = [connector3];
-            c = 0;
+            if (polies === null) polies = [];
+            contours = [];
+            let c;
             POINT.x = (connector.prev.vertex.x + connector.vertex.x) * 0.5;
             POINT.z = (connector.prev.vertex.z + connector.vertex.z) * 0.5;
             edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
             // edge to connector
 
-
+            c = 0;
             contours[c++] = edge.prev.vertex;
              contours[c++] = connector.vertex;
               contours[c++] = connector.prev.vertex;
@@ -504,11 +506,11 @@ class NavMeshUtils {
                 POINT.z = (connector2.prev.vertex.z + connector2.vertex.z) * 0.5;
                 edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
 
-
+                c = 0;
                 contours[c++] = edge.prev.vertex;
-                 contours[c++] = connector2.vertex;
-                  contours[c++] = connector2.prev.vertex;
-                  contours[c++] = edge.vertex;
+                contours[c++] = connector2.vertex;
+                 contours[c++] = connector2.prev.vertex;
+                 contours[c++] = edge.vertex;
 
                 contours.length = c;
                 polies.push(p2 =  new Polygon().fromContour(contours));
@@ -518,9 +520,27 @@ class NavMeshUtils {
 
                 p2.edge.prev.twin = connector2;
                 connector2.twin = p2.edge.prev;
+
             }
+            return polies;
+        } else if (connector!=null && connector2 !== null) {
+            // if half edges' vertices are already snapped exactly together, they will be welded and no new polies are created
+            if (connector.prev.vertex.x === connector2.vertex.x && connector.prev.vertex.y === connector2.vertex.y && connector.prev.vertex.z === connector2.vertex.z
+            &&  connector.vertex.x === connector2.prev.vertex.x && connector.vertex.y === connector2.prev.vertex.y && connector.vertex.z === connector2.prev.vertex.z
+            ) {
+               connector.twin = connector2;
+               connector2.twin = connector;
+               return true;
+            } else {
+                if (polies === null) polies = [];
+                // TODO: check for triangle case since 1 pair of vertices might be matching
+                polies.push(new Polygon().fromContour([connector.vertex, connector2.prev.vertex, connector2.vertex, connector.prev.vertex]));
+                return polies;
+            }
+        } else {
+            throw new Error("Could not resolve connection case from parameters!");
         }
-        return polies;
+        return null;
     }
 
     static getClosestBorderEdgeCenterToPoint(polygons, pt, distLimit=0, ignoreBorder=false) {
@@ -574,23 +594,113 @@ class NavMeshUtils {
 
 
    /**
-    * somewhat like divideEdgeByVertex...
-    * kiv Later, mainly for navmesh ramp connections between AND Highways/Upper roads with Lower ward floor navmesh, and connectios
-    * to remaining part of ramp building area navmesh to lower floor navmesh
-    * - Highway (+Upper Ward regions) navmesh
-    * - Upper ward road navmesh
-    * - Ground navmesh (ground subtracted with buildings and city wall/(grounded pillar extrudes))
-    *  (all linked by ramps/ramp-areas)
-    *
-    *  - (atm. CIty wall navmesh is completely seperate and requires special access)
-    * @param {HalfEdge} subjectEdge  The HalfEdge belonging to Polygon #1 to split by connectingEdge
-    * @param {HalfEdge} connectingEdge The collinear HalfEdge belonging to Polygon #2
-    * @param {HalfEdge} setTwinLinks Whether to set twin links between both polygons
-    * @return THe resulting connecting portal HalfEdge from subjectEdge
+    * Connect 2 navmeshes given a set of edges between them.
+     Annotated edges array vs other annotated edges array
+    * @param {[HalfEdge|Polygon]} results  To hold a record of all connected values
+    * @param {Navmesh|[HalfEdge]} navmesh Navmesh 1 or a set of border edges 1
+    * @param {Navmesh|[HalfEdge]} navmesh2 Navmesh 2 or a set of border edges 2. This is welded to Navmesh 1 as a slave under certain cases.
+    * @return Total connections added to array
     */
-   static addConnectingPortal(subjectEdge, connectingEdge, setTwinLinks=false) {
 
+   static createNavmeshBorderConnections(results, navmesh, navmesh2, maxSnapDistThreshold=0,  maxConnectDistThreshold=0, connectDotFacingThreshold=1e-2) {
+       const gotMainNavmesh = !Array.isArray(navmesh);
+       const borders = !gotMainNavmesh ? navmesh : navmesh._borderEdges;
+       const borders2 = Array.isArray(navmesh2) ? navmesh2 : navmesh2._borderEdges;
+       let totalHits = 0;
+       let c = results.length;
+
+        /*
+        1st check:
+        Check for exact point snapping:
+        ----------------------------
+        Check for exact edge snap threshold pure euclidean distance by xyz vertex positions.
+        If both edges snap within average, snap by theier average positions if distance > 0,  considered auto snap to weld
+        _________________
+
+        2nd check:
+        Check for adding connecting polygons between edges
+
+        Required Opposite facing dot product threshold value between edge facing directions.
+        Max connecting xyz distance between edge points. (or may use edge midpoints/ or closest between entire edge distance check? )
+        */
+
+        const maxSnapDistThresholdSQ = maxSnapDistThreshold !== Number.MAX_VALUE ? maxSnapDistThreshold*maxSnapDistThreshold : Infinity;
+        const maxConnectDistThresholdSQ = maxConnectDistThreshold !== Number.MAX_VALUE ? maxConnectDistThreshold*maxConnectDistThreshold : Infinity;
+
+        let len = borders.length;
+        for (let i=0; i<len; i++) {
+            let e = borders[i];
+            let doConnect = 0;
+            let e2 = null;
+            let bLen = borders2.length;
+            for (let b =0; b<bLen; b++) {
+                let dx, dy, dz, dx2, dy2, dz2, d, d2;
+
+                e2 = borders2[b];
+                dx = e.prev.vertex.x - e2.vertex.x;
+                dy = e.prev.vertex.y - e2.vertex.y;
+                dz = e.prev.vertex.z - e2.vertex.z;
+                d = dx*dx + dy*dy + dz*dz;
+
+                dx2 = e.vertex.x - e2.prev.vertex.x;
+                dy2 = e.vertex.y - e2.prev.vertex.y;
+                dz2 = e.vertex.z - e2.prev.vertex.z;
+                d2 = dx2*dx2 + dy2*dy2 + dz2*dz2;
+
+                if (d <= maxSnapDistThresholdSQ && d2 <= maxSnapDistThresholdSQ) {
+                    doConnect = 1;
+                    break;
+                }
+
+                if (d <= maxConnectDistThresholdSQ && d2 <= maxConnectDistThresholdSQ) {
+                    dx = e.vertex.x - e.prev.vertex.x;
+                    dy = e.vertex.y - e.prev.vertex.y;
+                    dz = e.vertex.z - e.prev.vertex.z;
+                    d = 1/Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    dx*=d; dy*=d; dz*=d;
+
+                    dx2 = e2.vertex.x - e2.prev.vertex.x;
+                    dy2 = e2.vertex.y - e2.prev.vertex.y;
+                    dz2 = e2.vertex.z - e2.prev.vertex.z;
+                    d2 = 1/Math.sqrt(dx2*dx2 + dy2*dy2 + dz2*dz2);
+                    dx2*=d2; dy2*=d2; dz2*=d2;
+
+                    if ( Math.abs((dx*dx2 + dy*dy2 + dz*dz2) - (-1)) <= connectDotFacingThreshold ) {
+                        doConnect = -1;
+                        break;
+                    }
+                }
+            }
+            if (doConnect !== 0) {
+                if (doConnect === 1) {
+                    // snap
+                    e.vertex.x = (e.vertex.x + e2.prev.vertex.x) * 0.5;
+                    e.vertex.y = (e.vertex.y + e2.prev.vertex.y) * 0.5;
+                    e.vertex.z = (e.vertex.z + e2.prev.vertex.z) * 0.5;
+                    e2.prev.vertex = e.vertex;
+
+                    e.prev.vertex.x = (e.prev.vertex.x + e2.vertex.x) * 0.5;
+                    e.prev.vertex.y = (e.prev.vertex.y + e2.vertex.y) * 0.5;
+                    e.prev.vertex.z = (e.prev.vertex.z + e2.vertex.z) * 0.5;
+                    e2.vertex = e.prev.vertex;
+
+                    e.twin = e2;
+                    e2.twin = e;
+                    results[c++] = e;
+                    totalHits++;
+                } else {
+                    NavMeshUtils.linkPolygons(e, e2, null, results);
+                    if (gotMainNavmesh) navmesh.regions.push(results[results.length - 1]);
+                    c++;
+                    totalHits++;
+                }
+            }
+        }
+
+       return totalHits;
    }
+
+   //static connectNavmeshes
 
     /**
      * Seperates out a list of polygons by bitmask.
@@ -1049,14 +1159,14 @@ class NavMeshUtils {
     }
 
     /**
-     * Calculate offset/corner projections necessary for navmesh minowski-like operations
-     * @param {NavMesh}  navMesh
+     * Calculate offset border or corner chamfer/snap-to-weld projections necessary for navmesh minowski-like operations
+     * @param {NavMesh|[HalfEdges]}  navMesh The parsed navmesh or object (with `._borderEdges` property) or array of half edges representing the borders
      * @param {Number}  inset   The amount to inset navmesh by
      * @param {Number}  minChamferLength   The minimum chamfer distance
      * @return A Map to map vertices of current navmesh to their respective edge pairs
      */
-    static getBorderEdgeOffsetProjections(navMesh, inset, minChamferDist = 1e-5) {
-
+    static getBorderEdgeOffsetProjections(navMesh, inset, minChamferDist = 1e-5, suppressWarnings=false) {
+        const borderEdges = Array.isArray(navMesh) ? navMesh : navMesh._borderEdges;
         const LINE = new LineSegment();
         const LINE2 = new LineSegment();
         const LINE_RESULT = {};
@@ -1068,10 +1178,10 @@ class NavMeshUtils {
 
         // vertex to incident [edges] map
         var vertexToEdgesMap = new Map();
-        let len = navMesh._borderEdges.length;
+        let len = borderEdges.length;
         var e;
         for(let i=0; i<len; i++) {
-            e = navMesh._borderEdges[i];
+            e = borderEdges[i];
             e.index = i;
             if (!vertexToEdgesMap.has(e.vertex)) {
                 vertexToEdgesMap.set(e.vertex, [e]);
@@ -1099,7 +1209,7 @@ class NavMeshUtils {
 
         // iterate through each border edge to expand and stretch
         for(let i=0;i<len; i++) {
-            e = navMesh._borderEdges[i];
+            e = borderEdges[i];
             e.value = new LineSegment(new Vector3(e.prev.vertex.x + e.normal.x * inset, 0, e.prev.vertex.z + e.normal.z * inset)
             , new Vector3(e.vertex.x + e.normal.x * inset, 0, e.vertex.z + e.normal.z * inset));
             e.value.from.t = 0;
@@ -1120,7 +1230,7 @@ class NavMeshUtils {
         let coincideArr;
 
         for (let i =0; i<len; i++) {
-            e = navMesh._borderEdges[i];
+            e = borderEdges[i];
 
            let arr;
             // head vertex on consiered edge
@@ -1188,7 +1298,7 @@ class NavMeshUtils {
                                     splitVertex2.t = tPlane;
                                 }
                                 intersectPtOrChamfer = new LineSegment(splitVertex, splitVertex2);
-                                if (snapT > inset*2) snapT = inset*2;
+                                if (snapT > inset*2) snapT = inset*2; // hard limit to deal with exceptions...by right shouldn't be needed? not too sure.
                                 intersectPtOrChamfer.snap =  new Vector3(LINE.to.x + snapT * e.dir.x, 0, LINE.to.z + snapT * e.dir.z);
                                 if (!resultMap.has(e.vertex)) {
                                     e.vertex.chamfer = intersectPtOrChamfer;
@@ -1203,7 +1313,7 @@ class NavMeshUtils {
                     //}
                 });
            } else {
-                console.warn("Failed to find complementary neighbnor edge!", e);
+                if (!suppressWarnings) console.warn("Failed to find complementary neighbnor edge!", e);
                 // throw new Error("Failed to find complementary neighbnor edge!");
            }
 
