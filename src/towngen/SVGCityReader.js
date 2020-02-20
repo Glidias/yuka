@@ -296,17 +296,6 @@ function navmeshTagRegionByPt(navmesh, pt, mask=null, errors, lenient=false) {
 	return r;
 }
 
-/*
-function getClosestBorderEdgeToPoint(polygons, pt) {
-
-}
-*/
-
-/*
-function getClosestPointToEdge(points, edge) {
-
-}
-*/
 
 function pointInTriangle(px, py, c, b, a ) {
 	return ( ( px - a[0] ) * ( b[1] - a[1] ) ) - ( ( b[0] - a[0] ) * ( py - a[1] ) ) >= 0 &&
@@ -917,7 +906,7 @@ const samplePt = new Vector3();
  * Analyses city SVG files generated from https://watabou.itch.io/medieval-fantasy-city-generator .
  * Acts as a springboard to generate street map, navigation graphs, etc. from SVG city layout, which is useful for conversion to 3D visualisations and games.
  *
- * Can do the following:
+ * Able to do the following:
  * - Retrieves Wards: their neighborhoods, and building shapes within neighbourhoods for easy extrusion, among other things
  *  - Retrieves out shape polygon geometries of City/Citadel Wall and Bastions
  *  -Identify Wards (or any arbituary position) that are within the boundaries of City Wall
@@ -930,12 +919,6 @@ const samplePt = new Vector3();
  * - Retrieves Citadel building blocks shape
  * - Retrieves plaza region points and landmark
  * - Calculate ward-distances and centroid-to-point euclidean distances of Wards from Citadel and City Wall respectively
- *
- * - Create insetted navmesh
- *
- * Future considerations:
- * - Retrieves BSP tree from Ward of all its buildings, to allow for optimized near-hit first raycasting in-game on large maps.
- * - Adjust wards
 */
 class SVGCityReader {
 
@@ -1331,7 +1314,8 @@ class SVGCityReader {
 			indices = deployable.indices;
 			len = indices.length;
 			for (let i = 0; i< len; i+=3) {
-				lines.push("f " + indices[i] + " " + indices[i+1] + " " + indices[i+2]);
+				// Wavefront obj face indices start from 1 always
+				lines.push("f " + (indices[i]+1) + " " + (indices[i+1]+1) + " " + (indices[i+2]+1));
 			}
 		} else { // object hash of groups
 			let list = Array.isArray(deployable) ? deployable.map((d, index) => ({key:'group_'+index, value:d})) : SVGCityReader.objToArray(deployable);
@@ -1364,7 +1348,7 @@ class SVGCityReader {
 			list.forEach((obj) => {
 				let indices;
 				let len;
-				let baseI = obj.vertexOffset;
+				let baseI = obj.vertexOffset + 1; // Wavefront obj face indices start from 1 always
 				indices = obj.value.indices;
 				len = indices.length;
 				lines.push("g "+obj.key);
@@ -3310,25 +3294,9 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 
 			//s	this.cityWallSegments = filteredAtCitadel.refArray.slice(f1+1, f2  ).concat(filteredAtCitadel.refArray.slice(f2+1));
 
-			// not sure why need to add another +1
-			// cityWallSegments
-
+			// note: hack fix below.
 			this.cityWallSegments =filteredAtCitadel.refArray.slice(f2 + 1).concat(filteredAtCitadel.refArray.slice(f1+1, f2  ));
 
-
-			// HACK JOB atm, need to fix function for svg path
-			//let hackjob = filteredAtCitadel.refArray[f1+1];
-			//filteredAtCitadel.refArray[f2+1].push( hackjob[hackjob.length-1]);
-			//this.cityWallSegments[6].push(testSegments[testSegments.length-2]);
-
-			//this.cityWallSegments[6].push(testSegments[testSegments.length-1]);
-
-			//console.log(filteredAtCitadel.refArray[f1+1][]);
-
-			//this.cityWallSegments.splice(5,0, filteredAtCitadel.refArray[f1+1]);
-
-			//this.cityWallSegments = this.cityWallSegments.slice(f2-1).concat(this.cityWallSegments.slice(1, f2-1));
-			//console.log(this.cityWallSegments.length);
 		}
 
 
