@@ -74,6 +74,7 @@
     "clipper-lib": "^6.4.2",
     "csg2d": "^0.1.2",
     "d3-delaunay": "^5.1.5",
+    "file-saver": "^2.0.2",
     "jquery": "^3.4.1"
   }
 }

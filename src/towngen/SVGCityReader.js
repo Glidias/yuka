@@ -8,7 +8,7 @@ import { BVH } from "../math/BVH.js";
 import {Delaunay} from "d3-delaunay";
 
 import cdt2d from "cdt2d";
-import Shape from "@doodle3d/clipper-js";
+//import Shape from "@doodle3d/clipper-js";
 //import cleanPSLG from "clean-pslg";
 import CSG from "csg2d";
 
@@ -20,6 +20,8 @@ import {MathUtils} from "../math/MathUtils.js";
 import {Dijkstra} from "../graph/search/Dijkstra.js";
 import { NavEdge } from "../navigation/core/NavEdge.js";
 import { MeshGeometry } from "../core/MeshGeometry.js";
+
+import FileSaver from 'file-saver';
 
 const lineSegment = new LineSegment();
 const lineSegment2 = new LineSegment();
@@ -110,13 +112,13 @@ function height2DInTri(x, z, bvh, errors, errorThreshold) {
 	let closestT = null;
 	let t;
 	D.set(x, 0, z);
-	for (let i =0; i< len; i+=3) {	
+	for (let i =0; i< len; i+=3) {
 		A.set(primitives[i][0], 0, primitives[i][1]);
 		B.set(primitives[i+1][0], 0, primitives[i+1][1]);
 		C.set(primitives[i+2][0], 0, primitives[i+2][1]);
-		
+
 		lineSegment.from.copy(A);
-		
+
 		lineSegment.to.copy(B);
 		t = lineSegment.closestPointToPointParameter(D, true);
 		lineSegment.at( t, pointOnLineSegment );
@@ -1299,6 +1301,94 @@ class SVGCityReader {
 		}
 	}
 
+	static saveWavefrontObj(deployable, filename='svgcity.obj') {
+		let objStr = this.exportWavefrontObj(deployable);
+		var blob = new Blob([objStr], {type: "text/plain;charset=utf-8"});
+		FileSaver.saveAs(blob, filename);
+		return objStr;
+	}
+
+	static exportWavefrontObj(deployable) {
+		let lines = [];
+		if (deployable.vertices) { // single grouped object
+			let vertices;
+			let indices;
+			let normals;
+			let len;
+
+			vertices = deployable.vertices;
+			len = vertices.length;
+			for (let i = 0; i< len; i+=3) {
+				lines.push("v " + vertices[i] + " " + vertices[i+1] + " " + vertices[i+2]);
+			}
+
+			normals = deployable.normals;
+			len = normals.length;
+			for (let i = 0; i< len; i+=3) {
+				lines.push("vn " + normals[i] + " " + normals[i+1] + " " + normals[i+2]);
+			}
+
+			indices = deployable.indices;
+			len = indices.length;
+			for (let i = 0; i< len; i+=3) {
+				lines.push("f " + indices[i] + " " + indices[i+1] + " " + indices[i+2]);
+			}
+		} else { // object hash of groups
+			let list = Array.isArray(deployable) ? deployable.map((d, index) => ({key:'group_'+index, value:d})) : SVGCityReader.objToArray(deployable);
+			let totalVertexCount = 0;
+
+			list.forEach((obj) => {
+				let vertices;
+				let len;
+
+				obj.vertexOffset = totalVertexCount;
+
+				vertices = obj.value.vertices;
+				len = vertices.length;
+				for (let i = 0; i< len; i+=3) {
+					lines.push("v " + vertices[i] + " " + vertices[i+1] + " " + vertices[i+2]);
+				}
+				totalVertexCount += len / 3;
+			});
+
+			list.forEach((obj) => {
+				let normals;
+				let len;
+				normals = obj.value.normals;
+				len = normals.length;
+				for (let i = 0; i< len; i+=3) {
+					lines.push("vn " + normals[i] + " " + normals[i+1] + " " + normals[i+2]);
+				}
+			});
+
+			list.forEach((obj) => {
+				let indices;
+				let len;
+				let baseI = obj.vertexOffset;
+				indices = obj.value.indices;
+				len = indices.length;
+				lines.push("g "+obj.key);
+				for (let i = 0; i< len; i+=3) {
+					lines.push("f " + (baseI+indices[i]) + " " + (baseI+indices[i+1]) + " " + (baseI+indices[i+2]));
+				}
+			});
+		}
+		return lines.join("\n");
+	}
+
+	static objToArray(obj) {
+		let arr = [];
+		for (let p in obj) {
+			arr.push(
+				{
+					key: p,
+					value: obj[p]
+				}
+			);
+		}
+		return arr;
+	}
+
 	getNavmeshHighways() {
 		let navmesh = new NavMesh();
 		navmesh.attemptBuildGraph = false;
@@ -1543,7 +1633,7 @@ class SVGCityReader {
 		const scaleXZ = this._PREVIEW_MODE ? 1 : this.exportScaleXZ;
 		const previewMult = this._PREVIEW_MODE ? 1/this.exportScaleXZ : 1;
 		var points = this.getCanvasVertexArr();
-		var canvasSubject = new Shape([points.map(pointToShapePt)]);
+		//var canvasSubject = new Shape([points.map(pointToShapePt)]);
 
 		var edges = this.getCanvasEdges();
 		const pointsList = [];
@@ -1817,7 +1907,7 @@ class SVGCityReader {
 
 				if (!this.navmeshHighways) this.navmeshHighways = this.getNavmeshHighways();
 				slicePolygonList = [];
-				//this.navmeshHighways._borderEdges; // 
+				//this.navmeshHighways._borderEdges; //
 				let filteredNavmeshHighwayEdges = this.navmeshHighways._borderEdges; //this.navmeshHighways._borderEdges.filter(notGroundLevel);
 				resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(filteredNavmeshHighwayEdges, inset, minChamferDist, true);
 				// this.getCanvasVertexArr(), this.getCanvasEdges()
@@ -1855,25 +1945,22 @@ class SVGCityReader {
 
 				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d:  navmesh.regions.map(polygonSVGString).join(" ") }));
 
-
-				
-
 				// highway
 				this.navmeshHighways = new NavMesh();
 				this.navmeshHighways.attemptBuildGraph = false;
 				let errors = [];
-				
+
 				this.navmeshHighways.fromPolygons(cdtHighways.map((tri) => getTriPolygonBVH(resultObj.vertices, tri, navmeshBVH, errors)));
 				errors.forEach((e)=>{
 					console.warn("[point in tri] region find error founds")
 					if (this._PREVIEW_MODE) svg.append(this.makeSVG("circle", {r:0.5, "stroke":"red", fill:"white", cx:e[0], cy:e[1]}));
 				});
 
-				let highwayToFloorLinks = [];
-				NavMeshUtils.createNavmeshBorderConnections(highwayToFloorLinks, this.navmeshHighways._borderEdges, navmesh._borderEdges, 0, inset+0.9, 0.6, 2);
-				console.log(highwayToFloorLinks);
+				//let highwayToFloorLinks = [];
+				//NavMeshUtils.createNavmeshBorderConnections(highwayToFloorLinks, this.navmeshHighways, navmesh._borderEdges, 0, inset+0.9, 0.6, 1);
+				//console.log(highwayToFloorLinks);
 
-				if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"red", stroke:"blue", "stroke-width": 0.0, d: highwayToFloorLinks.map(r => r instanceof Polygon ? polygonSVGString(r) : edgeSVGString(r)).join(" ") }));
+				//if (this._PREVIEW_MODE) svg.append(this.makeSVG("path", {fill:"red", stroke:"blue", "stroke-width": 0.0, d: highwayToFloorLinks.map(r => r instanceof Polygon ? polygonSVGString(r) : edgeSVGString(r)).join(" ") }));
 
 				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: this.navmeshHighways.regions.map(polygonSVGString).join(" ") }));
 				if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: this.navmeshHighways._borderEdges.map(edgeSVGString).join(" ") }));
@@ -1884,7 +1971,10 @@ class SVGCityReader {
 
 		clearStacks();
 
-		return navmesh;
+		return {
+			floor: navmesh,
+			highways: this.navmeshHighways
+		};
 	}
 
 
@@ -3061,6 +3151,7 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 		return csg;
 	}
 
+	/*
 	getPointsListShape(pointsList, processPointsMethod, processCSGShapeMethod) {
 		let polygonsListCSG = [];
 		pointsList.forEach((points, index)=> {
@@ -3100,6 +3191,7 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 		let cdt = cdt2d(vertices, edges, (params ? params : {exterior:true}));
 		return {vertices:vertices, edges:edges, cdt:cdt};
 	}
+	*/
 
 
 	getCDTObjFromPointsListUnion(pointsList, cleanup, params, processPointsMethod, csgPtr) {
@@ -4705,12 +4797,14 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 					if (distCheck <= maxBridgeSqDist2) { // distance check
 						let needCheckpoint = distCheck <= maxBridgeSqDist;
 
+						/*
 						if (this.noBridgeAcrossCityWallRamp) {
 							// todo: filter
 						}
 						if (this.noBridgeAcrossCityWall) {
 							// todo: filter
 						}
+						*/
 
 						// todo: perp/area-clip threshold check to link to either tower or edge of centroid
 
@@ -4723,13 +4817,14 @@ collectVerticesEdgesFromShape(vertices, edges, shape) {
 				edge = edge.next;
 			} while( edge !== region.edge)
 
-
+			/*
 			if (this.linkBridgesToHighways && (upperWardCell || !region.supports)) {  // && region.s.ward.withinCityWall
 				// todo: link bridges to highways
 				// console.log(region.s.ward);
 				//console.log("HAHA");
 
 			}
+			*/
 		}
 
 	}

@@ -149,5 +149,6 @@ export { Trigger } from './trigger/Trigger.js';
 
 // My Kralchester stuffs
 export { SVGCityReader } from './towngen/SVGCityReader.js';
+export { NavMeshUtils } from './navigation/navmesh/NavMeshUtils.js';
 
 export * from './constants.js';

@@ -205,6 +205,12 @@ class NavMeshUtils {
         return PLANE.fromCoplanarPoints(A, B, C);
    }
 
+   static collectPlainNavmeshGeometry(collector, polygons, xzScale=1) {
+    return NavMeshUtils.collectExtrudeGeometry(collector, polygons, 0, xzScale, undefined, undefined, {
+        excludeBottomFaceRender: true
+    });
+   }
+
     /**
      * Sets up triangulated data for 3D rendering from  polygon references to be extruded
      * @param {*} collector An object of existing "vertices" and "indices" array to push values into
@@ -216,6 +222,13 @@ class NavMeshUtils {
      * @param {Object} extraParams Extra extrusion params added to the default set of parameters
      */
     static collectExtrudeGeometry(collector, polygons, yVal, xzScale=1 , yBottom, yBottomMin, extraParams) {
+        if (!collector) {
+            collector = {
+                vertices: [],
+                indices: [],
+                normals: []
+            };
+        }
         transformId++;
 
         const vertices = collector.vertices;
@@ -478,7 +491,7 @@ class NavMeshUtils {
             let connector3Arr = [connector3];
             if (polies === null) polies = [];
             contours = [];
-            
+
             POINT.x = (connector.prev.vertex.x + connector.vertex.x) * 0.5;
             POINT.z = (connector.prev.vertex.z + connector.vertex.z) * 0.5;
             edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
@@ -517,7 +530,7 @@ class NavMeshUtils {
                 polies.push(p2 =  new Polygon().fromContour(contours));
 
                 edge.twin = p.edge.prev;
-                 p.edge.prev.twin = edge;
+                p.edge.prev.twin = edge;
 
                 p2.edge.prev.twin = connector2;
                 connector2.twin = p2.edge.prev;
@@ -540,7 +553,7 @@ class NavMeshUtils {
 
                 contours = [];
                  c = 0;
-                
+
                 contours[c++] = connector.vertex;
                 if (!headMatch) contours[c++] = connector2.prev.vertex;
                 if (!tailMatch) contours[c++] = connector2.vertex;
@@ -549,8 +562,17 @@ class NavMeshUtils {
                 let p;
                 polies.push(p = new Polygon().fromContour(contours));
 
-                //kiv TODO: add connections from connecting polygon
-            
+                p.edge.twin = connector;
+                connector.twin = p.edge;
+
+               if (headMatch) {
+                    p.edge.next.twin = connector2;
+                    connector2.twin = p.edge.next;
+               } else {
+                   p.edge.next.next.twin = connector2;
+                   connector2.twin = p.edge.next.next;
+               }
+
                 return polies;
             }
         } else {
@@ -1458,7 +1480,7 @@ class NavMeshUtils {
                         holesAdded.push( p = new Polygon().fromContour(builtContour.map((e)=>{return e.vertex})) );
                         p.holed = true;
 
-                        // kiv todo: link twins  newly added polygon's edges
+                        // kiv: link twins  newly added polygon's edges
 
                         if (isUsingFullNavmesh) {
                             // link respective polygon holes to full navmesh to connect it. add arc to graph.
