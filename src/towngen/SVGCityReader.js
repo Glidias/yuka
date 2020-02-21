@@ -1337,7 +1337,7 @@ class SVGCityReader {
 			navmesh = inset !== 0 ? NavMeshUtils.getInsetNavmesh(navmesh, inset, minChamferDist ) : navmesh;
 
 			if (this._PREVIEW_MODE) {
-				svg.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+				svg.append(this.makeSVG("path", {fill:"yellow", stroke:"green", "stroke-width": 0.08, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 				svg.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 			}
 
@@ -1373,7 +1373,7 @@ class SVGCityReader {
 		navmesh = inset !== 0 ? NavMeshUtils.getInsetNavmesh(navmesh, inset, minChamferDist ) : navmesh;
 
 		if (this._PREVIEW_MODE) {
-			svg.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			svg.append(this.makeSVG("path", {fill:"yellow", stroke:"green", "stroke-width": 0.08, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 			svg.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 		}
 
@@ -1397,7 +1397,7 @@ class SVGCityReader {
 
 		if (this._PREVIEW_MODE) {
 			navmeshes.forEach((navmesh) => {
-				svg.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+				svg.append(this.makeSVG("path", {fill:"yellow", stroke:"green", "stroke-width": 0.08, d: navmesh.regions.map(polygonSVGString).join(" ") }));
 				svg.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
 			});
 		}
