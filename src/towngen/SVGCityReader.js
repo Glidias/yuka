@@ -3,6 +3,7 @@ import { Polygon } from "../math/Polygon.js";
 import { HalfEdge } from "../math/HalfEdge.js";
 import { AABB } from "../math/AABB.js";
 import { LineSegment } from "../math/LineSegment.js";
+import { Plane } from "../math/Plane.js";
 // import { CellSpacePartitioning } from "../partitioning/CellSpacePartitioning.js";
 import { BVH } from "../math/BVH.js";
 import {Delaunay} from "d3-delaunay";
@@ -19,17 +20,12 @@ import {MathUtils} from "../math/MathUtils.js";
 
 import {Dijkstra} from "../graph/search/Dijkstra.js";
 import { NavEdge } from "../navigation/core/NavEdge.js";
-import { MeshGeometry } from "../core/MeshGeometry.js";
 
 import FileSaver from 'file-saver';
 
+
 const lineSegment = new LineSegment();
-const lineSegment2 = new LineSegment();
 const pointOnLineSegment = new Vector3();
-const A = new Vector3();
-const B = new Vector3();
-const C = new Vector3();
-const D = new Vector3();
 
 const CITADEL_WARD_INDEX = -1;
 const PLAZA_WARD_INDEX = -2;
@@ -55,14 +51,6 @@ function svgLineFromTo(from, to) {
 	return "M"+from.x + ","+from.z + "L" + to.x + ","+to.z;
 }
 
-function cdtTriFilterFunction(c, ptArr, navmeshBVH=null, obstaclesBVH=null) {
-	let cx;
-	let cz;
-	cx = (ptArr[c[0]][0] + ptArr[c[1]][0] + ptArr[c[2]][0]) / 3;
-	cz = (ptArr[c[0]][1] + ptArr[c[1]][1] + ptArr[c[2]][1]) / 3;
-	return (navmeshBVH === null || pt2DInBVH(cx, cz, navmeshBVH)) && (obstaclesBVH === null || !pt2DInBVH(cx, cz, obstaclesBVH));
-}
-
 function enclosedSegments(segments) {
 	let omega = segments[segments.length -1];
 	omega = omega[omega.length - 1];
@@ -77,132 +65,6 @@ function getNewGeometryCollector() {
 		indices: [],
 		normals: []
 	}
-}
-
-
-function pt2DInBVH(x, z, bvh) {
-	let len = query2DInBVH(x, z, bvh);
-	// console.log(primitives[0]);
-	let primitives = PRIMITIVES;
-	for (let i =0; i< len; i+=3) {
-		if (is_in_triangle(x, z, primitives[i+2], primitives[i+1], primitives[i])) {
-			return true;
-		}
-	}
-	return false;
-}
-
-function height2DInTri(x, z, bvh, errors, errorThreshold) {
-	if (errorThreshold === undefined) errorThreshold = Number.MAX_VALUE; // 1e-2;
-	const errorThresholdSq = errorThreshold !== Number.MAX_VALUE ? errorThreshold * errorThreshold : Infinity;
-
-	let len = query2DInBVH(x, z, bvh);
-	// console.log(primitives[0]);
-	let primitives = PRIMITIVES;
-	for (let i =0; i< len; i+=3) {
-		if (is_in_triangle(x, z, primitives[i+2], primitives[i+1], primitives[i])) {
-			A.set(primitives[i][0], primitives[i][2], primitives[i][1]);
-			B.set(primitives[i+1][0], primitives[i+1][2], primitives[i+1][1]);
-			C.set(primitives[i+2][0], primitives[i+2][2], primitives[i+2][1]);
-			return getYHeightOnTri(A, B, C, x, z);
-		}
-	}
-	let closestDist = Infinity;
-	let dist;
-	let closestT = null;
-	let t;
-	D.set(x, 0, z);
-	for (let i =0; i< len; i+=3) {
-		A.set(primitives[i][0], 0, primitives[i][1]);
-		B.set(primitives[i+1][0], 0, primitives[i+1][1]);
-		C.set(primitives[i+2][0], 0, primitives[i+2][1]);
-
-		lineSegment.from.copy(A);
-
-		lineSegment.to.copy(B);
-		t = lineSegment.closestPointToPointParameter(D, true);
-		lineSegment.at( t, pointOnLineSegment );
-		dist = pointOnLineSegment.squaredDistanceTo( D );
-		if (dist < errorThresholdSq && dist < closestDist) {
-			closestDist = dist;
-			closestT = t;
-			lineSegment2.from.copy(A);
-			lineSegment2.from.y = primitives[i][2];
-			lineSegment2.to.copy(B);
-			lineSegment2.to.y = primitives[i+1][2];
-		}
-
-		lineSegment.to.copy(C);
-		t = lineSegment.closestPointToPointParameter(D, true);
-		lineSegment.at( t, pointOnLineSegment );
-		dist = pointOnLineSegment.squaredDistanceTo( D );
-		if (dist < errorThresholdSq && dist < closestDist) {
-			closestDist = dist;
-			closestT = t;
-			lineSegment2.from.copy(A);
-			lineSegment2.from.y = primitives[i][2];
-			lineSegment2.to.copy(C);
-			lineSegment2.to.y = primitives[i+2][2];
-		}
-	}
-
-	if (closestT !== null) {
-		lineSegment2.at(closestT, pointOnLineSegment);
-		//console.log("CAUGHT!" +  pointOnLineSegment.y);
-		return pointOnLineSegment.y;
-	}
-	console.log("Failed!:"+len);
-
-	if (errors) errors.push([x,z]);
-	else console.warn("Failed to find height2DInTri!");
-	return 0;
-}
-
-
-function getYHeightOnTri(p1,  p2,  p3,  x,  z) {
- var det = (p2.z - p3.z) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.z - p3.z);
- var l1 = ((p2.z - p3.z) * (x - p3.x) + (p3.x - p2.x) * (z - p3.z)) / det;
- var l2 = ((p3.z - p1.z) * (x - p3.x) + (p1.x - p3.x) * (z - p3.z)) / det;
- var l3 = 1.0 - l1 - l2;
-return l1 * p1.y + l2 * p2.y + l3 * p3.y;
-
-}
-
-
-const STACK = [];
-const PRIMITIVES = [];
-function clearStacks() {
-	STACK.length = 0;
-	PRIMITIVES.length = 0;
-}
-
-function query2DInBVH(x, z, bvh) {
-	let stack = STACK;
-
-	stack[0] = bvh.root;
-	let si = 1;
-	let n;
-	let primitives = PRIMITIVES;
-	let pi = 0;
-	let l;
-	const padding = 1e-4;
-	let count = 0;
-	while(--si >= 0) {
-		n = stack[si];
-		if ( (l = n.primitives.length) !== 0) {
-			for ( let i = 0; i < l; i += 9 ) {
-				// xzy order in this case
-				primitives[count++] = [n.primitives[i], n.primitives[i+2], n.primitives[i+1]];
-				primitives[count++] = [n.primitives[i+3], n.primitives[i+5], n.primitives[i+4]];
-				primitives[count++] = [n.primitives[i+6], n.primitives[i+8], n.primitives[i+7]];
-			}
-		} else if (x>=n.boundingVolume.min.x-padding && x <=n.boundingVolume.max.x+padding && z >=n.boundingVolume.min.z-padding && z <= n.boundingVolume.max.z+padding) {
-			for (let c of n.children) {
-				stack[si++] = c;
-			}
-		}
-	}
-	return count;
 }
 
 function pointArrEquals(arr, arr2) {
@@ -234,34 +96,6 @@ function getMeshGeometryFromCDT(points, groundRef, cdt) {
 	return new MeshGeometry(vertices, indices);
 }
 */
-
-function getMeshGeometryFromPolygons(polygons) {
-	let arr = [];
-	let c = 0;
-	let len = polygons.length;
-	for (let i =0; i<len; i++) {
-		let p = polygons[i];
-		let edge = p.edge;
-		let mainP = edge.prev.vertex;
-		edge = edge.next;
-		while (edge !== p.edge.prev) {
-			arr[c++] = edge.prev.vertex.x;
-			arr[c++] = edge.prev.vertex.y;
-			arr[c++] = edge.prev.vertex.z;
-			arr[c++] = edge.vertex.x;
-			arr[c++] = edge.vertex.y;
-			arr[c++] = edge.vertex.z;
-			arr[c++] = mainP.x;
-			arr[c++] = mainP.y;
-			arr[c++] = mainP.z;
-			edge = edge.next;
-		}
-	}
-	console.log((arr.length/9) + ' tris , ' + (arr.length/3) + ' soup vertices');
-	return new MeshGeometry(new Float32Array(arr));
-}
-
-
 
 
 /**
@@ -306,32 +140,6 @@ function pointInTriangle(px, py, c, b, a ) {
 	( ( p.x - b.x ) * ( c.z - b.z ) ) - ( ( c.x - b.x ) * ( p.z - b.z ) ) >= 0 &&
 	( ( p.x - c.x ) * ( a.z - c.z ) ) - ( ( a.x - c.x ) * ( p.z - c.z ) ) >= 0;
 	*/
-}
-
-function is_in_triangle (px,py,a,b,c){ // triangle winding order doesn't matter for this method
-	let ax = a[0];
-	let ay = a[1];
-	let bx = b[0];
-	let by = b[1];
-	let cx = c[0];
-	let cy = c[1];
-	//credit: http://www.blackpawn.com/texts/pointinpoly/default.html
-	var v0 = [cx-ax,cy-ay];
-	var v1 = [bx-ax,by-ay];
-	var v2 = [px-ax,py-ay];
-
-	var dot00 = (v0[0]*v0[0]) + (v0[1]*v0[1]);
-	var dot01 = (v0[0]*v1[0]) + (v0[1]*v1[1]);
-	var dot02 = (v0[0]*v2[0]) + (v0[1]*v2[1]);
-	var dot11 = (v1[0]*v1[0]) + (v1[1]*v1[1]);
-	var dot12 = (v1[0]*v2[0]) + (v1[1]*v2[1]);
-
-	var invDenom = 1/ (dot00 * dot11 - dot01 * dot01);
-
-	var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-	var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-	return ((u >= 0) && (v >= 0) && (u + v < 1));
 }
 
 function pointToShapePt(pt) {
@@ -878,16 +686,6 @@ function getTriPolygon(vertSoup, tri, y) {
 	return poly;
 }
 
-function getTriPolygonBVH(vertSoup, tri, bvh, errors) {
-	let poly = new Polygon().fromContour([
-		new Vector3(vertSoup[tri[2]][0], height2DInTri(vertSoup[tri[2]][0], vertSoup[tri[2]][1], bvh, errors), vertSoup[tri[2]][1]),
-		new Vector3(vertSoup[tri[1]][0], height2DInTri(vertSoup[tri[1]][0], vertSoup[tri[1]][1], bvh, errors), vertSoup[tri[1]][1]),
-		new Vector3(vertSoup[tri[0]][0], height2DInTri(vertSoup[tri[0]][0], vertSoup[tri[0]][1], bvh, errors), vertSoup[tri[0]][1])
-	]);
-	return poly;
-}
-
-
 function collinear(p1, p2, p3, threshold) {
 	let x1 = p1[0];
 	let y1 = p1[1];
@@ -1284,14 +1082,14 @@ class SVGCityReader {
 		}
 	}
 
-	static saveWavefrontObj(deployable, filename='svgcity.obj') {
-		let objStr = this.exportWavefrontObj(deployable);
+	static saveWavefrontObj(deployable, filename='svgcity.obj', exportGroups=true) {
+		let objStr = this.exportWavefrontObj(deployable, exportGroups);
 		var blob = new Blob([objStr], {type: "text/plain;charset=utf-8"});
 		FileSaver.saveAs(blob, filename);
 		return objStr;
 	}
 
-	static exportWavefrontObj(deployable) {
+	static exportWavefrontObj(deployable, exportGroups=true) {
 		let lines = [];
 		if (deployable.vertices) { // single grouped object
 			let vertices;
@@ -1351,7 +1149,7 @@ class SVGCityReader {
 				let baseI = obj.vertexOffset + 1; // Wavefront obj face indices start from 1 always
 				indices = obj.value.indices;
 				len = indices.length;
-				lines.push("g "+obj.key);
+				if (exportGroups) lines.push("g "+obj.key);
 				for (let i = 0; i< len; i+=3) {
 					lines.push("f " + (baseI+indices[i]) + " " + (baseI+indices[i+1]) + " " + (baseI+indices[i+2]));
 				}
@@ -1519,92 +1317,6 @@ class SVGCityReader {
 			vertices: vertexArr,
 			edges: edgeConstraints
 		};
-	}
-
-	processNavmeshMinowski(navmesh, resultMap, slicePolygonList=null, vertexArr=null, edgeConstraints=null, edgeCallback=null, chamferCallback=null) {
-		const borderEdges = Array.isArray(navmesh) ? navmesh : navmesh._borderEdges;
-		if (slicePolygonList === null) slicePolygonList = [];
-		if (vertexArr === null) {
-			vertexArr = [];
-		}
-		if (edgeConstraints === null) {
-			edgeConstraints = [];
-		}
-		let vertexCount = vertexArr.length;
-
-		borderEdges.forEach((edge) => {
-			if (edge.vertex.index === undefined) {
-				vertexArr[vertexCount] = [edge.vertex.x, edge.vertex.z];
-				edge.vertex.index = vertexCount++;
-			}
-			if (edge.prev.vertex.index === undefined) {
-				vertexArr[vertexCount] = [edge.prev.vertex.x, edge.prev.vertex.z];
-				edge.prev.vertex.index = vertexCount++;
-			}
-			if (edge.value.from.index === undefined) {
-				vertexArr[vertexCount] = [edge.value.from.x, edge.value.from.z];
-				edge.value.from.index = vertexCount++;
-			}
-			if (edge.value.to.index === undefined) {
-				vertexArr[vertexCount] = [edge.value.to.x, edge.value.to.z];
-				edge.value.to.index = vertexCount++;
-			}
-
-			// add border slice solid...
-			edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
-			slicePolygonList.push(new Polygon().fromContour([edge.value.from, edge.prev.vertex, edge.vertex, edge.value.to]));
-
-			if (edgeCallback!==null) edgeCallback(edge);
-		});
-
-		resultMap.forEach( (edges, vertex) => {
-			let fromChamferIndex = -1;
-			let toChamferIndex = -1;
-			let theChamfer = null;
-			if (vertex.chamfer) {
-				// add chamfer solid
-				if (fromChamferIndex < 0 && vertex.chamfer.from.index !== undefined) {
-					fromChamferIndex = vertex.chamfer.from.index;
-				}
-				if(toChamferIndex < 0 && vertex.chamfer.to.index !== undefined) {
-					toChamferIndex = vertex.chamfer.to.index;
-				}
-				if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
-					theChamfer = vertex.chamfer;
-				}
-
-			}
-			if (vertex.resultArr && !theChamfer) {
-				vertex.resultArr.forEach((result, index) => {
-					let baseI = (index+1) * 2;
-					if (result instanceof LineSegment) {
-						if (fromChamferIndex < 0 && result.from.index !== undefined) {
-							fromChamferIndex = result.from.index;
-						}
-						if(toChamferIndex < 0 && result.to.index !== undefined) {
-							toChamferIndex = result.to.index;
-						}
-						if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
-							theChamfer = vertex.chamfer;
-						}
-					}
-				});
-			}
-			if (theChamfer) {
-				slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
-				// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
-				if (chamferCallback!==null) chamferCallback(theChamfer);
-			}
-		});
-		return {
-			slicePolygonList: slicePolygonList,
-			vertices: vertexArr,
-			edges: edgeConstraints
-		};
-	}
-
-	buildCityWallNavmesh(inset=0) {
-
 	}
 
 	buildGroundNavmesh(inset=0, minChamferDist=1e-5) {
@@ -1848,7 +1560,7 @@ class SVGCityReader {
 				let edgeConstraints = this.getCanvasEdges();
 				let slicePolygonList = [];
 
-				this.processNavmeshMinowski(navmesh, resultMap, slicePolygonList, vertexArr, edgeConstraints
+				NavMeshUtils.processNavmeshMinowski(navmesh, resultMap, slicePolygonList, vertexArr, edgeConstraints
 				/*
 					,this._PREVIEW_MODE ? (edge) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));}
 						: null,
@@ -1862,8 +1574,8 @@ class SVGCityReader {
 				let navmeshBVH;
 				let obstaclesBVH;
 
-				navmeshBVH =  new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(navmesh.regions));
-				obstaclesBVH = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(slicePolygonList.concat(rampShadowPolygons)));
+				navmeshBVH =  new BVH(2, 1, 10).fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(navmesh.regions));
+				obstaclesBVH = new BVH(2, 1, 10).fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(slicePolygonList.concat(rampShadowPolygons)));
 				let ptArr;
 
 				ptArr = vertexArr.slice(0); //vertexArr.map(vecToPoint);
@@ -1874,10 +1586,10 @@ class SVGCityReader {
 
 				let cdtFloor = cdt2d(ptArr, edgeConstraints, {interior:true, exterior:true});
 				cdtFloor = cdtFloor.filter((c)=> {
-					return cdtTriFilterFunction(c, ptArr, navmeshBVH, obstaclesBVH);
+					return NavMeshUtils.cdtTriFilterFunction(c, ptArr, navmeshBVH, obstaclesBVH);
 				})
 
-				//clearStacks();
+				//NavMeshUtils.clearStacks();
 
 				//if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"rgba(0,255,0,0.9)", stroke:"blue", "stroke-width": 0.15, d: cdtFloor.map((tri)=> {return triSVGString(ptArr, tri)}).join(" ") }));
 
@@ -1896,7 +1608,7 @@ class SVGCityReader {
 				resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(filteredNavmeshHighwayEdges, inset, minChamferDist, true);
 				// this.getCanvasVertexArr(), this.getCanvasEdges()
 				///*
-				resultObj = this.processNavmeshMinowski(filteredNavmeshHighwayEdges, resultMap, slicePolygonList, null, null
+				resultObj = NavMeshUtils.processNavmeshMinowski(filteredNavmeshHighwayEdges, resultMap, slicePolygonList, null, null
 					/*
 					, this._PREVIEW_MODE ? (edge) => {svg.append(this.makeSVG("path", {fill:"none", stroke:"orange", "stroke-width": 0.15, d:[[edge.prev.vertex, edge.vertex], [edge.value.from, edge.value.to]].map((e)=>lineSegmentSVGStr(e[0], e[1])).join(" ")}));}
 						: null,
@@ -1911,16 +1623,16 @@ class SVGCityReader {
 
 				cleanPSLG(resultObj.vertices, resultObj.edges);
 				let cdtHighways = cdt2d(resultObj.vertices, resultObj.edges, {interior:true, exterior:true});
-				navmeshBVH =  new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(this.navmeshHighways.regions));
-				obstaclesBVH = new BVH(2, 1, 10).fromMeshGeometry(getMeshGeometryFromPolygons(slicePolygonList));
+				navmeshBVH =  new BVH(2, 1, 10).fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(this.navmeshHighways.regions));
+				obstaclesBVH = new BVH(2, 1, 10).fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(slicePolygonList));
 				cdtHighways = cdtHighways.filter((c)=> {
-					return cdtTriFilterFunction(c, resultObj.vertices, navmeshBVH, obstaclesBVH);
+					return NavMeshUtils.cdtTriFilterFunction(c, resultObj.vertices, navmeshBVH, obstaclesBVH);
 				})
 
 				//if (this._PREVIEW_MODE) wireSVG.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.15, d: cdtHighways.map((tri)=> {return triSVGString(resultObj.vertices, tri)}).join(" ") }));
 
 
-				clearStacks();
+				NavMeshUtils.clearStacks();
 
 				// floor
 				navmesh = new NavMesh();
@@ -1934,7 +1646,7 @@ class SVGCityReader {
 				this.navmeshHighways.attemptBuildGraph = false;
 				let errors = [];
 
-				this.navmeshHighways.fromPolygons(cdtHighways.map((tri) => getTriPolygonBVH(resultObj.vertices, tri, navmeshBVH, errors)));
+				this.navmeshHighways.fromPolygons(cdtHighways.map((tri) => NavMeshUtils._getTriPolygonBVH(resultObj.vertices, tri, navmeshBVH, errors)));
 				errors.forEach((e)=>{
 					console.warn("[point in tri] region find error founds")
 					if (this._PREVIEW_MODE) svg.append(this.makeSVG("circle", {r:0.5, "stroke":"red", fill:"white", cx:e[0], cy:e[1]}));
@@ -1951,9 +1663,13 @@ class SVGCityReader {
 
 			}
 			//*/
+		} else {
+			if (!this.navmeshHighways) {
+				this.navmeshHighways = this.getNavmeshHighways();
+			}
 		}
 
-		clearStacks();
+		NavMeshUtils.clearStacks();
 
 		return {
 			floor: navmesh,

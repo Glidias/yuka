@@ -4,19 +4,29 @@ import { NavEdge } from '../core/NavEdge.js';
 import { Vector3 } from '../../math/Vector3.js';
 import { Polygon } from '../../math/Polygon.js';
 import { Plane } from '../../math/Plane.js';
-import {HalfEdge} from '../../math/HalfEdge.js';
-import {LineSegment} from '../../math/LineSegment.js';
-import { totalmem } from 'os';
+import { HalfEdge } from '../../math/HalfEdge.js';
+import { LineSegment } from '../../math/LineSegment.js';
+import { BVH } from '../../math/BVH.js';
+import { MeshGeometry } from "../../core/MeshGeometry.js";
+import cdt2d from "cdt2d";
 
-var MAX_HOLE_LEN = 16;
-
+const lineSegment = new LineSegment();
+const lineSegment2 = new LineSegment();
+const pointOnLineSegment = new Vector3();
 const PLANE = new Plane();
 const POINT = new Vector3();
 const A = new Vector3();
 const B = new Vector3();
 const C = new Vector3();
+const D = new Vector3();
+const STACK = [];
+const PRIMITIVES = [];
+
 
 // dfs search through edges by related mapped edge.prev vertices
+/*
+var MAX_HOLE_LEN = 16;
+
 function searchEdgeList(map, builtContour, startingEdge) {
     let edgeList = map.get(startingEdge.vertex);
     if (!edgeList) return 0;
@@ -27,18 +37,6 @@ function searchEdgeList(map, builtContour, startingEdge) {
         if (bi >= 3) return bi;
     }
     return 0;
-}
-
-function length2DSegment(segment) {
-    let dx = segment.to.x - segment.from.x;
-    let dz = segment.to.z - segment.from.z;
-    return Math.sqrt(dx*dx + dz*dz);
-}
-
-function lengthSq2DSegment(segment) {
-    let dx = segment.to.x - segment.from.x;
-    let dz = segment.to.z - segment.from.z;
-    return dx*dx + dz*dz;
 }
 
 function searchEdge(map, builtContour, edge, startingEdge, bi) {
@@ -59,6 +57,86 @@ function searchEdge(map, builtContour, edge, startingEdge, bi) {
         }
     }
     return 0;
+}
+*/
+
+function pt2DInBVH(x, z, bvh) {
+	let len = query2DInBVH(x, z, bvh);
+	// console.log(primitives[0]);
+	let primitives = PRIMITIVES;
+	for (let i =0; i< len; i+=3) {
+		if (is_in_triangle(x, z, primitives[i+2], primitives[i+1], primitives[i])) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function query2DInBVH(x, z, bvh) {
+	let stack = STACK;
+
+	stack[0] = bvh.root;
+	let si = 1;
+	let n;
+	let primitives = PRIMITIVES;
+	let pi = 0;
+	let l;
+	const padding = 1e-4;
+	let count = 0;
+	while(--si >= 0) {
+		n = stack[si];
+		if ( (l = n.primitives.length) !== 0) {
+			for ( let i = 0; i < l; i += 9 ) {
+				// xzy order in this case
+				primitives[count++] = [n.primitives[i], n.primitives[i+2], n.primitives[i+1]];
+				primitives[count++] = [n.primitives[i+3], n.primitives[i+5], n.primitives[i+4]];
+				primitives[count++] = [n.primitives[i+6], n.primitives[i+8], n.primitives[i+7]];
+			}
+		} else if (x>=n.boundingVolume.min.x-padding && x <=n.boundingVolume.max.x+padding && z >=n.boundingVolume.min.z-padding && z <= n.boundingVolume.max.z+padding) {
+			for (let c of n.children) {
+				stack[si++] = c;
+			}
+		}
+	}
+	return count;
+}
+
+function is_in_triangle (px,py,a,b,c){ // triangle winding order doesn't matter for this method
+	let ax = a[0];
+	let ay = a[1];
+	let bx = b[0];
+	let by = b[1];
+	let cx = c[0];
+	let cy = c[1];
+	//credit: http://www.blackpawn.com/texts/pointinpoly/default.html
+	var v0 = [cx-ax,cy-ay];
+	var v1 = [bx-ax,by-ay];
+	var v2 = [px-ax,py-ay];
+
+	var dot00 = (v0[0]*v0[0]) + (v0[1]*v0[1]);
+	var dot01 = (v0[0]*v1[0]) + (v0[1]*v1[1]);
+	var dot02 = (v0[0]*v2[0]) + (v0[1]*v2[1]);
+	var dot11 = (v1[0]*v1[0]) + (v1[1]*v1[1]);
+	var dot12 = (v1[0]*v2[0]) + (v1[1]*v2[1]);
+
+	var invDenom = 1/ (dot00 * dot11 - dot01 * dot01);
+
+	var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+	var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+	return ((u >= 0) && (v >= 0) && (u + v < 1));
+}
+
+function length2DSegment(segment) {
+    let dx = segment.to.x - segment.from.x;
+    let dz = segment.to.z - segment.from.z;
+    return Math.sqrt(dx*dx + dz*dz);
+}
+
+function lengthSq2DSegment(segment) {
+    let dx = segment.to.x - segment.from.x;
+    let dz = segment.to.z - segment.from.z;
+    return dx*dx + dz*dz;
 }
 
 function setToPerp(vec, result) {
@@ -109,8 +187,6 @@ function getIntersectionTimeToPlaneBound(origin, dx, dz, plane) {
     return numerator/denom;
 }
 
-
-
 function findNeighborEdgeCompHeadArr(edges, edge, vertex, visitedEdgePairs, edgeLen) {
     let len = edges.length;
     let arr = [];
@@ -137,63 +213,17 @@ function getKeyEdgePair(edge, edge2, len) {
     return e1*len + e2;
 }
 
-/* // depecrated
-function findNeighborEdgeCompHead(edges, vertex) {
-    let len = edges.length;
-    for (let i =0; i< len; i++) {
-        if (edges[i].prev.vertex === vertex) return edges[i];
-    }
-    return null;
-}
-
-function findNeighborEdgeCompTail(edges, vertex) {
-    let len = edges.length;
-    for (let i =0; i< len; i++) {
-        if (edges[i].vertex === vertex) return edges[i];
-    }
-    return null;
-}
-
-function findNeighborEdgeCompTailArr(edges, edge, vertex, visitedEdgePairs, edgeLen) {
-    let len = edges.length;
-    let arr =[];
-    let edgeKey;
-    let foundCount = 0;
-    for (let i =0; i< len; i++) {
-        let candidate = edges[i];
-        if (candidate.vertex === vertex) {
-            edgeKey = getKeyEdgePair(edge, candidate, edgeLen);
-            if (!visitedEdgePairs.has(edgeKey)) arr.push(candidate);
-            foundCount++;
-            //break;
-        }
-    }
-    return foundCount > 0 ? arr : null;
-}
-*/
-
 var transformId = 0;
 
+/**
+ * General tools/methods for Navmesh geometry building, carving, and querying
+ */
 class NavMeshUtils {
 
-    // todo: boundary edge: inset
-
-    /*
-    static cacheRegionIndexLookup(navMesh) {
-		if (!navMesh.regionIndexMap) {
-			navMesh.regionIndexMap = new Map();
-			var len = navMesh.regions.length;
-			for (var i=0; i<len; i++) {
-				navMesh.regionIndexMap.set(navMesh.regions[i], i);
-			}
-			navMesh.getNodeIndex = NavMeshUtils.getCachedNodeIndexForRegionProto;
-		}
-	}
-
-	static getCachedNodeIndexForRegionProto(region) {
-		return this.regionIndexMap.has(region) ? this.regionIndexMap.get(region) : -1;
+    static clearStacks() {
+        STACK.length = 0;
+        PRIMITIVES.length = 0;
     }
-    */
 
    static planeFromCoplarVertexIndices(vertices, i, i2, i3) {
         i*=3;
@@ -206,9 +236,9 @@ class NavMeshUtils {
    }
 
    static collectPlainNavmeshGeometry(collector, polygons, xzScale=1) {
-    return NavMeshUtils.collectExtrudeGeometry(collector, polygons, 0, xzScale, undefined, undefined, {
-        excludeBottomFaceRender: true
-    });
+        return NavMeshUtils.collectExtrudeGeometry(collector, polygons, 0, xzScale, undefined, undefined, {
+            excludeBottomFaceRender: true
+        });
    }
 
     /**
@@ -632,11 +662,15 @@ class NavMeshUtils {
 
 
    /**
-    * Connect 2 navmeshes given a set of edges between them.
+    * Heuristic attempt to auto-connect 2 navmeshes given a set of edges between them. (NOTE: not too accruate and lacks knowledge of world 3D environment. Manual is best for now)
      Annotated edges array vs other annotated edges array
     * @param {[HalfEdge|Polygon]} results  To hold a record of all connected values
     * @param {Navmesh|[HalfEdge]} navmesh Navmesh 1 or a set of border edges 1
     * @param {Navmesh|[HalfEdge]} navmesh2 Navmesh 2 or a set of border edges 2. This is welded to Navmesh 1 as a slave under certain cases.
+    * @param {Number} maxSnapDistThreshold
+    * @param {Number} maxConnectDistThreshold
+    * @param {Number} connectDotFacingThreshold
+    * @param {Number }connectRequiredCount
     * @return Total connections added to array
     */
 
@@ -1107,7 +1141,7 @@ class NavMeshUtils {
 
         if (getBorders === 1) {
             islands.forEach((isle)=> {
-                isle.borders = this.getOrderedIslandBorders(isle.borders);
+                isle.borders = NavMeshUtils.getOrderedIslandBorders(isle.borders);
             });
         }
         return islands;
@@ -1145,6 +1179,7 @@ class NavMeshUtils {
         l.prev = edge;
         return l;
     }
+
 
 
     /**
@@ -1207,6 +1242,318 @@ class NavMeshUtils {
         } while ( edge !== polygon.edge)
         return contours.length >= 3 ? new Polygon().fromContour(contours) : null;
     }
+
+   static getMeshGeometryFromPolygons(polygons) {
+        let arr = [];
+        let c = 0;
+        let len = polygons.length;
+        for (let i =0; i<len; i++) {
+            let p = polygons[i];
+            let edge = p.edge;
+            let mainP = edge.prev.vertex;
+            edge = edge.next;
+            while (edge !== p.edge.prev) {
+                arr[c++] = edge.prev.vertex.x;
+                arr[c++] = edge.prev.vertex.y;
+                arr[c++] = edge.prev.vertex.z;
+                arr[c++] = edge.vertex.x;
+                arr[c++] = edge.vertex.y;
+                arr[c++] = edge.vertex.z;
+                arr[c++] = mainP.x;
+                arr[c++] = mainP.y;
+                arr[c++] = mainP.z;
+                edge = edge.next;
+            }
+        }
+        console.log((arr.length/9) + ' tris , ' + (arr.length/3) + ' soup vertices');
+        return new MeshGeometry(new Float32Array(arr));
+    }
+
+    /**
+     * Filters a CDT 2D triangle result based on whether it exists within navmesh BVH 2D layer (if provided) or obstacles BVH 2D layer (if provided)
+     * @param {[Number, Number, Number]} Indices
+     * @param {[[Number, Number]]} ptArr Point Buffer
+     * @param {BVH} navmeshBVH
+     * @param {BVH} obstaclesBVH
+     */
+    static cdtTriFilterFunction(c, ptArr, navmeshBVH=null, obstaclesBVH=null) {
+        let cx;
+        let cz;
+        cx = (ptArr[c[0]][0] + ptArr[c[1]][0] + ptArr[c[2]][0]) / 3;
+        cz = (ptArr[c[0]][1] + ptArr[c[1]][1] + ptArr[c[2]][1]) / 3;
+        return (navmeshBVH === null || pt2DInBVH(cx, cz, navmeshBVH)) && (obstaclesBVH === null || !pt2DInBVH(cx, cz, obstaclesBVH));
+    }
+
+    /**
+     *
+     * @param {*} p1
+     * @param {*} p2
+     * @param {*} p3
+     * @param {*} x
+     * @param {*} z
+     */
+    static getYHeightOnTri(p1,  p2,  p3,  x,  z) {
+        var det = (p2.z - p3.z) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.z - p3.z);
+        var l1 = ((p2.z - p3.z) * (x - p3.x) + (p3.x - p2.x) * (z - p3.z)) / det;
+        var l2 = ((p3.z - p1.z) * (x - p3.x) + (p1.x - p3.x) * (z - p3.z)) / det;
+        var l3 = 1.0 - l1 - l2;
+        return l1 * p1.y + l2 * p2.y + l3 * p3.y;
+    }
+
+    /**
+     *
+     * @param {*} x
+     * @param {*} z
+     * @param {*} bvh
+     * @param {*} errors
+     * @param {*} errorThreshold
+     */
+   static height2DInTri(x, z, bvh, errors, errorThreshold) {
+	    if (errorThreshold === undefined) errorThreshold = Number.MAX_VALUE; // 1e-2;
+        const errorThresholdSq = errorThreshold !== Number.MAX_VALUE ? errorThreshold * errorThreshold : Infinity;
+
+        let len = query2DInBVH(x, z, bvh);
+        // console.log(primitives[0]);
+        let primitives = PRIMITIVES;
+        for (let i =0; i< len; i+=3) {
+            if (is_in_triangle(x, z, primitives[i+2], primitives[i+1], primitives[i])) {
+                A.set(primitives[i][0], primitives[i][2], primitives[i][1]);
+                B.set(primitives[i+1][0], primitives[i+1][2], primitives[i+1][1]);
+                C.set(primitives[i+2][0], primitives[i+2][2], primitives[i+2][1]);
+                return NavMeshUtils.getYHeightOnTri(A, B, C, x, z);
+            }
+        }
+        let closestDist = Infinity;
+        let dist;
+        let closestT = null;
+        let t;
+        D.set(x, 0, z);
+        for (let i =0; i< len; i+=3) {
+            A.set(primitives[i][0], 0, primitives[i][1]);
+            B.set(primitives[i+1][0], 0, primitives[i+1][1]);
+            C.set(primitives[i+2][0], 0, primitives[i+2][1]);
+
+            lineSegment.from.copy(A);
+
+            lineSegment.to.copy(B);
+            t = lineSegment.closestPointToPointParameter(D, true);
+            lineSegment.at( t, pointOnLineSegment );
+            dist = pointOnLineSegment.squaredDistanceTo( D );
+            if (dist < errorThresholdSq && dist < closestDist) {
+                closestDist = dist;
+                closestT = t;
+                lineSegment2.from.copy(A);
+                lineSegment2.from.y = primitives[i][2];
+                lineSegment2.to.copy(B);
+                lineSegment2.to.y = primitives[i+1][2];
+            }
+
+            lineSegment.to.copy(C);
+            t = lineSegment.closestPointToPointParameter(D, true);
+            lineSegment.at( t, pointOnLineSegment );
+            dist = pointOnLineSegment.squaredDistanceTo( D );
+            if (dist < errorThresholdSq && dist < closestDist) {
+                closestDist = dist;
+                closestT = t;
+                lineSegment2.from.copy(A);
+                lineSegment2.from.y = primitives[i][2];
+                lineSegment2.to.copy(C);
+                lineSegment2.to.y = primitives[i+2][2];
+            }
+        }
+
+        if (closestT !== null) {
+            lineSegment2.at(closestT, pointOnLineSegment);
+            //console.log("CAUGHT!" +  pointOnLineSegment.y);
+            return pointOnLineSegment.y;
+        }
+        console.log("Failed!:"+len);
+
+        if (errors) errors.push([x,z]);
+        else console.warn("Failed to find height2DInTri!");
+        return 0;
+    }
+
+    static _getTriPolygonBVH(vertSoup, tri, bvh, errors) {
+        let poly = new Polygon().fromContour([
+            new Vector3(vertSoup[tri[2]][0], NavMeshUtils.height2DInTri(vertSoup[tri[2]][0], vertSoup[tri[2]][1], bvh, errors), vertSoup[tri[2]][1]),
+            new Vector3(vertSoup[tri[1]][0], NavMeshUtils.height2DInTri(vertSoup[tri[1]][0], vertSoup[tri[1]][1], bvh, errors), vertSoup[tri[1]][1]),
+            new Vector3(vertSoup[tri[0]][0], NavMeshUtils.height2DInTri(vertSoup[tri[0]][0], vertSoup[tri[0]][1], bvh, errors), vertSoup[tri[0]][1])
+        ]);
+        return poly;
+    }
+
+
+    /* // multiple geometries (islands?).. with potentially pairwise obstacle polygon hovering blocking projections
+	buildNavmeshFromGeometries(geometries, obstacleGeometries, inset=0, minChamferDist=1e-5, maxNormalY=0) {
+	}
+    */
+
+	/**
+	 * Creates a navmesh from 3D geometry.
+     * Caveats:
+     * - As of now, if inset is used, only using non-self overlapping geometry (when viewing from top-down) is supported.
+     * - Also, if inset is used, "cleanPSLG" module is required to be loaded globally elsewhere else the function won't work!
+	 * @param {Object} geometry A typical geometry object containing `vertices` and (optionally) `indices` array of triangles
+	 * @param {Number} maxNormalY If specified a non-zero value, will only include specific triangles from geometry that have normal.y <= maxGroundNormalY
+	 * @param {Number} inset Typically the inset value to shrink the navmesh by (eg. the agent radius), if needed.
+	 * @param {Number} minChamferDist If inset is used, the minimum chamfer distance between offset border points before considering to snap & weld them always by their intersection.
+     * @return A new navmesh (note: without graph being set up yet). Since it's possible that devs might prefer navmeshes to be connected at build/run-time prior to graph creation.
+	 */
+	static buildNavmeshFromGeometry(geometry, maxNormalY=0, inset=0, minChamferDist=1e-5) {
+		let polygons = [];
+
+		let vertices = geometry.vertices;
+		let indices = geometry.indices;
+		let len = vertices.length;
+		let vertexList = [];
+
+		for (let i = 0; i < len; i+=3) {
+			vertexList.push(new Vector3(vertices[i], vertices[i+1], vertices[i+2]));
+		}
+
+		if (indices !== undefined) {
+			len = indices.length;
+			for (let i = 0; i < len; i+=3) {
+				if (maxNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]).normal.y > maxNormalY) continue;
+				polygons.push(new Polygon().fromContour([vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]]));
+			}
+		} else {
+			for (let i = 0; i < len; i+=3) {
+				if (maxNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[i], vertextList[i+1], vertexList[i+2]).normal.y > maxNormalY) continue;
+				polygons.push(new Polygon().fromContour([vertexList[i], vertextList[i+1], vertexList[i+2]]));
+			}
+		}
+
+		let navmesh = new NavMesh();
+		navmesh.attemptBuildGraph = false;
+		if (polygons.length === 0) return navmesh;
+
+		navmesh.fromPolygons(polygons);
+
+		if (inset !== 0) {
+           navmesh = getInsetNavmesh(navmesh, inset, minChamferDist);
+        }
+        return navmesh;
+    }
+
+    /**
+     * Creates an insetted navmesh from an existing navmesh.
+     * Caveats:
+     * - As of now, if inset is used, only using non-self overlapping geometry (when viewing from top-down) is supported.
+     * - Also, if inset is used, "cleanPSLG" module is required to be loaded globally elsewhere else the function won't work!} navmesh
+     * @param {NavMesh} navmesh
+     * @param {Number} inset Typically the inset value to shrink the navmesh by (eg. the agent radius), if needed.
+	 * @param {Number} minChamferDist If inset is used, the minimum chamfer distance between offset border points before considering to snap & weld them always by their intersection.
+     */
+    static getInsetNavmesh(navmesh, inset=0, minChamferDist=1e-5) {
+        // note: this method only works for non-self 2D-overlapping navmeshes!
+        let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh._borderEdges, inset, minChamferDist);
+        let resultObj = NavMeshUtils.processNavmeshMinowski(navmesh._borderEdges, resultMap);
+        cleanPSLG(resultObj.vertices, resultObj.edges);
+        let cdt = cdt2d(resultObj.vertices, resultObj.edges, {interior:true, exterior:true});
+        let navmeshBVH =  new BVH().fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(navmesh.regions));
+        let obstaclesBVH = new BVH().fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(resultObj.slicePolygonList));
+        cdt = cdt.filter((c)=> {
+            return NavMeshUtils.cdtTriFilterFunction(c, resultObj.vertices, navmeshBVH, obstaclesBVH);
+        })
+        navmesh = new Navmesh();
+        navmesh.attemptBuildGraph = false;
+        return navmesh.fromPolygons(cdt.map((tri) => NavMeshUtils._getTriPolygonBVH(resultObj.vertices, tri, navmeshBVH)));
+    }
+
+
+    /**
+     *
+     * @param {Navmesh} navmesh
+     * @param {Map<Vertex, [Border]>} resultMap
+     * @param {[Polygon]} slicePolygonList
+     * @param {[[Number,Number]]} vertexArr
+     * @param {[[Number,Number]]} edgeConstraints
+     * @param {Function} edgeCallback
+     * @param {Function} chamferCallback
+     */
+    static processNavmeshMinowski(navmesh, resultMap, slicePolygonList=null, vertexArr=null, edgeConstraints=null, edgeCallback=null, chamferCallback=null) {
+		const borderEdges = Array.isArray(navmesh) ? navmesh : navmesh._borderEdges;
+		if (slicePolygonList === null) slicePolygonList = [];
+		if (vertexArr === null) {
+			vertexArr = [];
+		}
+		if (edgeConstraints === null) {
+			edgeConstraints = [];
+		}
+		let vertexCount = vertexArr.length;
+
+		borderEdges.forEach((edge) => {
+			if (edge.vertex.index === undefined) {
+				vertexArr[vertexCount] = [edge.vertex.x, edge.vertex.z];
+				edge.vertex.index = vertexCount++;
+			}
+			if (edge.prev.vertex.index === undefined) {
+				vertexArr[vertexCount] = [edge.prev.vertex.x, edge.prev.vertex.z];
+				edge.prev.vertex.index = vertexCount++;
+			}
+			if (edge.value.from.index === undefined) {
+				vertexArr[vertexCount] = [edge.value.from.x, edge.value.from.z];
+				edge.value.from.index = vertexCount++;
+			}
+			if (edge.value.to.index === undefined) {
+				vertexArr[vertexCount] = [edge.value.to.x, edge.value.to.z];
+				edge.value.to.index = vertexCount++;
+			}
+
+			// add border slice solid...
+			edgeConstraints.push([edge.prev.vertex.index, edge.vertex.index], [edge.value.from.index, edge.value.to.index]);
+			slicePolygonList.push(new Polygon().fromContour([edge.value.from, edge.prev.vertex, edge.vertex, edge.value.to]));
+
+			if (edgeCallback!==null) edgeCallback(edge);
+		});
+
+		resultMap.forEach( (edges, vertex) => {
+			let fromChamferIndex = -1;
+			let toChamferIndex = -1;
+			let theChamfer = null;
+			if (vertex.chamfer) {
+				// add chamfer solid
+				if (fromChamferIndex < 0 && vertex.chamfer.from.index !== undefined) {
+					fromChamferIndex = vertex.chamfer.from.index;
+				}
+				if(toChamferIndex < 0 && vertex.chamfer.to.index !== undefined) {
+					toChamferIndex = vertex.chamfer.to.index;
+				}
+				if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+					theChamfer = vertex.chamfer;
+				}
+
+			}
+			if (vertex.resultArr && !theChamfer) {
+				vertex.resultArr.forEach((result, index) => {
+					let baseI = (index+1) * 2;
+					if (result instanceof LineSegment) {
+						if (fromChamferIndex < 0 && result.from.index !== undefined) {
+							fromChamferIndex = result.from.index;
+						}
+						if(toChamferIndex < 0 && result.to.index !== undefined) {
+							toChamferIndex = result.to.index;
+						}
+						if (fromChamferIndex >= 0 && toChamferIndex >= 0) {
+							theChamfer = vertex.chamfer;
+						}
+					}
+				});
+			}
+			if (theChamfer) {
+				slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
+				// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
+				if (chamferCallback!==null) chamferCallback(theChamfer);
+			}
+		});
+		return {
+			slicePolygonList: slicePolygonList,
+			vertices: vertexArr,
+			edges: edgeConstraints
+		};
+	}
 
     /**
      * Calculate offset border or corner chamfer/snap-to-weld projections necessary for navmesh minowski-like operations
