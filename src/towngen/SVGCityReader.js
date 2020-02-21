@@ -1115,7 +1115,7 @@ class SVGCityReader {
 				// Wavefront obj face indices start from 1 always
 				lines.push("f " + (indices[i]+1) + " " + (indices[i+1]+1) + " " + (indices[i+2]+1));
 			}
-		} else { // object hash of groups
+		} else { // object hash or Array of groups
 			let list = Array.isArray(deployable) ? deployable.map((d, index) => ({key:'group_'+index, value:d})) : SVGCityReader.objToArray(deployable);
 			let totalVertexCount = 0;
 
@@ -1317,6 +1317,93 @@ class SVGCityReader {
 			vertices: vertexArr,
 			edges: edgeConstraints
 		};
+	}
+
+	// alternatively, may use NavMeshUtils.buildNavmeshFromGeometry( deployGeom.cityWallWalk, 0, inset, minChamferDist)
+	// and NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions)
+	buildCityWallWalkNavmesh(inset=0, minChamferDist=1e-5, asGeometry=false) {
+		const scaleXZ = this._PREVIEW_MODE ? 1 : this.exportScaleXZ;
+		let svg;
+		if (this._PREVIEW_MODE) {
+			svg = $(this.makeSVG("g", {}));
+			this.map.append(svg, {});
+		}
+		if (this.navmeshCityWallWalk) {
+			//let geometry = NavMeshUtils.collectPlainNavmeshGeometry(null, this.navmeshCityWallWalk.regions, scaleXZ);
+			//let navmesh = NavMeshUtils.buildNavmeshFromGeometry(geometry, 0, inset, minChamferDist);
+
+			let navmesh = NavMeshUtils.getNewScaledNavmesh(this.navmeshCityWallWalk, scaleXZ, 1, scaleXZ);
+
+			navmesh = inset !== 0 ? NavMeshUtils.getInsetNavmesh(navmesh, inset, minChamferDist ) : navmesh;
+
+			if (this._PREVIEW_MODE) {
+				svg.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+				svg.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+			}
+
+			if (!asGeometry) return navmesh;
+
+
+			return NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions, scaleXZ);
+
+		} else {
+			throw new Error("Deprecated branch case no longer accounted for")
+		}
+	}
+
+	// alternatively, may use NavMeshUtils.buildNavmeshFromGeometry( deployGeom.cityWallTowerCeiling, 1e-5, inset, minChamferDist)
+	// and NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions);
+	// TODO: this one not working need to check
+	buildCityWallCeilRoofNavmesh(inset=0, minChamferDist=1e-5, asGeometry=false) {
+		const scaleXZ = this._PREVIEW_MODE ? 1 : this.exportScaleXZ;
+		let svg;
+		if (this._PREVIEW_MODE) {
+			svg = $(this.makeSVG("g", {}));
+			this.map.append(svg, {});
+		}
+		if (!this.cityWallTowerWallPolies) {
+			throw new Error('Not available here');
+		}
+		//let geometry = NavmeshUtils.collectPlainNavmeshGeometry(null, NavMeshUtils.collectExtrudeGeometry(null, NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerCeilingPolies), scaleXZ);
+		//let navmesh = NavMeshUtils.buildNavmeshFromGeometry(geometry, 0, inset, minChamferDist);
+
+		let navmesh = NavMeshUtils.getNewScaledNavmesh(NavMeshUtils.seperateMarkedPolygonsVertices(this.cityWallTowerWallPolies), scaleXZ, 1, scaleXZ);
+		//NavMeshUtils.setAbsAltitudeOfAllPolygons(navmesh.regions, this.cityWallTowerTopAltitude);
+
+		navmesh = inset !== 0 ? NavMeshUtils.getInsetNavmesh(navmesh, inset, minChamferDist ) : navmesh;
+
+		if (this._PREVIEW_MODE) {
+			svg.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+			svg.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+		}
+
+		if (!asGeometry)  return navmesh;
+
+		return NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions, scaleXZ);
+	}
+
+	buildBuildingRoofsNavmeshes(inset=0, minChamferDist=1e-5, asGeometry=false ) {
+		const scaleXZ = this._PREVIEW_MODE ? 1 : this.exportScaleXZ;
+		let svg;
+		if (this._PREVIEW_MODE) {
+			svg = $(this.makeSVG("g", {}));
+			this.map.append(svg, {});
+		}
+		if (!this.wardRoofCollectors) {
+			alert('buildBuildingRoofsNavmesh failed, please call getWardBuildingsGeometry() first!');
+			return;
+		}
+		let navmeshes = this.wardRoofCollectors.map((w) => NavMeshUtils.buildNavmeshFromGeometry(w, 0, inset, minChamferDist));
+
+		if (this._PREVIEW_MODE) {
+			navmeshes.forEach((navmesh) => {
+				svg.append(this.makeSVG("path", {fill:"yellow", stroke:"blue", "stroke-width": 0.0, d: navmesh.regions.map(polygonSVGString).join(" ") }));
+				svg.append(this.makeSVG("path", {fill:"transparent", stroke:"blue", "stroke-width": 0.15, d: navmesh._borderEdges.map(edgeSVGString).join(" ") }));
+			});
+		}
+		if (!asGeometry) return navmeshes;
+
+		return navmeshes.map((n) => NavMeshUtils.collectPlainNavmeshGeometry(null, n.regions, scaleXZ));
 	}
 
 	buildGroundNavmesh(inset=0, minChamferDist=1e-5) {

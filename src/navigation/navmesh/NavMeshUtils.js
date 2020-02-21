@@ -9,6 +9,7 @@ import { LineSegment } from '../../math/LineSegment.js';
 import { BVH } from '../../math/BVH.js';
 import { MeshGeometry } from "../../core/MeshGeometry.js";
 import cdt2d from "cdt2d";
+import { NavMesh } from './NavMesh.js';
 
 const lineSegment = new LineSegment();
 const lineSegment2 = new LineSegment();
@@ -643,22 +644,54 @@ class NavMeshUtils {
         return result;
     }
 
-    static scalePolygons(polygons, xzScale) {
+    static scalePolygons(polygons, x=1, y=1, z=1) {
         transformId++;
         let len = polygons.length;
         for (let i=0; i<len; i++) {
             let polygon = polygons[i];
             let edge = polygon.edge;
             do {
-                if (edge.vertex !== transformId) {
-                    edge.vertex.x *= xzScale;
-                    edge.vertex.z *= xzScale;
+                if (edge.vertex.transformId !== transformId) {
+                    edge.vertex.x *= x;
+                    edge.vertex.y *= y;
+                    edge.vertex.z *= z;
                     edge.vertex.transformId = transformId;
                 }
                 edge = edge.next;
             } while (edge !== polygon.edge);
         }
     }
+
+
+    static getNewScaledNavmesh(navmesh, x=1, y=1, z=1) {
+        let polygons = navmesh.regions || navmesh;
+        transformId++;
+
+        let newNavmesh = new NavMesh();
+        let newPolygons = [];
+        let vertRef = [];
+        let len = polygons.length;
+        let mapToScaledVertex = new Map();
+
+        for (let i=0; i<len; i++) {
+            let polygon = polygons[i];
+            let edge = polygon.edge;
+            let contours = [];
+            do {
+                if (edge.vertex.transformId !== transformId) {
+                    edge.vertex.transformId = transformId;
+                    mapToScaledVertex.set(edge.vertex, new Vector3(edge.vertex.x*x, edge.vertex.y*y, edge.vertex.z*z));
+                }
+                contours.push(mapToScaledVertex.get(edge.vertex));
+                edge = edge.next;
+            } while (edge !== polygon.edge);
+            newPolygons.push(new Polygon().fromContour(contours));
+        }
+
+        return newNavmesh.fromPolygons(newPolygons);
+    }
+
+
 
 
    /**
@@ -1395,12 +1428,13 @@ class NavMeshUtils {
      * - As of now, if inset is used, only using non-self overlapping geometry (when viewing from top-down) is supported.
      * - Also, if inset is used, "cleanPSLG" module is required to be loaded globally elsewhere else the function won't work!
 	 * @param {Object} geometry A typical geometry object containing `vertices` and (optionally) `indices` array of triangles
-	 * @param {Number} maxNormalY If specified a non-zero value, will only include specific triangles from geometry that have normal.y <= maxGroundNormalY
+	 * @param {Number} requiredNormalY If specified a non-zero value, will only include specific triangles from geometry that have normal.y >= requiredNormalY as an indicator for slope.
+     * Use default zero only if you are sure all faces in geometry are "valid" (typically facing upwards) for use in navmesh to skip this slope check.
 	 * @param {Number} inset Typically the inset value to shrink the navmesh by (eg. the agent radius), if needed.
 	 * @param {Number} minChamferDist If inset is used, the minimum chamfer distance between offset border points before considering to snap & weld them always by their intersection.
      * @return A new navmesh (note: without graph being set up yet). Since it's possible that devs might prefer navmeshes to be connected at build/run-time prior to graph creation.
 	 */
-	static buildNavmeshFromGeometry(geometry, maxNormalY=0, inset=0, minChamferDist=1e-5) {
+	static buildNavmeshFromGeometry(geometry, requiredNormalY=0, inset=0, minChamferDist=1e-5) {
 		let polygons = [];
 
 		let vertices = geometry.vertices;
@@ -1415,12 +1449,12 @@ class NavMeshUtils {
 		if (indices !== undefined) {
 			len = indices.length;
 			for (let i = 0; i < len; i+=3) {
-				if (maxNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]).normal.y > maxNormalY) continue;
+				if (requiredNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]).normal.y >= requiredNormalY) continue;
 				polygons.push(new Polygon().fromContour([vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]]));
 			}
 		} else {
 			for (let i = 0; i < len; i+=3) {
-				if (maxNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[i], vertextList[i+1], vertexList[i+2]).normal.y > maxNormalY) continue;
+				if (requiredNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[i], vertextList[i+1], vertexList[i+2]).normal.y >= requiredNormalY) continue;
 				polygons.push(new Polygon().fromContour([vertexList[i], vertextList[i+1], vertexList[i+2]]));
 			}
 		}
@@ -1432,7 +1466,7 @@ class NavMeshUtils {
 		navmesh.fromPolygons(polygons);
 
 		if (inset !== 0) {
-           navmesh = getInsetNavmesh(navmesh, inset, minChamferDist);
+           navmesh = NavMeshUtils.getInsetNavmesh(navmesh, inset, minChamferDist);
         }
         return navmesh;
     }
@@ -1440,38 +1474,42 @@ class NavMeshUtils {
     /**
      * Creates an insetted navmesh from an existing navmesh.
      * Caveats:
+     * - This will also attempt to weld the navmesh's vertices (mutatively, for simplicity/performance), and may have unfortunate side effects under certain cases.
      * - As of now, if inset is used, only using non-self overlapping geometry (when viewing from top-down) is supported.
      * - Also, if inset is used, "cleanPSLG" module is required to be loaded globally elsewhere else the function won't work!} navmesh
      * @param {NavMesh} navmesh
      * @param {Number} inset Typically the inset value to shrink the navmesh by (eg. the agent radius), if needed.
 	 * @param {Number} minChamferDist If inset is used, the minimum chamfer distance between offset border points before considering to snap & weld them always by their intersection.
      */
-    static getInsetNavmesh(navmesh, inset=0, minChamferDist=1e-5) {
+    static getInsetNavmesh(navmesh, inset, minChamferDist=1e-5) {
+        NavMeshUtils.weldVertices(navmesh);
+
         // note: this method only works for non-self 2D-overlapping navmeshes!
         let resultMap = NavMeshUtils.getBorderEdgeOffsetProjections(navmesh._borderEdges, inset, minChamferDist);
         let resultObj = NavMeshUtils.processNavmeshMinowski(navmesh._borderEdges, resultMap);
         cleanPSLG(resultObj.vertices, resultObj.edges);
         let cdt = cdt2d(resultObj.vertices, resultObj.edges, {interior:true, exterior:true});
+
         let navmeshBVH =  new BVH().fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(navmesh.regions));
         let obstaclesBVH = new BVH().fromMeshGeometry(NavMeshUtils.getMeshGeometryFromPolygons(resultObj.slicePolygonList));
         cdt = cdt.filter((c)=> {
             return NavMeshUtils.cdtTriFilterFunction(c, resultObj.vertices, navmeshBVH, obstaclesBVH);
         })
-        navmesh = new Navmesh();
+        navmesh = new NavMesh();
         navmesh.attemptBuildGraph = false;
         return navmesh.fromPolygons(cdt.map((tri) => NavMeshUtils._getTriPolygonBVH(resultObj.vertices, tri, navmeshBVH)));
     }
 
-
     /**
-     *
-     * @param {Navmesh} navmesh
+     * Processses navmesh from getBorderEdgeOffsetProjections' result to compile a list of vertices and edges and chamfer/border slices.
+     * @param {Navmesh|Array[Half Edge]} navmesh
      * @param {Map<Vertex, [Border]>} resultMap
      * @param {[Polygon]} slicePolygonList
      * @param {[[Number,Number]]} vertexArr
      * @param {[[Number,Number]]} edgeConstraints
      * @param {Function} edgeCallback
      * @param {Function} chamferCallback
+     * @return Initial object set of vertices and edges and slicePolygonList
      */
     static processNavmeshMinowski(navmesh, resultMap, slicePolygonList=null, vertexArr=null, edgeConstraints=null, edgeCallback=null, chamferCallback=null) {
 		const borderEdges = Array.isArray(navmesh) ? navmesh : navmesh._borderEdges;

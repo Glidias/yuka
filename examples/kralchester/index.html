@@ -31,10 +31,20 @@
 	function init() {
 		var cityReader = new YUKA.SVGCityReader();
 		cityReader._PREVIEW_MODE = true;
+		cityReader.exportScaleXZ = 1;
+
 		cityReader.parse(document.getElementById('svgholder').innerHTML, document.getElementById("svgpreview"));
 		//console.log( cityReader.getNavmeshExtrudedGeometry() );
 		console.log( cityReader.getWardBuildingsGeometry(0.00) );
-		cityReader.buildGroundNavmesh(0.15); // , 0.3
+
+		// main ground and highway
+		//cityReader.buildGroundNavmesh(0.15); // , 0.3
+
+		// collaterals
+		//buildCityWallCeilRoofNavmesh
+		//buildCityWallWalkNavmesh
+		//buildBuildingRoofsNavmeshes
+		cityReader.buildCityWallCeilRoofNavmesh(0.3, 1e-5, true); // , 0.3
 		window.document.body.style.zoom = "400%";
 	}
 
