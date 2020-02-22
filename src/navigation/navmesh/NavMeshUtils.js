@@ -660,6 +660,7 @@ class NavMeshUtils {
                 edge = edge.next;
             } while (edge !== polygon.edge);
         }
+        return polygons;
     }
 
 
@@ -972,11 +973,11 @@ class NavMeshUtils {
         } while (edge !== polygon.edge);
     }
 
-    static seperateMarkedPolygonsVertices(polygons) {
+    static seperateMarkedPolygonsVertices(polygons, useMarker=true) {
         let len = polygons.length;
         for (let i=0;i<len; i++) {
             let polygon = polygons[i];
-            if (!polygon.sep) continue;
+            if (useMarker && !polygon.sep) continue;
             let edge = polygon.edge;
             do {
                 edge.vertex = edge.vertex.clone();
@@ -1298,7 +1299,7 @@ class NavMeshUtils {
                 edge = edge.next;
             }
         }
-        console.log((arr.length/9) + ' tris , ' + (arr.length/3) + ' soup vertices');
+        // console.log((arr.length/9) + ' tris , ' + (arr.length/3) + ' soup vertices');
         return new MeshGeometry(new Float32Array(arr));
     }
 
@@ -1449,12 +1450,12 @@ class NavMeshUtils {
 		if (indices !== undefined) {
 			len = indices.length;
 			for (let i = 0; i < len; i+=3) {
-				if (requiredNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]).normal.y >= requiredNormalY) continue;
+				if (requiredNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]).normal.y < requiredNormalY) continue;
 				polygons.push(new Polygon().fromContour([vertexList[indices[i]], vertexList[indices[i+1]], vertexList[indices[i+2]]]));
 			}
 		} else {
 			for (let i = 0; i < len; i+=3) {
-				if (requiredNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[i], vertextList[i+1], vertexList[i+2]).normal.y >= requiredNormalY) continue;
+				if (requiredNormalY !== 0 && PLANE.fromCoplanarPoints(vertexList[i], vertextList[i+1], vertexList[i+2]).normal.y < requiredNormalY) continue;
 				polygons.push(new Polygon().fromContour([vertexList[i], vertextList[i+1], vertexList[i+2]]));
 			}
 		}
@@ -1582,7 +1583,7 @@ class NavMeshUtils {
 			}
 			if (theChamfer) {
 				slicePolygonList.push(new Polygon().fromContour([vertex, theChamfer.to, theChamfer.from]));
-				// edgeConstraints.push([fromChamferIndex, toChamferIndex]);
+				edgeConstraints.push([fromChamferIndex, toChamferIndex]);
 				if (chamferCallback!==null) chamferCallback(theChamfer);
 			}
 		});
