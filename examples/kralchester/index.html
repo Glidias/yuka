@@ -29,10 +29,10 @@
 
 
 	function init() {
-		var cityReader = new YUKA.SVGCityReader();
-		cityReader._PREVIEW_MODE = true;
+		var cityReader = new YUKA.SVGCityReader();		
 		var testScale = 5.587384732907732;
 
+		//cityReader._PREVIEW_MODE = true;
 		//cityReader.exportScaleXZ = 1;
 
 		cityReader.exportScaleXZ = testScale; testScale = 1;
@@ -42,7 +42,7 @@
 
 		cityReader.parse(document.getElementById('svgholder').innerHTML, document.getElementById("svgpreview"));
 		//console.log( cityReader.getNavmeshExtrudedGeometry() );
-		console.log( cityReader.getWardBuildingsGeometry(0.8/testScale) ); // 2.3
+		console.log( cityReader.getWardBuildingsGeometry(2.3/testScale) ); // 2.3
 
 		// main ground and highway
 		cityReader.buildGroundNavmesh(0.5/testScale, 0.25/testScale); // , 0.3
