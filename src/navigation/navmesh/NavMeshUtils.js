@@ -237,6 +237,9 @@ class NavMeshUtils {
    }
 
    static collectPlainNavmeshGeometry(collector, polygons, xzScale=1) {
+       if (!isArray(polygons)) {
+        polygons = polygons.regions;
+       }
         return NavMeshUtils.collectExtrudeGeometry(collector, polygons, 0, xzScale, undefined, undefined, {
             excludeBottomFaceRender: true
         });

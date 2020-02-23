@@ -1352,7 +1352,7 @@ class SVGCityReader {
 			if (!asGeometry) return navmesh;
 
 
-			return NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions, scaleXZ);
+			return NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions);
 
 		} else {
 			throw new Error("Deprecated branch case no longer accounted for")
@@ -1389,7 +1389,7 @@ class SVGCityReader {
 
 		if (!asGeometry)  return navmesh;
 
-		return NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions, scaleXZ);
+		return NavMeshUtils.collectPlainNavmeshGeometry(null, navmesh.regions);
 	}
 
 	buildBuildingRoofsNavmeshes(inset=0, minChamferDist=1e-5, asGeometry=false ) {
@@ -1652,7 +1652,7 @@ class SVGCityReader {
 				//return;
 
 				if (!this.navmeshHighways) this.navmeshHighways = this.getNavmeshHighways();
-				this.navmeshHighways = NavMeshUtils.getNewScaledNavmesh(this.navmeshHighways);
+				this.navmeshHighways = NavMeshUtils.getNewScaledNavmesh(this.navmeshHighways, scaleXZ, 1, scaleXZ);
 				slicePolygonList = [];
 				//this.navmeshHighways._borderEdges; //
 				let filteredNavmeshHighwayEdges = this.navmeshHighways._borderEdges; //this.navmeshHighways._borderEdges.filter(notGroundLevel);
@@ -1717,6 +1717,7 @@ class SVGCityReader {
 		} else {
 			if (!this.navmeshHighways) {
 				this.navmeshHighways = this.getNavmeshHighways();
+				this.navmeshHighways = NavMeshUtils.getNewScaledNavmesh(this.navmeshHighways, scaleXZ, 1, scaleXZ);
 			}
 		}
 
