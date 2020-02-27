@@ -60,5 +60,8 @@
     "text-encoding": "0.7.0",
     "tui-jsdoc-template": "1.2.2"
   },
-  "dependencies": {}
+  "dependencies": {
+    "cdt2d": "^1.0.0",
+    "clean-pslg": "^1.1.2"
+  }
 }
