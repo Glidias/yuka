@@ -47,7 +47,7 @@ class NavMesh {
 		this.graph.digraph = true;
 
 		/**
-		 * Whether to merge polygons when constructing regions. Defaults to true unless set otherwise.
+		 * Whether to merge polygons when constructing regions. Defaults to true.
 		 * @type Boolean
 		 */
 		this.attemptMergePolies = true;

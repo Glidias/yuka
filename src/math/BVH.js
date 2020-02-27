@@ -32,8 +32,8 @@ class BVH {
 	* Constructs a new BVH.
 	*
 	* @param {Number} branchingFactor - The branching factor.
-	* @param {Number} depth - The maximum hierarchical depth.
 	* @param {Number} primitivesPerNode - The minimum amount of primitives per BVH node.
+	* @param {Number} depth - The maximum hierarchical depth.
 	*/
 	constructor( branchingFactor = 2, primitivesPerNode = 1, depth = 10 ) {
 
@@ -79,9 +79,11 @@ class BVH {
 
 		// primitives
 
-		const nonIndexedGeometry = geometry.toTriangleSoup();
+		const nonIndexedGeometry = geometry.indices ? geometry.toTriangleSoup() : geometry;  // only convert if indexed
 		const vertices = nonIndexedGeometry.vertices;
-		this.root.primitives.push( ...vertices );
+
+		// this.root.primitives.push( ...vertices );
+		for (let e of vertices) this.root.primitives.push(e); // somewhat fix for ... operator causing maximum stack size
 
 		// centroids
 

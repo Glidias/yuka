@@ -4,6 +4,22 @@ import { MathUtils } from './MathUtils.js';
 const p1 = new Vector3();
 const p2 = new Vector3();
 
+function sqDistBetween2DVector(a, b)
+{
+	var dx = b.x - a.x;
+	var dy = b.z - a.z;
+	return dx * dx + dy * dy;
+}
+
+function rBetween2DVec(a, b, c)
+{
+	var dx = b.x - a.x;
+	var dy = b.z - a.z;
+	var dx2 = c.x - a.x;
+	var dy2 = c.z - a.z;
+	return dx * dx2 + dy * dy2;
+}
+
 /**
 * Class representing a 3D line segment.
 *
@@ -98,10 +114,53 @@ class LineSegment {
 	* @return {Vector3} The result vector.
 	*/
 	at( t, result ) {
-
 		return this.delta( result ).multiplyScalar( t ).add( this.from );
-
 	}
+
+	/**
+	 * Calculates intersection result with other line segment
+	 * @param {LineSegment} other
+	 * @param {Object} result Holds r and s result timings. R represents timing of intersection along first line segment, S represents timing along second line segment
+	 * @return Whether ray hits
+	 */
+	getIntersects(other, result = null)
+	{
+		let a = this.from;
+		let b = this.to;
+		let c = other.from;
+		let d = other.to;
+		let denominator = ((b.x - a.x) * (d.z - c.z)) - ((b.z - a.z) * (d.x - c.x));
+		let numerator1 = ((a.z - c.z) * (d.x - c.x)) - ((a.x - c.x) * (d.z - c.z));
+		let numerator2 = ((a.z - c.z) * (b.x - a.x)) - ((a.x - c.x) * (b.z - a.z));
+		let r;
+		let s;
+		// Detect coincident lines (has a problem, read below)
+		if (denominator == 0)
+		{
+			// find between c and d, which is closer to a, clamp to s to 1 and 0, set r to c/d
+			s = sqDistBetween2DVector(a, c) < sqDistBetween2DVector(a, d) ? 0 : 1;
+			r = s != 0 ? rBetween2DVec(a, b, d) : rBetween2DVec(a, b, c);
+			// throw new Error("DETECT");
+			if (result !== null) {
+				result.r = r;
+				result.s = s;
+				result.coincident = true;
+			}
+			return false; // (r >= 0) && (s >= 0 && s <= 1);
+				//  return numerator1 == 0 && numerator2 == 0;
+		}
+
+		r = numerator1 / denominator;
+		s = numerator2 / denominator;
+		if (result !== null) {
+			result.r = r;
+			result.s = s;
+			result.coincident = false;
+		}
+		//
+		return s >= 0 && s <= 1 && r <= 1 && r >= 0;
+	}
+
 
 	/**
 	* Computes the closest point on an infinite line defined by the line segment.
