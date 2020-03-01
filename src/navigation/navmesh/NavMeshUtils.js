@@ -1,6 +1,3 @@
-import { Graph } from '../../graph/core/Graph.js';
-import { NavNode } from '../core/NavNode.js';
-import { NavEdge } from '../core/NavEdge.js';
 import { Vector3 } from '../../math/Vector3.js';
 import { Polygon } from '../../math/Polygon.js';
 import { Plane } from '../../math/Plane.js';
@@ -10,6 +7,7 @@ import { BVH } from '../../math/BVH.js';
 import { MeshGeometry } from "../../core/MeshGeometry.js";
 import cdt2d from "cdt2d";
 import { NavMesh } from './NavMesh.js';
+import {getClosestBorderEdgeCenterToPoint, linkPolygons} from './NavMeshUtil';
 
 const lineSegment = new LineSegment();
 const lineSegment2 = new LineSegment();
@@ -528,7 +526,7 @@ class NavMeshUtils {
 
             POINT.x = (connector.prev.vertex.x + connector.vertex.x) * 0.5;
             POINT.z = (connector.prev.vertex.z + connector.vertex.z) * 0.5;
-            edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
+            edge = getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
             // edge to connector
 
             c = 0;
@@ -552,7 +550,7 @@ class NavMeshUtils {
                 c =0;
                 POINT.x = (connector2.prev.vertex.x + connector2.vertex.x) * 0.5;
                 POINT.z = (connector2.prev.vertex.z + connector2.vertex.z) * 0.5;
-                edge = NavMeshUtils.getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
+                edge = getClosestBorderEdgeCenterToPoint(connector3Arr, POINT);
 
                 c = 0;
                 contours[c++] = edge.prev.vertex;
