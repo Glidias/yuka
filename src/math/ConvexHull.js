@@ -31,6 +31,13 @@ class ConvexHull extends Polyhedron {
 
 		super();
 
+		/**
+		* Whether faces of the convex hull should be merged or not.
+		* @type Boolean
+		* @default true
+		*/
+		this.mergeFaces = true;
+
 		// tolerance value for various (float) compare operations
 
 		this._tolerance = - 1;
@@ -44,9 +51,6 @@ class ConvexHull extends Polyhedron {
 		this._assigned = new VertexList();
 		this._unassigned = new VertexList();
 
-		// this array holds the new faces generated in a single iteration of the algorithm
-
-		this._newFaces = new Array();
 	}
 
 	/**
@@ -184,7 +188,7 @@ class ConvexHull extends Polyhedron {
 
 	_addNewFaces( vertex, horizon ) {
 
-		this._newFaces = [];
+		const newFaces = [];
 
 		let firstSideEdge = null;
 		let previousSideEdge = null;
@@ -207,7 +211,7 @@ class ConvexHull extends Polyhedron {
 
 			}
 
-			this._newFaces.push( sideEdge.polygon );
+			newFaces.push( sideEdge.polygon );
 			previousSideEdge = sideEdge;
 
 		}
@@ -216,7 +220,7 @@ class ConvexHull extends Polyhedron {
 
 		firstSideEdge.next.linkOpponent( previousSideEdge );
 
-		return this;
+		return newFaces;
 
 	}
 
@@ -254,11 +258,11 @@ class ConvexHull extends Polyhedron {
 
 		this._computeHorizon( vertex.point, null, vertex.face, horizon );
 
-		this._addNewFaces( vertex, horizon );
+		const newFaces = this._addNewFaces( vertex, horizon );
 
 		// reassign 'unassigned' vertices to the new faces
 
-		this._resolveUnassignedPoints( this._newFaces );
+		this._resolveUnassignedPoints( newFaces );
 
 		return this;
 
@@ -272,8 +276,6 @@ class ConvexHull extends Polyhedron {
 
 		this._assigned.clear();
 		this._unassigned.clear();
-
-		this._newFaces.length = 0;
 
 		return this;
 
@@ -643,7 +645,7 @@ class ConvexHull extends Polyhedron {
 
 		this._updateFaces();
 
-		this._mergeFaces();
+		this._postprocessHull();
 
 		this._reset();
 
@@ -651,17 +653,16 @@ class ConvexHull extends Polyhedron {
 
 	}
 
-	// merges faces if the result is still convex and coplanar
+	// final tasks after computing the hull
 
-	_mergeFaces() {
+	_postprocessHull() {
 
 		const faces = this.faces;
 		const edges = this.edges;
 
-		if (!this.skipMergeFaces) {
+		if ( this.mergeFaces === true ) {
 
-			// gather unique edges and temporarily sort them
-			this.computeUniqueEdges();
+			// merges faces if the result is still convex and coplanar
 
 			const cache = {
 				leftPrev: null,
@@ -669,6 +670,10 @@ class ConvexHull extends Polyhedron {
 				rightPrev: null,
 				rightNext: null
 			};
+
+			// gather unique edges and temporarily sort them
+
+			this.computeUniqueEdges();
 
 			edges.sort( ( a, b ) => b.length() - a.length() );
 
@@ -678,7 +683,7 @@ class ConvexHull extends Polyhedron {
 
 				const entry = edges[ i ];
 
-				if (!this.skipMergePossible && this._mergePossible( entry ) === false ) continue;
+				if ( this._mergePossible( entry ) === false ) continue;
 
 				let candidate = entry;
 
@@ -699,29 +704,9 @@ class ConvexHull extends Polyhedron {
 				const polygon = candidate.polygon;
 				polygon.edge = candidate.prev;
 
-				const dot =  polygon.plane.normal.dot( up );
-				const ccw = dot >= 0;
+				const ccw = polygon.plane.normal.dot( up ) >= 0;
 
-				// infinite loop guard for now...
-				/*
-				let edge = polygon.edge;
-				let count = 0;
-				let safe = true;
-				do {
-					if (count >= 32) {
-						safe = false;
-						console.warn("A possible infinite loop was detected. DOT:" + dot + " id?: "+this.id);
-						if (this.hangCallback) this.hangCallback(this);
-						break;
-					}
-					count++;
-					edge = edge.next;
-
-				} while ( edge !== polygon.edge );
-				*/
-
-				// safe &&
-				if (polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
+				if ( polygon.convex( ccw ) === true && polygon.coplanar( this._tolerance ) === true ) {
 
 					// correct polygon reference of all edges
 
@@ -762,9 +747,11 @@ class ConvexHull extends Polyhedron {
 				faces[ i ].computeCentroid();
 
 			}
+
 		}
 
 		// compute centroid of convex hull and the final edge and vertex list
+
 		this.computeCentroid();
 		this.computeUniqueEdges();
 		this.computeUniqueVertices();
@@ -772,6 +759,8 @@ class ConvexHull extends Polyhedron {
 		return this;
 
 	}
+
+	// checks if the given edge can be used to merge convex regions
 
 	_mergePossible( edge ) {
 

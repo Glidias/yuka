@@ -44,12 +44,14 @@ class GameEntity {
 		* Automatically set when added to a {@link GameEntity}.
 		* @type GameEntity
 		* @default null
+		* @readonly
 		*/
 		this.parent = null;
 
 		/**
 		* A list of neighbors of this game entity.
 		* @type Array
+		* @readonly
 		*/
 		this.neighbors = new Array();
 
@@ -118,11 +120,12 @@ class GameEntity {
 		* @type Boolean
 		* @default true
 		*/
-		this.canAcitivateTrigger = true;
+		this.canActivateTrigger = true;
 
 		/**
 		* A transformation matrix representing the world space of this game entity.
 		* @type Matrix4
+		* @readonly
 		*/
 		this.worldMatrix = new Matrix4();
 
@@ -131,6 +134,7 @@ class GameEntity {
 		* Automatically set when added to an {@link EntityManager}.
 		* @type EntityManager
 		* @default null
+		* @readonly
 		*/
 		this.manager = null;
 
@@ -457,6 +461,7 @@ class GameEntity {
 			up: this.up.toArray( new Array() ),
 			boundingRadius: this.boundingRadius,
 			maxTurnRate: this.maxTurnRate,
+			canActivateTrigger: this.canActivateTrigger,
 			worldMatrix: this.worldMatrix.toArray( new Array() ),
 			_localMatrix: this._localMatrix.toArray( new Array() ),
 			_cache: {
@@ -489,6 +494,7 @@ class GameEntity {
 		this.up.fromArray( json.up );
 		this.boundingRadius = json.boundingRadius;
 		this.maxTurnRate = json.maxTurnRate;
+		this.canActivateTrigger = json.canActivateTrigger;
 		this.worldMatrix.fromArray( json.worldMatrix );
 
 		this.children = json.children.slice();
