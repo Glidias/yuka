@@ -28,12 +28,34 @@ class MeshGeometry {
 	*/
 	constructor( vertices = new Float32Array(), indices = null ) {
 
+		/**
+		* The vertex buffer.
+		* @type Float32Array
+		*/
 		this.vertices = vertices;
+
+		/**
+		* The index buffer.
+		* @type Uint16Array | Uint32Array
+		*/
 		this.indices = indices;
 
+		/**
+		*  Whether back face culling is active or not. Only relevant for raycasting.
+		* @type Boolean
+		*/
 		this.backfaceCulling = true;
 
+		/**
+		* An AABB enclosing the geometry.
+		* @type AABB
+		*/
 		this.aabb = new AABB();
+
+		/**
+		* A bounding sphere enclosing the geometry.
+		* @type BoundingSphere
+		*/
 		this.boundingSphere = new BoundingSphere();
 
 		this.computeBoundingVolume();
@@ -242,19 +264,19 @@ class MeshGeometry {
 	}
 
 	/**
-	 * Returns a new geometry without containing indices.
+	 * Returns a new geometry without containing indices. If the geometry is already
+	 * non-indexed, the method performs no changes.
 	 *
-	 * @return {MeshGeometry} The new geometry.
+	 * @return {MeshGeometry} The new non-indexed geometry.
 	 */
 	toTriangleSoup() {
 
 		const indices = this.indices;
-		const vertices = this.vertices;
-		let newVertices;
 
 		if ( indices ) {
 
-			newVertices = new Float32Array( indices.length * 3 );
+			const vertices = this.vertices;
+			const newVertices = new Float32Array( indices.length * 3 );
 
 			for ( let i = 0, l = indices.length; i < l; i ++ ) {
 
@@ -267,13 +289,13 @@ class MeshGeometry {
 
 			}
 
+			return new MeshGeometry( newVertices );
+
 		} else {
 
-			newVertices = new Float32Array( vertices );
+			return this;
 
 		}
-
-		return new MeshGeometry( newVertices );
 
 	}
 

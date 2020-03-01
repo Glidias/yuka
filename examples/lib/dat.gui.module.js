@@ -678,8 +678,9 @@ Object.defineProperty(Color.prototype, 'a', {
 });
 Object.defineProperty(Color.prototype, 'hex', {
   get: function get$$1() {
-    if (!this.__state.space !== 'HEX') {
-      this.__state.hex = ColorMath.rgb_to_hex(this.r, this.g, this.b);
+    if (this.__state.space !== 'HEX') {
+      this.__state.hex = math.rgb_to_hex(this.r, this.g, this.b);
+      this.__state.space = 'HEX';
     }
     return this.__state.hex;
   },
@@ -2513,4 +2514,3 @@ var index = {
 
 export { color, controllers, dom$1 as dom, gui, GUI$1 as GUI };
 export default index;
-//# sourceMappingURL=dat.gui.module.js.map
