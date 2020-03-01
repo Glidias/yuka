@@ -427,7 +427,7 @@ class NavMeshUtils {
                 }
 
                 // set up lower bottom face indices if needed
-                if (extrudeParams.yBottom !== true || !extrudeParams.excludeBottomFaceRender) {
+                if (extrudeParams.yBottom !== true && !extrudeParams.excludeBottomFaceRender) {
                     for (let f=1; f< fLen; f++) {
                         indices[ii++] = profile.get(faceIndices[f+1]);
                         indices[ii++] = profile.get(faceIndices[f]);
